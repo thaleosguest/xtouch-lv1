@@ -42,6 +42,8 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   (format `[[dB, course 0..1], ..., ["-inf", course]]`). **Le fichier calibré est sur le PC de Joseph : ne pas l'écraser.**
 - `xtouch_couleurs.exemple.json` : forçage couleur LV1 (index palette) -> couleur X-Touch.
 - `tests/` : tests contre une **fausse LV1** et une X-Touch simulée (voir « Tester »).
+- `lv1_capture.py` : décode une capture pcap/pcapng (pktmon) du trafic MyFOH <-> LV1 en messages OSC
+  (réassemblage TCP, doublons pktmon). Test : `py tests/test_capture.py .`.
 - `LISEZMOI.md` : mode d'emploi utilisateur (français).
 
 ## API réseau LV1 (LV1 V17, ServiceVersion v.17.6.26.456)
@@ -109,6 +111,8 @@ Messages vérifiés :
 - Extender **à gauche** de la X-Touch (tranches 1-8 sur l'Extender). Master -> LR.
 - Calibration sur les **repères imprimés** de la X-Touch (pas sur l'écran LV1). Un seul fichier de courbe pour tous.
 - Vumètres : il préfère ceux de la LV1 (post-fader).
+- ◄ CHANNEL ► = **sélection** canal suivant / précédent (pas de décalage de tranches, il n'en veut pas).
+- Il a **MyFOH sur sa tablette** : source pour trouver les commandes couche / sélection (`lv1_capture.py` + pktmon).
 - Avancer par petites étapes testées, hors concert ; journal + rapport à chaque test.
 
 ## Reste à faire / idées

@@ -134,3 +134,22 @@ Fonctionne aussi en `--lecture-seule` (rien n'est envoyé à la LV1).
 2. Clique une couche sur l'écran de la LV1 : la X-Touch doit la reprendre.
 3. Appuie aussi une fois sur ◄ CHANNEL ► et sur FLIP (pas encore de fonction, notés dans le journal).
 4. Envoie-moi le journal.
+
+## Capture du trafic MyFOH (recherche des commandes couche / sélection)
+
+`lv1_capture.py` décode une capture réseau tablette <-> LV1 en messages lisibles. La capture se fait avec
+**pktmon**, intégré à Windows (rien à installer), dans un **PowerShell lancé en administrateur**.
+Le port LV1 (ex. 56397) est celui affiché par `xtouch_lv1_display.py` (« LV1 trouvée : … port … ») ;
+il change quand on change la config du mixer.
+
+```
+pktmon filter remove
+pktmon filter add LV1 -t TCP -p 56397
+pktmon start --capture --comp nics --pkt-size 0 -f "$env:USERPROFILE\Documents\xTouchController_LV1_workspace\myfoh.etl"
+   ... gestes dans MyFOH, 5 s entre chaque ...
+pktmon stop
+pktmon etl2pcap "$env:USERPROFILE\Documents\xTouchController_LV1_workspace\myfoh.etl" -o "$env:USERPROFILE\Documents\xTouchController_LV1_workspace\myfoh.pcapng"
+pktmon filter remove
+```
+
+Puis : `py lv1_capture.py myfoh.pcapng` (option `--tout` pour voir aussi vumètres et ping).
