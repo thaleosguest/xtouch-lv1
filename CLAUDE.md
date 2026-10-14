@@ -37,7 +37,8 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   noms des tranches y 433, x 188+96i ; onglet Mixer 1 x 651 / Mixer 2 x 749, y 28, actif (56,201,255).
   Garde-fous avant chaque clic : admin, fenêtre non réduite, onglet lu à l'écran, cadre de case présent.
   Tranche cliquée seulement si la couche LV1 courante la contient ; sélections en rafale regroupées.
-  Intégration pont : à tester sur le matériel. Test `tests/test_clic_lv1.py`.
+  Intégration pont **vérifiée le 14/10** (journal 182527 : 146 clics, 0 refus, LV1 réagit en ~50 ms, max 123).
+  Test `tests/test_clic_lv1.py`.
 - État mute/solo **initial** lu dans `/Channels` (test `tests/test_etat_initial.py`, LED au démarrage à vérifier sur le matériel).
 
 ## Fichiers
