@@ -826,7 +826,8 @@ class GainControl:
     STEP_DB = 0.5
     PHANTOM_HOLD = 1.0
 
-    PAN_STEP = 1.0 / 45.0             # 1 cran = 1 pas de l'échelle LV1 (L45..R45)
+    PAN_STEP = 3.0 / 45.0             # 1 cran = 3 pas de l'échelle LV1 (L45..R45) ; « pas assez sensible » à 1
+    PAN_FAST = 0.08                   # s : crans plus rapprochés -> pas doublé
     PAN_HOLD = 0.5                    # s : retours LV1 de pan ignorés après notre envoi
 
     def __init__(self, state, link, write=True, lv1=None):
@@ -834,6 +835,7 @@ class GainControl:
         self.lv1 = lv1                    # LV1Link (envoi /Set/Track/Pan)
         self.mode = False                 # mode gain (TRACK)
         self.pan_mode = False             # mode pan (PAN) ; exclusif avec le mode gain
+        self.pan_last = {}                # tranche -> instant du dernier cran (accélération)
         self.rec_down = {}                # tranche -> instant d'appui sur Rec
         self.side = {}                    # piste stéréo -> 0 (L, défaut) / 1 (R) : appui encodeur ; jamais les deux
         self.warned = set()
@@ -874,8 +876,11 @@ class GainControl:
             if cur is None:
                 self._warn("pan de départ inconnu pour %s : encodeur sans effet (bouge-le une fois sur la LV1)" % (e,))
                 return True
-            self._set_pan(e, max(-1.0, min(1.0, round((cur + delta * self.PAN_STEP) * 45) / 45.0)),
-                          "encodeur %d %+d" % (strip + 1, delta))
+            fast = t - self.pan_last.get(strip, 0) < self.PAN_FAST
+            self.pan_last[strip] = t
+            step = self.PAN_STEP * (2 if fast else 1)
+            self._set_pan(e, max(-1.0, min(1.0, round((cur + delta * step) * 45) / 45.0)),
+                          "encodeur %d %+d%s" % (strip + 1, delta, " rapide" if fast else ""))
             return True
         if kind == 0x90 and NOTE_VPOT_PUSH <= d1 < NOTE_VPOT_PUSH + 8:
             strip = 8 * unit + (d1 - NOTE_VPOT_PUSH)
@@ -974,6 +979,7 @@ class LV1Clicker(threading.Thread):
     WAIT_LAYER = 1.0     # s d'attente de /Notify/CurrentLayer après un clic de couche
 
     def __init__(self, state, page, click_layer=None, click_strip=None):
+        # click_strip(i, mixer, rgb) : rgb = couleur du canal (0..255), pour trouver la bande du nom à l'écran
         super().__init__(daemon=True)
         self.state, self.page = state, page
         if click_layer is None or click_strip is None:
@@ -1034,7 +1040,10 @@ class LV1Clicker(threading.Thread):
                     if i is None or i >= 16:
                         JOURNAL.mark("clic LV1 sélection %s : pas sur la couche affichée par la LV1" % (arg,))
                         continue
-                    ok, why = self.click_strip(i, self.page + 1)
+                    with self.state.lock:
+                        f = self.state.tracks.get(arg, {}).get("rgb")
+                    rgb = tuple(int(round(v * 255)) for v in f) if f else None
+                    ok, why = self.click_strip(i, self.page + 1, rgb)
                     JOURNAL.mark("clic LV1 tranche %d %s : %s" % (i + 1, arg, "envoyé" if ok else why))
                     if not ok:
                         self._refused("sélection", why or "envoi refusé par Windows")

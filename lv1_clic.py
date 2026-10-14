@@ -307,6 +307,44 @@ def strip_point(i):
     return STRIP_X0 + STRIP_PITCH * i, STRIP_NAME_Y
 
 
+# Bande du nom de tranche : sa position dépend des modes Top / Middle / Bottom / Big Fader (question de Joseph,
+# 14/10). On la CHERCHE dans la colonne de la tranche : pixels de la couleur exacte du canal (/Notify/TrackColor),
+# hauteur 12..34 px sur 1080, entre y 300 et 700 (la case de source en haut et le pied de tranche ont aussi la
+# couleur du canal, mais hors de cette plage ou d'une autre hauteur). Introuvable = pas de clic.
+NAME_SCAN = (300, 700)
+NAME_H = (12, 34)
+NAME_DX = 3                      # colonne lue : 3 px après le bord gauche de la bande (le texte n'y arrive pas)
+
+
+def name_bar_y(runs, ref_y=STRIP_NAME_Y):
+    """Parmi des bandes (y0, y1) en coordonnées de référence, celle du nom : hauteur plausible, la plus proche
+    de la position habituelle. Renvoie son centre, ou None."""
+    ok = [(y0, y1) for y0, y1 in runs if NAME_H[0] <= y1 - y0 + 1 <= NAME_H[1]]
+    if not ok:
+        return None
+    y0, y1 = min(ok, key=lambda r: abs((r[0] + r[1]) / 2.0 - ref_y))
+    return (y0 + y1) / 2.0
+
+
+def color_runs(colors, rgb, y0, tol=14):
+    """Bandes consécutives de la couleur rgb dans une colonne de pixels commençant à y0."""
+    runs, start = [], None
+    for k, c in enumerate(list(colors) + [None]):
+        hit = c is not None and _close(c, rgb, tol)
+        if hit and start is None:
+            start = k
+        elif not hit and start is not None:
+            runs.append((y0 + start, y0 + k - 1))
+            start = None
+    merged = []                      # recolle les morceaux coupés par le texte du nom (écart < 10 px)
+    for r in runs:
+        if merged and r[0] - merged[-1][1] <= 10:
+            merged[-1] = (merged[-1][0], r[1])
+        else:
+            merged.append(r)
+    return merged
+
+
 def click_layer(k, mixer=1, method="message"):
     """Clique la case de couche k (0..7). Renvoie (fait, raison)."""
     t = Target(mixer)
@@ -316,13 +354,30 @@ def click_layer(k, mixer=1, method="message"):
     return t.on_mixer(layer_frame(k), lambda: t.click(*layer_point(k), method=method))
 
 
-def click_strip(i, mixer=1, method="message"):
-    """Clique le nom de la tranche i (0..15). Renvoie (fait, raison)."""
+def click_strip(i, mixer=1, method="message", rgb=None):
+    """Clique le nom de la tranche i (0..15), cherché à l'écran par la couleur du canal rgb (0..255). Sans
+    couleur connue, ou bande introuvable : pas de clic. Renvoie (fait, raison)."""
+    if rgb is None:
+        return False, "couleur du canal inconnue : bande du nom introuvable"
     t = Target(mixer)
     why = t.check()
     if why:
         return False, why
-    return t.on_mixer(None, lambda: t.click(*strip_point(i), method=method))
+
+    def act():
+        x, y, w, h = t.rect
+        sx = x + round((STRIP_X0 - 46 + NAME_DX + STRIP_PITCH * i) * w / REF_W)
+        ya, yb = (y + round(v * h / REF_H) for v in NAME_SCAN)
+        col = [row[0] for row in screen_rows(sx, list(range(ya, yb)), 1)]
+        runs = [(round((a - y) * REF_H / h), round((b - y) * REF_H / h)) for a, b in color_runs(col, rgb, ya)]
+        ny = name_bar_y(runs)
+        if ny is None:
+            act.why = "bande du nom de la tranche %d introuvable (disposition Mixer ?)" % (i + 1)
+            return False
+        return t.click(strip_point(i)[0], ny, method=method)
+    act.why = None
+    ok, why = t.on_mixer(None, act)
+    return ok, why or act.why
 
 
 def main(argv=None):

@@ -81,11 +81,11 @@ def inject():
         time.sleep(max(0, t - (time.time() - T0)))
         D.EVENTS.put(ev + (time.time(),))
     put(1.2, 1, 0x90, 0x2A, 127); put(1.25, 1, 0x90, 0x2A, 0)    # PAN -> mode pan
-    put(1.4, 0, 0xB0, 0x10, 0x03)                                # In 1 : -0.5 (L23) + 3 -> L20
+    put(1.4, 0, 0xB0, 0x10, 0x03)                                # In 1 : -0.5 (L22,5) + 3 crans x 3 -> L14
     put(1.45, 0, 0xB0, 0x11, 0x01)                               # In 2 : pan inconnu -> rien
-    put(2.0, 0, 0xB0, 0x10, 0x01)                                # -> L19
+    put(2.0, 0, 0xB0, 0x10, 0x01)                                # +1 cran x 3 -> L11
     put(2.3, 0, 0x90, 0x20, 127); put(2.35, 0, 0x90, 0x20, 0)    # appui encodeur 1 -> centre
-    put(2.6, 0, 0xB0, 0x10, 0x42)                                # -2 -> L2
+    put(2.6, 0, 0xB0, 0x10, 0x42)                                # -2 crans x 3 -> L6
 threading.Thread(target=inject, daemon=True).start()
 
 sys.argv = ["x", "--dry-run", "--no-journal", "--host", "127.0.0.1", "--port", str(srv.getsockname()[1]),
@@ -95,7 +95,7 @@ with contextlib.redirect_stdout(io.StringIO()):
 pans = [(round(v[2] * 45)) for a, v in SETS if a == "/Set/Track/Pan" and v[1] == 0]
 print("/Set/Track/Pan In 1 (échelle 45) :", pans, " autres :", [v for a, v in SETS if a == "/Set/Track/Pan" and v[1] != 0])
 print("Ligne du bas :", LCD.get(1, b"")[-60:], " couronne 1 :", hex(RINGS.get((1, 0), 0)))
-ok = pans == [-20, -19, 0, -2] and not [v for a, v in SETS if a == "/Set/Track/Pan" and v[1] != 0]
-ok = ok and b"L2 " in LCD.get(1, b"") and b"  ?" in LCD.get(1, b"") and RINGS.get((1, 0)) == 6
+ok = pans == [-14, -11, 0, -6] and not [v for a, v in SETS if a == "/Set/Track/Pan" and v[1] != 0]
+ok = ok and b"L6 " in LCD.get(1, b"") and b"  ?" in LCD.get(1, b"") and RINGS.get((1, 0)) == 5
 print("OK" if ok else "ÉCHEC")
 sys.exit(0 if ok else 1)

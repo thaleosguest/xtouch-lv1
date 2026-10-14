@@ -31,7 +31,7 @@ def fake_layer(k, mixer):
     return True, None
 
 
-def fake_strip(i, mixer):
+def fake_strip(i, mixer, rgb=None):
     with st.lock:
         cur = st.current[0]
     CLICKS.append(("tranche", i, cur))

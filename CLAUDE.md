@@ -34,7 +34,9 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   WM_LBUTTON* à la fenêtre enfant sous le point (souris immobile). **Vérifié le 14/10** : `couche 3` et `tranche 5`
   marchent (PowerShell administrateur obligatoire : LV1 en admin, PrintWindow/clics refusés sinon).
   Géométrie (1920x1080, fractions de la zone client) : couches x 1847, y 537+72k (cadre x 1795) ;
-  noms des tranches y 433, x 188+96i ; onglet Mixer 1 x 651 / Mixer 2 x 749, y 28, actif (56,201,255).
+  noms des tranches : bande CHERCHÉE à l'écran (sa position change avec Top/Middle/Bottom/Big Fader) dans la colonne
+  x 145+96i (3 px du bord, hors texte), y 300..700, couleur exacte du canal (/Notify/TrackColor), hauteur 12..34,
+  la plus proche de y 433 ; introuvable = PAS de clic (sinon risque de cliquer un MUTE) ; onglet Mixer 1 x 651 / Mixer 2 x 749, y 28, actif (56,201,255).
   Garde-fous avant chaque clic : admin, fenêtre non réduite, onglet lu à l'écran, cadre de case présent.
   Tranche cliquée seulement si la couche LV1 courante la contient ; sélections en rafale regroupées.
   Intégration pont **vérifiée le 14/10** (journal 182527 : 146 clics, 0 refus, LV1 réagit en ~50 ms, max 123).
@@ -137,7 +139,7 @@ Messages vérifiés :
   (-1..+1), retour `/Notify/Track/Pan ii d i` envoyé SEULEMENT aux changements (rien à la connexion, rien dans
   /Channels) -> pan de départ lu dans la base : `lv1_db.py`, copie de CurrentLV1.dat(+wal), snapshot -1, param 436
   PARAM_OUTPUT_BALANCE -45..+45 (absent = centre), chainer_id = object.id (obj_type 0 = entrées). Vérifié le 14/10 :
-  In 4 tout à gauche = -45. 1 cran = 1/45 ; appui encodeur = centre ; pan inconnu (« ? ») = encodeur sans effet ;
+  In 4 tout à gauche = -45. 1 cran = 3/45 (x2 si crans < 80 ms ; 1/45 jugé pas assez sensible) ; appui encodeur = centre ; pan inconnu (« ? ») = encodeur sans effet ;
   retours LV1 ignorés 0,5 s après un envoi (`pan_hold`). Affichage « L45 / C / R12 », couronne mode 0. Test `tests/test_pan.py`.
 - **Sélection sur l'onglet Channel (codé, à tester)** : `lv1_clic.Target.on_mixer` = aller-retour d'onglet (clic Mixer N,
   attente qu'il soit affiché, vérif case, clic, retour Channel). Onglets (relevé 14/10) : centres x 652 + 98k
