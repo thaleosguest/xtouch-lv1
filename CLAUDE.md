@@ -173,7 +173,7 @@ Messages vérifiés :
   ligne du bas des écrans en NÉGATIF (couleur + 0x20, `INVERT_BOTTOM` ; bit d'inversion X-Touch non vérifié) ;
   écran du PC (`xtouch_overlay.py`, tkinter) : bandeau 2,5 s « SEND ON FADER : FX 1  <nom de la piste> » puis
   cadre rouge clignotant doucement autour de la fenêtre LV1, fenêtres traversées par les clics. Piège : une fenêtre
-  WS_EX_LAYERED sans attribut -alpha n'est PAS dessinée. Option `--sans-cadre`.
+  WS_EX_LAYERED sans attribut -alpha n'est PAS dessinée. Option `--sans-cadre`. Textes à l'écran du PC : en ANGLAIS (demande de Joseph).
 - Fader : sous -60 dB, descente continue jusqu'à -144 (plus de saut -144 -> -78) — vérifié le 15/10.
 - FLIP (0x32) sans fonction.
 - Sens LV1 -> X-Touch de la sélection (vérifié le 14/10, journal 185026) : `LV1SelectionWatcher` (avec --clic-lv1) lit le liseré

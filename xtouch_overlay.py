@@ -154,7 +154,7 @@ if __name__ == "__main__":
         return lv1_rect() or (0, 0, 1280, 720)
     o = LV1Overlay(rect_fn=full_screen)
     o.start()
-    o.set("SEND ON FADER : CHOISIS L'AUX (Select)")
+    o.set("SEND ON FADER : SELECT AN AUX")
     time.sleep(4)
     o.set(send_text("Fx 1", "Reverb"))
     time.sleep(8)

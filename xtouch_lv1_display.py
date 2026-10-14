@@ -1084,7 +1084,7 @@ class SendControl:
     def overlay_text(self):
         """Texte du bandeau / cadre à l'écran du PC (xtouch_overlay), ou None hors mode sends."""
         if self.picking:
-            return "SEND ON FADER : choisis l'aux (Select)"
+            return "SEND ON FADER : SELECT AN AUX"
         if self.aux is None:
             return None
         import xtouch_overlay
