@@ -1757,12 +1757,15 @@ def main():
             with state.lock:
                 sel = state.selected
                 any_solo = any(t.get("solo") for t in state.tracks.values())
-                lr_db = state.tracks.get(master_target, {}).get("fader") if master_target else None
+                lr_db = state.tracks.get(master_now, {}).get("fader") if master_now else None
             side = gain.side.get(sel, 0)
             g_sel = xlink.gain(sel, side) if (xlink and sel) else None
             stereo = bool(xlink and sel and len(xlink.preamps(sel)) == 2)
             assign, timecode = master_display(sel, g_sel, side, stereo, lr_db)
-            if sends.picking or sends.aux is not None:      # mode SEND : « SE » + aux à gauche du timecode
+            if sends.picking:                                # choix de l'aux : « SE » + « SEL »
+                assign = seg_codes("SE", 2)
+                timecode = seg_codes("SEL", 5) + seg_codes("", 5)
+            elif sends.aux is not None:                      # envois : « SE » + aux + niveau du master de l'aux
                 assign = seg_codes("SE", 2)
                 timecode = seg_codes(sends.label() or "--", 5) + timecode[5:]
             surface.push_master_display(assign, timecode)
