@@ -134,10 +134,10 @@ Messages vérifiés :
 ## Reste à faire / idées
 
 - FLIP (0x32) sans fonction.
-- Sens LV1 -> X-Touch de la sélection (codé, à tester) : `LV1SelectionWatcher` (avec --clic-lv1) lit le liseré
+- Sens LV1 -> X-Touch de la sélection (vérifié le 14/10, journal 185026) : `LV1SelectionWatcher` (avec --clic-lv1) lit le liseré
   jaune (255,242,0) y 98-102/1080, x 143+96i (`lv1_clic.selected_strip`, sans admin) toutes les 0,15 s ; ne réagit
   qu'aux changements. Test `tests/test_selection_lv1.py`.
-- **Étape 4 (codée, à tester)** : gain/48 V X32 **via x32-gain-recall** (choix de Joseph : pas d'OSC direct),
+- **Étape 4 (vérifiée le 14/10, journal 185026 : gain, stéréo L/R, 48 V tenu, appuis brefs ignorés)** : gain/48 V X32 **via x32-gain-recall** (choix de Joseph : pas d'OSC direct),
   `xgr_link.py` (GET /api/state 2x/s : gains, phantom, exp_map idx->EXP, lv1_sources canal LV1 1-based->[EXP] ;
   POST /api/gain {idx, db}, /api/phantom {idx, on} ; localhost sans code ; -12..+60 dB pas 0,5).
   `GainControl` : **TRACK** (0x28, vérifié) bascule le mode gain ; encodeurs CC 0x10-17 relatifs (bit 6 = sens),
