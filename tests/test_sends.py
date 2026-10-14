@@ -1,4 +1,4 @@
-"""Test : sends on fader. SEND -> choix de l'aux (faders bloqués), Select -> faders = envois (/Set/Aux/Send/Gain),
+"""Test : sends on fader. SEND -> choix de l'aux (faders = masters des aux), Select -> faders = envois (/Set/Aux/Send/Gain),
 Mute = envoi on/off, SEND -> retour aux faders des canaux.
 
     py tests/test_sends.py .
@@ -87,7 +87,7 @@ def inject():
     put(1.0, 0, 0x90, 0x68, 127)                                  # toucher fader 1 (le toucher est connu)
     put(1.05, 0, 0xE0, 0x00, 0x30); put(1.1, 0, 0x90, 0x68, 0)    # fader 1 normal -> /Set/Track/Out/Gain
     put(1.5, 1, 0x90, 0x29, 127); put(1.55, 1, 0x90, 0x29, 0)    # SEND -> choix
-    put(1.7, 0, 0x90, 0x68, 127); put(1.75, 0, 0xE0, 0x10, 0x30); put(1.8, 0, 0x90, 0x68, 0)  # fader bloqué
+    put(1.7, 0, 0x90, 0x68, 127); put(1.75, 0, 0xE0, 0x10, 0x30); put(1.8, 0, 0x90, 0x68, 0)  # master Fx 1
     put(1.9, 0, 0x90, 0x10, 127); put(1.95, 0, 0x90, 0x10, 0)    # Mute bloqué pendant le choix
     put(2.1, 0, 0x90, 0x1A, 127); put(2.15, 0, 0x90, 0x1A, 0)    # Select tranche 3 -> aux 2 (Fx 3)
     put(2.6, 0, 0x90, 0x68, 127); put(2.65, 0, 0xE0, 0x00, 0x40); put(3.0, 0, 0x90, 0x68, 0)  # envoi In1 -> Fx3
@@ -105,7 +105,8 @@ print("/Set envoyés :", [(a.split("/Set/")[1], v) for a, v in kinds])
 picks = [v for t, d in sorted(LCD.items()) if 1.4 < t < 2.2 for v in d if b"Fx 1" in v]
 print("Écran pendant le choix :", picks[0][5:60] if picks else None)
 ok = kinds[0][0] == "/Set/Track/Out/Gain" and kinds[0][1][:2] == [0, 0]
-ok = ok and all(a != "/Set/Track/Out/Gain" or v[:2] != [0, 0] for a, v in kinds[1:])   # rien pendant le choix
+ok = ok and kinds[1][0] == "/Set/Track/Out/Gain" and kinds[1][1][:2] == [2, 0]       # choix : master de Fx 1
+ok = ok and all(a != "/Set/Track/Out/Gain" or v[:2] != [0, 0] for a, v in kinds[1:])
 ok = ok and any(a == "/Set/Aux/Send/Gain" and v == [0, 0, 2] for a, v in kinds)
 ok = ok and ("/Set/Aux/Send/On", [0, 0, 2]) in kinds and [v for a, v in SETS if a == "/Set/Aux/Send/On"][0][3] is False
 ok = ok and kinds[-1][0] == "/Set/Track/Out/Gain" and kinds[-1][1][:2] == [0, 1]

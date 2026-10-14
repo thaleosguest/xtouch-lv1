@@ -1046,7 +1046,7 @@ class SendControl:
     tranches 1-8, Mon 1-8 sur 9-16, BANK = Mon 9-16), Select choisit l'aux ; les faders règlent alors les envois de
     chaque canal vers lui (/Set/Aux/Send/Gain), Mute = envoi on/off (LED allumée = envoi coupé), encodeur = pan de
     l'envoi (s'il est connu ; appui = centre), fader master = master de l'aux. SEND à nouveau : retour normal.
-    Pendant le choix de l'aux, faders et boutons de tranche sont bloqués."""
+    Pendant le choix de l'aux, les faders règlent les masters des aux ; les boutons de tranche sont bloqués."""
     PAN_STEP = 3.0 / 45.0
     PAN_HOLD = 0.5
 
@@ -1058,8 +1058,16 @@ class SendControl:
         self.page = 0                     # choix : 0 = aux 0..15, 1 = aux 16..31
 
     def key_of(self, strip, e):
-        """Clé réglée par un fader (branchée sur FaderControl.key_of)."""
+        """Clé réglée par un fader (branchée sur FaderControl.key_of). Pendant le choix de l'aux, les faders
+        règlent les masters des aux affichés (remarque de Joseph : bloqués, ils revenaient en place)."""
         if self.picking:
+            if strip == MASTER:
+                return e
+            k = 16 * self.page + strip
+            with self.state.lock:
+                aux = self.state.aux_tracks
+                return (aux[k][0], aux[k][1]) if k < len(aux) else None
+        if e is None:
             return None
         if self.aux is not None and strip != MASTER:
             return (e[0], e[1], self.aux)
@@ -1430,7 +1438,7 @@ class FaderControl:
         self.last_sent = {}    # tranche -> instant du dernier envoi
         self.seen_touch = False
         self.gesture = {}      # clé -> valeurs du geste en cours (ancienne valeur + valeurs envoyées)
-        # tranche, piste -> clé réglée : (g, ch) = fader de piste, (g, ch, aux) = envoi, None = fader bloqué
+        # tranche, piste (ou None) -> clé réglée : (g, ch) = fader de piste, (g, ch, aux) = envoi, None = rien
         self.key_of = lambda strip, e: e
 
     def held(self, now):
@@ -1460,7 +1468,7 @@ class FaderControl:
             self.hold_until[strip] = t + HOLD_AFTER
             surface.note_position(strip, value)
             e = entries[strip] if strip < len(entries) else None
-            key = self.key_of(strip, e) if e is not None else None
+            key = self.key_of(strip, e)
             if key is not None:
                 if key not in self.gesture:
                     with self.state.lock:

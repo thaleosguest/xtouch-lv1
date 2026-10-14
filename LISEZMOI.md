@@ -179,10 +179,10 @@ base de la LV1 ; s'il est inconnu (« ? », ex. bus), l'encodeur ne fait rien ta
 ## Sends on fader (SEND)
 
 1. **SEND** : les écrans affichent les aux (Fx 1-8 sur l'Extender, Mon 1-8 sur la X-Touch ; BANK = Mon 9-16).
-   Pendant ce choix, faders et boutons de tranche ne font rien.
+   Pendant ce choix, les faders règlent les **masters des aux** ; les boutons de tranche ne font rien.
 2. **Select** sous l'aux voulu : les faders règlent les **envois** de chaque canal vers cet aux ; le fader
    master règle le master de l'aux. Afficheur : « SE » et le nom court de l'aux (F3, M2…).
-3. **Mute** = envoi on/off (LED allumée = envoi coupé). **Encodeur** = pan de l'envoi, appui = centre.
+3. **Mute** = envoi on/off (LED allumée = envoi coupé ; monter un envoi l'allume, c'est la LV1 qui le fait). **Encodeur** = pan de l'envoi, appui = centre.
 4. **SEND** à nouveau : retour aux faders des canaux.
 
 ## La LV1 suit BANK et la sélection (`--clic-lv1`)

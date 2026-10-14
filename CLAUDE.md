@@ -160,14 +160,16 @@ Messages vérifiés :
   **Option C choisie (codée, à tester)** : assignment = n° du canal sélectionné (D1, G3… hors entrées) ; timecode =
   gain X32 du sélectionné (L/R si stéréo) + fader LR (`master_display`, `seg_codes`). CC Mackie non vérifiés :
   timecode 0x40-0x49 (0x40 = à droite), assignment 0x4B/0x4A, point = +0x40 ; LED SOLO note 0x73 (clignote si solo).
-- **Sends on fader (codé, à tester)** — choix de Joseph : SEND (0x29, non vérifié) puis Select de l'aux ; Mute = envoi
+- **Sends on fader (vérifié en partie le 15/10 : SEND, liste des aux, Select -> envois OK)** — choix de Joseph : SEND (0x29, non vérifié) puis Select de l'aux ; Mute = envoi
   on/off ; encodeur = pan de l'envoi. `SendControl` : écrans = aux (Fx 1-8 tranches 1-8, Mon 1-8 tranches 9-16, BANK =
-  Mon 9-16), faders/boutons BLOQUÉS pendant le choix (`FaderControl.key_of` -> None) ; ensuite faders = envois
+  Mon 9-16) ; pendant le choix, faders = masters des aux affichés (demande de Joseph), boutons de tranche bloqués ; ensuite faders = envois
   (`/Set/Aux/Send/Gain iii d`, clé (g, ch, aux), mêmes garde-fous que les pistes), Mute = `/Set/Aux/Send/On iii T|F`
   (LED allumée = envoi coupé), encodeur = `/Set/Aux/Send/Pan iii d` (si connu ; appui = centre), master = master de
   l'aux ; afficheur « SE » + « F3 ». Index aux = ordre de `/Aux/Tracks` (i canal, i groupe, s nom ; Fx = groupe 2,
   Mon = 25). Retours : `/Notify/Aux/Send/Gain iii d T`, `/On iii T T`, `/Pan iii d B`. Rien n'est envoyé à la
   connexion -> niveaux/on de départ lus dans la base (`lv1_db.input_sends`, voir ce fichier). Test `tests/test_sends.py`.
+  La LV1 ALLUME d'elle-même un envoi quand on monte son niveau (LED Mute qui s'éteint : normal).
+- Fader : sous -60 dB, descente continue jusqu'à -144 (plus de saut -144 -> -78) — vérifié le 15/10.
 - FLIP (0x32) sans fonction.
 - Sens LV1 -> X-Touch de la sélection (vérifié le 14/10, journal 185026) : `LV1SelectionWatcher` (avec --clic-lv1) lit le liseré
   jaune (255,242,0) y 98-102/1080, x 143+96i (`lv1_clic.selected_strip`, sans admin) toutes les 0,15 s ; ne réagit
