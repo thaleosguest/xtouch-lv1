@@ -113,8 +113,8 @@ ok = ok and ("/Set/Aux/Send/On", [0, 0, 2]) in kinds and [v for a, v in SETS if 
 ok = ok and kinds[-1][0] == "/Set/Track/Out/Gain" and kinds[-1][1][:2] == [0, 1]
 ok = ok and not any(a == "/Set/Track/Out/Mute" for a, v in kinds)
 ok = ok and bool(picks)
-inv = [c for t, h, c in COLORS if 2.1 <= t < 3.6 and h == 1]
-print("Couleurs Extender en mode envois :", inv[-1].hex() if inv else None)
-ok = ok and bool(inv) and inv[-1][0] & 0x20 and not any(c[0] & 0x20 for t, h, c in COLORS if t > 3.7 and h == 1)
+bottom = [v for t, d in sorted(LCD.items()) if 2.1 <= t < 3.6 for v in d if v[5:7] == b"8"]
+print("Ligne du bas en mode envois :", bottom[-1][7:30] if bottom else None)
+ok = ok and bool(bottom) and bottom[-1][7:14].startswith(b"F3 -")
 print("OK" if ok else "ÉCHEC")
 sys.exit(0 if ok else 1)

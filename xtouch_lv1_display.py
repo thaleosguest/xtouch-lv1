@@ -1033,7 +1033,22 @@ class GainControl:
 
 
 NOTE_SEND = 0x29                  # SEND (norme Mackie ; « sends on fader »)
-INVERT_BOTTOM = 0x20              # couleur d'écran X-Touch : ligne du bas en négatif (demande de Joseph, à confirmer)
+# Le négatif (couleur + 0x20) n'a AUCUN effet en mode Mackie (essai de Joseph, 15/10) : à la place, la ligne du
+# bas affiche l'aux devant le niveau d'envoi.
+
+
+def send_label(short, db):
+    """Ligne du bas en mode sends (7 car.) : « F1 -12 », « M12 -6 », « F3 -inf », « F1 ? »."""
+    if db is None:
+        lvl = "?"
+    elif db <= FADER_MIN_DB:
+        lvl = "-inf"
+    else:
+        room = 7 - len(short) - 1
+        lvl = "%.1f" % db
+        if len(lvl) > room:
+            lvl = "%.0f" % db
+    return ("%s %s" % (short, lvl))[:7]
 
 
 def aux_short(name, aux):
@@ -1201,15 +1216,16 @@ class SendControl:
                         top[i], bot[i], cols[i], fads[i] = "", "", XT["vide"], 0
                     mutes[i] = solos[i] = selects[i] = False
             elif self.aux is not None:
+                aux = self.state.aux_tracks
+                short = aux_short(aux[self.aux][2] if self.aux < len(aux) else None, self.aux)
                 for i, e in enumerate(entries[:n]):
                     if e is None:
                         continue
                     s = self.state.sends.get((e[0], e[1], self.aux), {})
                     f = s.get("fader")
-                    bot[i] = fader_text(f) if f is not None else "  ?"
+                    bot[i] = send_label(short, f)            # « F1 -12 » : on voit qu'on est en sends
                     fads[i] = db_to_fader(f)
                     mutes[i] = s.get("on") is False
-                    cols[i] = (cols[i] & 0x07) | INVERT_BOTTOM      # ligne du bas en négatif : mode sends
         return mutes, solos, selects
 
 

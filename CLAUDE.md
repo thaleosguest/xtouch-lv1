@@ -170,7 +170,8 @@ Messages vérifiés :
   connexion -> niveaux/on de départ lus dans la base (`lv1_db.input_sends`, voir ce fichier). Test `tests/test_sends.py`.
   La LV1 ALLUME d'elle-même un envoi quand on monte son niveau (LED Mute qui s'éteint : normal).
   Indication du mode (choix de Joseph) : afficheur « SE » + « SEL » (choix) / « F3 » + niveau du master de l'aux ;
-  ligne du bas des écrans en NÉGATIF (couleur + 0x20, `INVERT_BOTTOM` ; bit d'inversion X-Touch non vérifié) ;
+  ligne du bas = aux + niveau d'envoi « F1 -12 » (`send_label`) — le NÉGATIF (couleur + 0x20) n'a aucun effet en
+  mode Mackie (essai du 15/10), ne pas y revenir ;
   écran du PC (`xtouch_overlay.py`, tkinter) : bandeau 2,5 s « SEND ON FADER : FX 1  <nom de la piste> » puis
   cadre rouge clignotant doucement autour de la fenêtre LV1, fenêtres traversées par les clics. Piège : une fenêtre
   WS_EX_LAYERED sans attribut -alpha n'est PAS dessinée. Option `--sans-cadre`. Textes à l'écran du PC : en ANGLAIS (demande de Joseph).

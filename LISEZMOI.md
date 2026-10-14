@@ -185,8 +185,8 @@ base de la LV1 ; s'il est inconnu (« ? », ex. bus), l'encodeur ne fait rien ta
 3. **Mute** = envoi on/off (LED allumée = envoi coupé ; monter un envoi l'allume, c'est la LV1 qui le fait). **Encodeur** = pan de l'envoi, appui = centre.
 4. **SEND** à nouveau : retour aux faders des canaux.
 
-On sait qu'on est en mode sends : bouton SEND allumé, afficheur « SE » + aux, **ligne du bas des écrans en
-négatif**, et à l'écran du PC un bandeau « SEND ON FADER : FX 1 … » puis un **cadre rouge** autour de la LV1 qui
+On sait qu'on est en mode sends : bouton SEND allumé, afficheur « SE » + aux, **ligne du bas des écrans =
+aux + niveau** (« F1 -12 »), et à l'écran du PC un bandeau « SEND ON FADER : FX 1 … » puis un **cadre rouge** autour de la LV1 qui
 clignote doucement (les clics passent au travers). `--sans-cadre` retire bandeau et cadre.
 
 ## La LV1 suit BANK et la sélection (`--clic-lv1`)
