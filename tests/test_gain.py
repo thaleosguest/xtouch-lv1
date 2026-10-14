@@ -103,7 +103,7 @@ ok = ok and not any(d.get("idx") == 32 and p == "/api/phantom" for p, d in posts
 ok = ok and len([1 for p, d in posts if p == "/api/gain" and d["idx"] == 32]) <= 3     # crans regroupés
 # en simulation, les tranches 1-8 (Extender à gauche) sont sur le port 1, la X-Touch (TRACK) sur le port 0
 ok = ok and LEDS.get((0, 0x28)) == 127 and LEDS.get((1, 0x01)) == 127 and not LEDS.get((1, 0x00))
-ok = ok and RINGS.get((1, 0)) == 0x24 and RINGS.get((1, 1)) == 0x25 and not RINGS.get((1, 2))
+ok = ok and RINGS.get((1, 0)) == 0x24 and RINGS.get((1, 1)) == 0x26 and not RINGS.get((1, 2))
 print("Gains finaux :", {i: XGR["gains"][i] for i in want_g})
 print("OK" if ok else "ÉCHEC")
 sys.exit(0 if ok else 1)
