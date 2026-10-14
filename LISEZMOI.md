@@ -176,6 +176,15 @@ Elle servira à l'étape 4 (gain X32, EQ…).
 **appui sur l'encodeur = centre**. Écran : « L45 », « C », « R12 ». Le pan de départ des entrées est lu dans la
 base de la LV1 ; s'il est inconnu (« ? », ex. bus), l'encodeur ne fait rien tant que le pan n'a pas bougé une fois.
 
+## Sends on fader (SEND)
+
+1. **SEND** : les écrans affichent les aux (Fx 1-8 sur l'Extender, Mon 1-8 sur la X-Touch ; BANK = Mon 9-16).
+   Pendant ce choix, faders et boutons de tranche ne font rien.
+2. **Select** sous l'aux voulu : les faders règlent les **envois** de chaque canal vers cet aux ; le fader
+   master règle le master de l'aux. Afficheur : « SE » et le nom court de l'aux (F3, M2…).
+3. **Mute** = envoi on/off (LED allumée = envoi coupé). **Encodeur** = pan de l'envoi, appui = centre.
+4. **SEND** à nouveau : retour aux faders des canaux.
+
 ## La LV1 suit BANK et la sélection (`--clic-lv1`)
 
 L'API réseau de la LV1 n'a pas de commande de couche ni de sélection. Avec `--clic-lv1`, le pont **clique

@@ -221,6 +221,8 @@ class LV1State:
         self.local = {}           # vue -> index choisi par ◄ BANK ► sur la X-Touch (effacé au clic LV1)
         self.selected = None      # (g, ch) sélectionné dans le pont (Select / ◄ CHANNEL ►), local comme MyFOH
         self.pan_hold = {}        # (g, ch) -> instant jusqu'auquel les /Notify/Track/Pan sont ignorés (geste PAN)
+        self.sends = {}           # (g, ch, aux) -> {"fader": dB, "on": bool, "pan": -1..1} (envois aux)
+        self.aux_tracks = []      # /Aux/Tracks : [(groupe, canal, nom)] dans l'ordre des index aux (Fx 1-8, Mon 1-16)
         self.custom_on = {}       # vue -> bouton Custom allumé ? (/Notify/CustomButton, hypothèse)
         self.spill_on = {}        # vue -> bouton Spill allumé ? (/Notify/SpillButton, hypothèse)
         self.version = ""
@@ -228,6 +230,17 @@ class LV1State:
         # (g, ch) -> (valeurs « périmées » en dB arrondi, instant de fin) : après le relâchement, un retour
         # LV1 égal à l'ancienne valeur ou à une valeur intermédiaire du geste est ignoré (retour tardif).
         self.stale = {}
+
+    def send(self, g, ch, aux):
+        return self.sends.setdefault((g, ch, aux), {"fader": None, "on": None, "pan": None})
+
+    def fader_of(self, key):
+        """Fader d'une piste (g, ch) ou d'un envoi (g, ch, aux)."""
+        d = self.sends.get(key) if len(key) == 3 else self.tracks.get(key)
+        return (d or {}).get("fader")
+
+    def set_fader(self, key, db):
+        (self.send(*key) if len(key) == 3 else self.track(*key))["fader"] = db
 
     def track(self, g, ch):
         return self.tracks.setdefault((g, ch), {"name": None, "rgb": None, "pal": None, "fader": None,
@@ -353,6 +366,32 @@ def handle(state, address, args):
             # ,iiiT [groupe, canal, muet 0|1, T] ; groupe 13 = groupes de mute (module Companion)
             if args[0][1] != 13:
                 state.track(args[0][1], args[1][1])["mute"] = args[2][1] != 0
+        elif address == "/Aux/Tracks" and args and args[0][0] == "i":
+            # i:N puis par aux (i canal, i groupe, s nom) ; index aux = ordre (Fx 1-8 = 0..7, Mon 1-16 = 8..23)
+            aux = []
+            for k in range(1, len(args) - 2, 3):
+                if args[k][0] == "i" and args[k + 1][0] == "i" and args[k + 2][0] == "s":
+                    aux.append((args[k + 1][1], args[k][1], args[k + 2][1]))
+            if aux:
+                state.aux_tracks = aux
+        elif address == "/Notify/Aux/Send/Gain" and len(args) >= 4 and args[3][0] in "fdi":
+            # ,iiid [g, ch, aux, dB] : mêmes garde-fous que les faders de piste (geste en cours, valeur périmée)
+            key = (args[0][1], args[1][1], args[2][1])
+            val = float(args[3][1])
+            st = state.stale.get(key)
+            if key in state.held_tracks:
+                JOURNAL.mark("retour LV1 ignoré %s %s (fader tenu)" % (key, val))
+            elif st and time.time() < st[1] and round(val, 1) in st[0]:
+                JOURNAL.mark("retour LV1 ignoré %s %s (valeur périmée)" % (key, val))
+            else:
+                state.send(*key)["fader"] = val
+        elif address == "/Notify/Aux/Send/On" and len(args) >= 4:
+            on = args[3][0] == "T" or (args[3][0] == "i" and args[3][1] != 0)
+            state.send(args[0][1], args[1][1], args[2][1])["on"] = on
+        elif address == "/Notify/Aux/Send/Pan" and len(args) >= 4 and args[3][0] in "fd":
+            key = (args[0][1], args[1][1], args[2][1])
+            if time.time() >= state.pan_hold.get(key, 0):
+                state.send(*key)["pan"] = float(args[3][1])
         elif address == "/Notify/Track/Pan" and len(args) >= 3 and args[2][0] in "fd":
             # ,iidi [groupe, canal, pan -1..+1, ?] ; la LV1 ne l'envoie qu'aux changements (pan de départ :
             # base de la LV1, lv1_db). Juste après un geste PAN, nos propres retours tardifs sont ignorés.
@@ -675,6 +714,7 @@ class Surface:
                     self.midi.short(h, 0x90, NOTE_TRACK, 0)
                     self.midi.short(h, 0x90, NOTE_PAN, 0)
                     self.midi.short(h, 0x90, NOTE_RUDE_SOLO, 0)
+                    self.midi.short(h, 0x90, NOTE_SEND, 0)
                     for cc in list(range(CC_TIMECODE, CC_TIMECODE + 10)) + [CC_ASSIGN_L, CC_ASSIGN_R]:
                         self.midi.short(h, 0xB0, cc, 0x20)
                 if u == self.master_unit:
@@ -992,6 +1032,162 @@ class GainControl:
         return rings, recs
 
 
+NOTE_SEND = 0x29                  # SEND (norme Mackie ; « sends on fader »)
+
+
+def aux_short(name, aux):
+    """Libellé court d'un aux pour l'afficheur : « F3 », « M12 »."""
+    n = "".join(ch for ch in (name or "") if ch.isdigit()) or str(aux + 1)
+    return ("F" if (name or "").lower().startswith("fx") else "M") + n
+
+
+class SendControl:
+    """« Sends on fader » (demande de Joseph, 15/10/2026) : SEND -> les écrans listent les aux (Fx 1-8 sur les
+    tranches 1-8, Mon 1-8 sur 9-16, BANK = Mon 9-16), Select choisit l'aux ; les faders règlent alors les envois de
+    chaque canal vers lui (/Set/Aux/Send/Gain), Mute = envoi on/off (LED allumée = envoi coupé), encodeur = pan de
+    l'envoi (s'il est connu ; appui = centre), fader master = master de l'aux. SEND à nouveau : retour normal.
+    Pendant le choix de l'aux, faders et boutons de tranche sont bloqués."""
+    PAN_STEP = 3.0 / 45.0
+    PAN_HOLD = 0.5
+
+    def __init__(self, state, link, write=True, gain=None):
+        self.state, self.link, self.write = state, link, write
+        self.gain = gain                  # GainControl : en mode TRACK / PAN, les encodeurs restent à lui
+        self.aux = None                   # index aux réglé, ou None
+        self.picking = False
+        self.page = 0                     # choix : 0 = aux 0..15, 1 = aux 16..31
+
+    def key_of(self, strip, e):
+        """Clé réglée par un fader (branchée sur FaderControl.key_of)."""
+        if self.picking:
+            return None
+        if self.aux is not None and strip != MASTER:
+            return (e[0], e[1], self.aux)
+        return e
+
+    def aux_track(self):
+        with self.state.lock:
+            aux = self.state.aux_tracks
+            if self.aux is not None and self.aux < len(aux):
+                return (aux[self.aux][0], aux[self.aux][1])
+        return None
+
+    def label(self):
+        with self.state.lock:
+            aux = self.state.aux_tracks
+            name = aux[self.aux][2] if self.aux is not None and self.aux < len(aux) else None
+        return aux_short(name, self.aux) if self.aux is not None else None
+
+    def on_midi(self, unit, status, d1, d2, t, entries, surface):
+        kind = status & 0xF0
+        if kind == 0x90 and d1 == NOTE_SEND:
+            if d2:
+                if self.picking or self.aux is not None:
+                    self.picking, self.aux = False, None
+                    JOURNAL.mark("XT bouton Send -> retour aux faders des canaux")
+                else:
+                    self.picking, self.page = True, 0
+                    JOURNAL.mark("XT bouton Send -> choix de l'aux")
+            return True
+        if self.picking:
+            if kind == 0x90 and d1 in (NOTE_BANK_LEFT, NOTE_BANK_RIGHT):
+                if d2:
+                    with self.state.lock:
+                        n = len(self.state.aux_tracks)
+                    self.page = max(0, min((n - 1) // 16 if n else 0, self.page + (1 if d1 == NOTE_BANK_RIGHT else -1)))
+                return True
+            if kind == 0x90 and NOTE_SELECT <= d1 < NOTE_SELECT + 8:
+                if d2:
+                    idx = 16 * self.page + 8 * unit + (d1 - NOTE_SELECT)
+                    with self.state.lock:
+                        n = len(self.state.aux_tracks)
+                    if idx < n:
+                        self.aux, self.picking = idx, False
+                        JOURNAL.mark("XT Select -> sends vers l'aux %d (%s)" % (idx, self.label()))
+                return True
+            if kind == 0x90 and d1 <= 0x1F:          # Rec / Solo / Mute bloqués pendant le choix
+                return True
+            if kind == 0x90 and NOTE_VPOT_PUSH <= d1 < NOTE_VPOT_PUSH + 8:
+                return True
+            if kind == 0xB0 and CC_VPOT <= d1 < CC_VPOT + 8:
+                return True
+            return False
+        if self.aux is None:
+            return False
+        if kind == 0x90 and NOTE_MUTE <= d1 < NOTE_MUTE + 8:
+            strip = 8 * unit + (d1 - NOTE_MUTE)
+            e = entries[strip] if strip < len(entries) else None
+            if d2 and e is not None:
+                key = (e[0], e[1], self.aux)
+                with self.state.lock:
+                    s = self.state.send(*key)
+                    new = not bool(s["on"])
+                    s["on"] = new
+                if self.write:
+                    self.link.send("/Set/Aux/Send/On", [("i", key[0]), ("i", key[1]), ("i", key[2]),
+                                                        ("T" if new else "F", new)])
+                JOURNAL.mark("XT Mute tranche %d -> envoi %s %s" % (strip + 1, key, "ON" if new else "OFF"))
+            return True
+        busy = self.gain is not None and (self.gain.mode or self.gain.pan_mode)
+        if not busy and kind == 0x90 and NOTE_VPOT_PUSH <= d1 < NOTE_VPOT_PUSH + 8:
+            strip = 8 * unit + (d1 - NOTE_VPOT_PUSH)
+            e = entries[strip] if strip < len(entries) else None
+            if d2 and e is not None:
+                self._set_pan((e[0], e[1], self.aux), 0.0)
+            return True
+        if not busy and kind == 0xB0 and CC_VPOT <= d1 < CC_VPOT + 8:
+            strip = 8 * unit + (d1 - CC_VPOT)
+            n = d2 & 0x0F
+            delta = -n if d2 & 0x40 else n
+            e = entries[strip] if strip < len(entries) else None
+            if e is None or not delta:
+                return True
+            key = (e[0], e[1], self.aux)
+            with self.state.lock:
+                cur = self.state.sends.get(key, {}).get("pan")
+            if cur is not None:
+                self._set_pan(key, max(-1.0, min(1.0, round((cur + delta * self.PAN_STEP) * 45) / 45.0)))
+            return True
+        return False
+
+    def _set_pan(self, key, value):
+        with self.state.lock:
+            self.state.send(*key)["pan"] = value
+            self.state.pan_hold[key] = time.time() + self.PAN_HOLD
+        if self.write:
+            self.link.send("/Set/Aux/Send/Pan", [("i", key[0]), ("i", key[1]), ("i", key[2]), ("d", value)])
+        JOURNAL.mark("XT encodeur -> pan envoi %s %+.3f" % (key, value))
+
+    def frame(self, entries, top, bot, cols, fads, overrides):
+        """Modifie l'affichage (choix de l'aux, ou niveaux d'envoi) ; renvoie les LED (mute, solo, select)."""
+        n = len(top)
+        with self.state.lock:
+            mutes, solos, selects = (list(x) for x in self.state.last_leds[:3])
+            if self.picking:
+                aux = self.state.aux_tracks
+                for i in range(n):
+                    k = 16 * self.page + i
+                    if k < len(aux):
+                        g, ch, name = aux[k]
+                        t = self.state.tracks.get((g, ch), {})
+                        top[i], bot[i] = name[:7], fader_text(t.get("fader"))
+                        cols[i] = rgb_to_xtouch(t.get("rgb")) if t.get("rgb") else XT["blanc"]
+                        fads[i] = db_to_fader(t.get("fader"))
+                    else:
+                        top[i], bot[i], cols[i], fads[i] = "", "", XT["vide"], 0
+                    mutes[i] = solos[i] = selects[i] = False
+            elif self.aux is not None:
+                for i, e in enumerate(entries[:n]):
+                    if e is None:
+                        continue
+                    s = self.state.sends.get((e[0], e[1], self.aux), {})
+                    f = s.get("fader")
+                    bot[i] = fader_text(f) if f is not None else "  ?"
+                    fads[i] = db_to_fader(f)
+                    mutes[i] = s.get("on") is False
+        return mutes, solos, selects
+
+
 class LV1Clicker(threading.Thread):
     """Fait suivre la LV1 par clics simulés (option --clic-lv1) : couche (BANK) et sélection (Select, CHANNEL).
 
@@ -1233,7 +1429,9 @@ class FaderControl:
         self.pending = {}      # tranche -> (g, ch, dB, valeur 14 bits)
         self.last_sent = {}    # tranche -> instant du dernier envoi
         self.seen_touch = False
-        self.gesture = {}      # (g, ch) -> valeurs du geste en cours (ancienne valeur + valeurs envoyées)
+        self.gesture = {}      # clé -> valeurs du geste en cours (ancienne valeur + valeurs envoyées)
+        # tranche, piste -> clé réglée : (g, ch) = fader de piste, (g, ch, aux) = envoi, None = fader bloqué
+        self.key_of = lambda strip, e: e
 
     def held(self, now):
         return {s for s in set(self.touched) | set(self.hold_until)
@@ -1262,13 +1460,13 @@ class FaderControl:
             self.hold_until[strip] = t + HOLD_AFTER
             surface.note_position(strip, value)
             e = entries[strip] if strip < len(entries) else None
-            if e is not None:
-                key = (e[0], e[1])
+            key = self.key_of(strip, e) if e is not None else None
+            if key is not None:
                 if key not in self.gesture:
                     with self.state.lock:
-                        old = self.state.tracks.get(key, {}).get("fader")
+                        old = self.state.fader_of(key)
                     self.gesture[key] = {round(old, 1)} if old is not None else set()
-                self.pending[strip] = (e[0], e[1], fader_to_db(value), value)
+                self.pending[strip] = (key, fader_to_db(value), value)
             JOURNAL.mark("XT fader %s = %d (%s dB)" % (label_of(strip), value, fader_to_db(value)))
             return True
         if kind in (0x90, 0x80) and d1 in TOUCH_NOTES:      # toucher / relâcher
@@ -1289,26 +1487,30 @@ class FaderControl:
     def flush(self, now):
         """Envoie à la LV1 les positions en attente (limité à une toutes les 20 ms par fader)."""
         held_now = self.held(now)
-        for strip, (g, ch, db, value) in list(self.pending.items()):
+        for strip, (key, db, value) in list(self.pending.items()):
             if now - self.last_sent.get(strip, 0) < SEND_EVERY:
                 continue
             with self.state.lock:
-                t = self.state.track(g, ch)
-                changed = t.get("fader") != db
-                t["fader"] = db            # mise à jour locale : la LV1 ne nous renvoie pas nos propres envois
+                changed = self.state.fader_of(key) != db
+                self.state.set_fader(key, db)   # mise à jour locale optimiste
             if changed:
-                self.gesture.setdefault((g, ch), set()).add(round(db, 1))
+                self.gesture.setdefault(key, set()).add(round(db, 1))
             if changed and self.write:
-                self.link.send("/Set/Track/Out/Gain", [("i", g), ("i", ch), ("d", float(db))])
-                JOURNAL.mark("-> LV1 /Set/Track/Out/Gain %d %d %s" % (g, ch, db))
+                if len(key) == 3:               # envoi aux (mode SEND)
+                    self.link.send("/Set/Aux/Send/Gain", [("i", key[0]), ("i", key[1]), ("i", key[2]),
+                                                          ("d", float(db))])
+                    JOURNAL.mark("-> LV1 /Set/Aux/Send/Gain %d %d %d %s" % (key + (db,)))
+                else:
+                    self.link.send("/Set/Track/Out/Gain", [("i", key[0]), ("i", key[1]), ("d", float(db))])
+                    JOURNAL.mark("-> LV1 /Set/Track/Out/Gain %d %d %s" % (key + (db,)))
             self.last_sent[strip] = now
             if strip not in held_now:
                 del self.pending[strip]
-                vals = self.gesture.pop((g, ch), set()) - {round(db, 1)}
+                vals = self.gesture.pop(key, set()) - {round(db, 1)}
                 with self.state.lock:
-                    self.state.stale[(g, ch)] = (vals, now + STALE_FOR)
+                    self.state.stale[key] = (vals, now + STALE_FOR)
         with self.state.lock:
-            self.state.held_tracks = {self.pending[s][:2] for s in self.pending}
+            self.state.held_tracks = {self.pending[s][0] for s in self.pending}
         return held_now
 
 
@@ -1449,6 +1651,8 @@ def main():
         xlink.start()
         print("  Gain X32 via X/M32 Gain Recall (%s) : TRACK = encodeurs sur le gain, Rec tenu 1 s = 48 V." % a.x32)
     gain = GainControl(state, xlink, write=not a.lecture_seule, lv1=link)
+    sends = SendControl(state, link, write=not a.lecture_seule, gain=gain)
+    faders.key_of = sends.key_of
 
     def load_pans():
         """Pans de départ des entrées (le réseau ne les donne pas) : copie de la base de la LV1."""
@@ -1464,6 +1668,19 @@ def main():
                 if t["pan"] is None:
                     t["pan"] = v
         JOURNAL.mark("pans de départ lus dans la base LV1 : %d entrées" % len(pans))
+        try:
+            snd = lv1_db.input_sends()
+        except Exception as e:
+            JOURNAL.mark("envois de départ illisibles : %r" % e)
+            return
+        with state.lock:
+            for key, (g_db, on) in snd.items():
+                s = state.send(*key)
+                if s["fader"] is None:
+                    s["fader"] = g_db
+                if s["on"] is None:
+                    s["on"] = on
+        JOURNAL.mark("envois de départ lus dans la base LV1 : %d" % len(snd))
     if not a.dry_run:
         link.on_connect = load_pans
         with state.lock:
@@ -1502,17 +1719,20 @@ def main():
                 except queue.Empty:
                     break
                 if not (faders.on_midi(unit, st, d1, d2, t, entries, surface)
+                        or sends.on_midi(unit, st, d1, d2, t, entries, surface)
                         or gain.on_midi(unit, st, d1, d2, t, entries, surface)
                         or buttons.on_midi(unit, st, d1, d2, t, entries, surface)):
                     JOURNAL.mark("MIDI unité %d : %02X %02X %02X" % (unit, st, d1, d2))
             held = faders.flush(now)
             top, bot, cols, lvls, fads, layer_name, entries = build_frame(state, a.mixer - 1, surface.strips, overrides)
-            entries = list(entries) + [None] * (MASTER - len(entries)) + [master_target]
+            send_leds = sends.frame(entries, top, bot, cols, fads, overrides)
+            master_now = sends.aux_track() or master_target      # mode SEND : fader master = master de l'aux
+            entries = list(entries) + [None] * (MASTER - len(entries)) + [master_now]
             master_fv = None
-            if master_target:
+            if master_now:
                 with state.lock:
                     connected = state.connected
-                    mdb = state.tracks.get(master_target, {}).get("fader")
+                    mdb = state.tracks.get(master_now, {}).get("fader")
                 master_fv = db_to_fader(mdb) if connected and mdb is not None else None
             if layer_name != last_layer:
                 if layer_name:
@@ -1521,10 +1741,11 @@ def main():
                 last_layer = layer_name
             rings, recs = gain.frame(entries[:surface.strips], bot)
             surface.push(top, bot, cols, lvls, fads, now, held, master_fv)
-            surface.push_leds(*state.last_leds, recs=recs)
+            surface.push_leds(*send_leds, recs=recs)
             surface.push_rings(rings)
             surface.set_main_led(NOTE_TRACK, gain.mode)
             surface.set_main_led(NOTE_PAN, gain.pan_mode)
+            surface.set_main_led(NOTE_SEND, sends.aux is not None or (sends.picking and int(now * 3) % 2 == 0))
             with state.lock:
                 sel = state.selected
                 any_solo = any(t.get("solo") for t in state.tracks.values())
@@ -1532,7 +1753,11 @@ def main():
             side = gain.side.get(sel, 0)
             g_sel = xlink.gain(sel, side) if (xlink and sel) else None
             stereo = bool(xlink and sel and len(xlink.preamps(sel)) == 2)
-            surface.push_master_display(*master_display(sel, g_sel, side, stereo, lr_db))
+            assign, timecode = master_display(sel, g_sel, side, stereo, lr_db)
+            if sends.picking or sends.aux is not None:      # mode SEND : « SE » + aux à gauche du timecode
+                assign = seg_codes("SE", 2)
+                timecode = seg_codes(sends.label() or "--", 5) + timecode[5:]
+            surface.push_master_display(assign, timecode)
             surface.set_main_led(NOTE_RUDE_SOLO, any_solo and int(now * 2) % 2 == 0)   # clignote si un solo
             time.sleep(0.01 if faders.pending else TICK)
     except KeyboardInterrupt:

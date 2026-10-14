@@ -48,6 +48,39 @@ def input_pans(path=DB_PATH):
     return {(0, idx): max(-1.0, min(1.0, float(vals.get(oid, 0.0)) / BALANCE_SCALE)) for oid, idx in objs}
 
 
+# Envois aux (vérifié le 15/10/2026 : In 1 -> Fx 1 -10,8 = GAIN_0, -> Mon 1 -21,0 = GAIN_8, In 2 -> Fx 8 = GAIN_7).
+# aux = index de /Aux/Tracks (Fx 1-8 = 0..7, Mon 1-16 = 8..23). aux 0..15 : GAIN_n (232+n), ONOFF_n (248+n) ;
+# aux 16..23 : GAIN_2_k (595+k), ONOFF_2_k (603+k) — non vérifié (Mon 9-16 jamais réglés pendant l'essai).
+# Absent : gain -144, off (chainer_params_default_values, obj_type 0).
+def send_params(aux):
+    if aux < 16:
+        return 232 + aux, 248 + aux
+    return 595 + (aux - 16), 603 + (aux - 16)
+
+
+def input_sends(path=DB_PATH, n_aux=24):
+    """{(0, canal 0-based, aux): (gain dB, on)} pour toutes les entrées et les n_aux premiers aux."""
+    dst = copy_db(path)
+    try:
+        db = sqlite3.connect(dst)
+        try:
+            objs = db.execute("select id, obj_index from object where obj_type = 0").fetchall()
+            ids = sorted({p for a in range(n_aux) for p in send_params(a)})
+            rows = db.execute("select chainer_id, param_id, param_value from snapshot_chainer_params "
+                              "where snapshot_id = -1 and param_id in (%s)" % ",".join(map(str, ids))).fetchall()
+        finally:
+            db.close()
+    finally:
+        shutil.rmtree(os.path.dirname(dst), ignore_errors=True)
+    vals = {(c, p): v for c, p, v in rows}
+    out = {}
+    for oid, idx in objs:
+        for a in range(n_aux):
+            pg, po = send_params(a)
+            out[(0, idx, a)] = (float(vals.get((oid, pg), -144.0)), bool(vals.get((oid, po), 0.0)))
+    return out
+
+
 def main():
     pans = input_pans(sys.argv[1] if len(sys.argv) > 1 else DB_PATH)
     for (g, ch), p in sorted(pans.items())[:16]:
