@@ -133,6 +133,18 @@ Messages vérifiés :
 
 ## Reste à faire / idées
 
+- **PAN (codé, à tester)** : bouton PAN (0x2A) = encodeurs sur le pan LV1 (exclusif avec TRACK). `/Set/Track/Pan ii d`
+  (-1..+1), retour `/Notify/Track/Pan ii d i` envoyé SEULEMENT aux changements (rien à la connexion, rien dans
+  /Channels) -> pan de départ lu dans la base : `lv1_db.py`, copie de CurrentLV1.dat(+wal), snapshot -1, param 436
+  PARAM_OUTPUT_BALANCE -45..+45 (absent = centre), chainer_id = object.id (obj_type 0 = entrées). Vérifié le 14/10 :
+  In 4 tout à gauche = -45. 1 cran = 1/45 ; appui encodeur = centre ; pan inconnu (« ? ») = encodeur sans effet ;
+  retours LV1 ignorés 0,5 s après un envoi (`pan_hold`). Affichage « L45 / C / R12 », couronne mode 0. Test `tests/test_pan.py`.
+- **Sélection sur l'onglet Channel (codé, à tester)** : `lv1_clic.Target.on_mixer` = aller-retour d'onglet (clic Mixer N,
+  attente qu'il soit affiché, vérif case, clic, retour Channel). Onglets (relevé 14/10) : centres x 652 + 98k
+  (Mixer 1, Mixer 2, All, Channel, Show, Patch, Setup), lus en y 14, actif = (56,201,255). La case « ‹ nom › » en
+  haut à gauche (nom du canal sélectionné, flèches) existe sur toutes les pages : piste de secours.
+- Master : la X-Touch n'a ni écran ni vumètre master ; afficheur 7 segments (2 + 10 car.) et LED SOLO libres.
+  Options A/B/C proposées à Joseph (sélection + gain / LR / mixte), choix en attente.
 - FLIP (0x32) sans fonction.
 - Sens LV1 -> X-Touch de la sélection (vérifié le 14/10, journal 185026) : `LV1SelectionWatcher` (avec --clic-lv1) lit le liseré
   jaune (255,242,0) y 98-102/1080, x 143+96i (`lv1_clic.selected_strip`, sans admin) toutes les 0,15 s ; ne réagit

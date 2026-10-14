@@ -28,6 +28,11 @@ STRIP_X0, STRIP_PITCH, STRIP_NAME_Y = 142 + 46, 96, 433
 TAB_X = {1: 651, 2: 749}
 TAB_Y = 28
 TAB_ACTIVE = (56, 201, 255)
+# Les 7 onglets (relevé du 14/10, capture lv1_channel) : centres x, couleur lue en y 14 (au-dessus du texte),
+# actif = bleu, autres = gris clair (231, 231, 231). Clic au centre (y 28).
+TABS = {"Mixer 1": 652, "Mixer 2": 750, "All": 848, "Channel": 946, "Show": 1044, "Patch": 1142, "Setup": 1240}
+TAB_READ_Y = 14
+HOP_WAIT = 0.6        # s max pour que la LV1 affiche l'onglet cliqué
 
 WM_MOUSEMOVE, WM_LBUTTONDOWN, WM_LBUTTONUP, MK_LBUTTON = 0x0200, 0x0201, 0x0202, 0x0001
 
@@ -140,14 +145,45 @@ class Target:
         if not self.rect or self.rect[2] < 800:
             return "zone client LV1 illisible"
         if not self.detached:
-            c = pixel(*self.screen(TAB_X[self.mixer], TAB_Y))
-            if not _close(c, TAB_ACTIVE):
-                return "onglet Mixer %d pas affiché (couleur lue %s ; LV1 cachée ou autre page ?)" % (self.mixer, c)
+            tab = self.active_tab()
+            if tab not in ("Mixer %d" % self.mixer, "Channel"):
+                return "onglet Mixer %d (ou Channel) pas affiché (lu : %s ; LV1 cachée ?)" % (self.mixer, tab)
+            if tab == "Channel":
+                return None            # aller-retour d'onglet : la case sera vérifiée sur la page Mixer
         if frame is not None:
             c = pixel(*self.screen(*frame))
             if c is None or sum(c) < 150:
                 return "cadre de la case attendu en %s introuvable (couleur %s)" % (frame, c)
         return None
+
+    def active_tab(self):
+        """Onglet affiché (« Mixer 1 », « Channel »…) lu à l'écran, ou None (LV1 cachée, illisible)."""
+        found = [name for name, x in TABS.items() if _close(pixel(*self.screen(x, TAB_READ_Y)), TAB_ACTIVE)]
+        return found[0] if len(found) == 1 else None
+
+    def on_mixer(self, frame, action):
+        """Exécute action() sur la page Mixer. Si la LV1 est sur l'onglet Channel (sélection très utile là,
+        demande de Joseph) : clic Mixer N, attente qu'il soit affiché, vérification de la case, action, puis
+        retour sur Channel. Renvoie (fait, raison)."""
+        hop = not self.detached and self.active_tab() == "Channel"
+        if hop:
+            self.click(TABS["Mixer %d" % self.mixer], TAB_Y)
+            t_end = time.time() + HOP_WAIT
+            while self.active_tab() != "Mixer %d" % self.mixer:
+                if time.time() > t_end:
+                    self.click(TABS["Channel"], TAB_Y)
+                    return False, "onglet Mixer %d pas affiché après le clic" % self.mixer
+                time.sleep(0.02)
+            if frame is not None:
+                c = pixel(*self.screen(*frame))
+                if c is None or sum(c) < 150:
+                    self.click(TABS["Channel"], TAB_Y)
+                    return False, "case introuvable sur la page Mixer (couleur %s)" % (c,)
+        ok = action()
+        if hop:
+            time.sleep(0.08)
+            self.click(TABS["Channel"], TAB_Y)
+        return ok, None
 
     def click(self, rx, ry, method="message"):
         cx, cy = self.pt(rx, ry)
@@ -252,7 +288,7 @@ def selected_strip(mixer=1):
     t = Target(mixer)
     if not t.hwnd or not t.rect or u32().IsIconic(t.hwnd) or t.rect[2] < 800:
         return None, "LV1 introuvable ou réduite"
-    if not t.detached and not _close(pixel(*t.screen(TAB_X[mixer], TAB_Y)), TAB_ACTIVE):
+    if not t.detached and t.active_tab() != "Mixer %d" % mixer:
         return None, "onglet Mixer %d pas affiché" % mixer
     x, y, w, h = t.rect
     rows = screen_rows(x, [y + round(h * r / REF_H) for r in SEL_TOP_ROWS], w)
@@ -277,7 +313,7 @@ def click_layer(k, mixer=1, method="message"):
     why = t.check(layer_frame(k))
     if why:
         return False, why
-    return t.click(*layer_point(k), method=method), None
+    return t.on_mixer(layer_frame(k), lambda: t.click(*layer_point(k), method=method))
 
 
 def click_strip(i, mixer=1, method="message"):
@@ -286,7 +322,7 @@ def click_strip(i, mixer=1, method="message"):
     why = t.check()
     if why:
         return False, why
-    return t.click(*strip_point(i), method=method), None
+    return t.on_mixer(None, lambda: t.click(*strip_point(i), method=method))
 
 
 def main(argv=None):
@@ -305,6 +341,7 @@ def main(argv=None):
         print("Tranche sélectionnée sur la LV1 : %s" % (col + 1 if col is not None else (why or "aucune / illisible")))
         return 0
     if a.action == "verifier":
+        print("Onglet affiché : %s" % (t.active_tab() if t.rect else "?"))
         for k in range(8):
             print("  couche %d -> %s : %s" % (k + 1, t.screen(*layer_point(k)) if t.rect else "?",
                                              t.check(layer_frame(k)) or "clic possible"))

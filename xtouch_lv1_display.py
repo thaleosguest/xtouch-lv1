@@ -217,6 +217,7 @@ class LV1State:
         self.current = {}         # vue -> index de couche (/Notify/CurrentLayer)
         self.local = {}           # vue -> index choisi par ◄ BANK ► sur la X-Touch (effacé au clic LV1)
         self.selected = None      # (g, ch) sélectionné dans le pont (Select / ◄ CHANNEL ►), local comme MyFOH
+        self.pan_hold = {}        # (g, ch) -> instant jusqu'auquel les /Notify/Track/Pan sont ignorés (geste PAN)
         self.custom_on = {}       # vue -> bouton Custom allumé ? (/Notify/CustomButton, hypothèse)
         self.spill_on = {}        # vue -> bouton Spill allumé ? (/Notify/SpillButton, hypothèse)
         self.version = ""
@@ -227,7 +228,7 @@ class LV1State:
 
     def track(self, g, ch):
         return self.tracks.setdefault((g, ch), {"name": None, "rgb": None, "pal": None, "fader": None,
-                                                "mute": None, "solo": None})
+                                                "mute": None, "solo": None, "pan": None})
 
     def bank(self, page, step):
         """◄ BANK ► : couche précédente / suivante du jeu affiché, en sautant les couches vides.
@@ -349,6 +350,12 @@ def handle(state, address, args):
             # ,iiiT [groupe, canal, muet 0|1, T] ; groupe 13 = groupes de mute (module Companion)
             if args[0][1] != 13:
                 state.track(args[0][1], args[1][1])["mute"] = args[2][1] != 0
+        elif address == "/Notify/Track/Pan" and len(args) >= 3 and args[2][0] in "fd":
+            # ,iidi [groupe, canal, pan -1..+1, ?] ; la LV1 ne l'envoie qu'aux changements (pan de départ :
+            # base de la LV1, lv1_db). Juste après un geste PAN, nos propres retours tardifs sont ignorés.
+            key = (args[0][1], args[1][1])
+            if time.time() >= state.pan_hold.get(key, 0):
+                state.track(*key)["pan"] = float(args[2][1])
         elif address == "/Notify/Solo" and len(args) >= 3 and args[2][0] == "i":
             state.track(args[0][1], args[1][1])["solo"] = args[2][1] != 0
         elif address == "/Notify/Track/Out/Gain" and len(args) >= 3 and args[2][0] in "fdi":
@@ -410,6 +417,7 @@ class LV1Link(threading.Thread):
         self.stop_flag = False
         self.sock = None
         self.send_lock = threading.Lock()
+        self.on_connect = None    # appelée (sur un fil à part) à chaque connexion : pans de départ…
 
     def send(self, address, args):
         """Envoie un message à la LV1 (ignoré si pas connectée)."""
@@ -487,6 +495,8 @@ class LV1Link(threading.Thread):
                     with self.state.lock:
                         self.state.connected = True
                     print("  LV1 connectée (%s:%d)" % (ip, port))
+                    if self.on_connect:
+                        threading.Thread(target=self.on_connect, daemon=True).start()
                     sock.sendall(L.frame("/Get/Aux/Tracks") + L.frame("/Get/Layers", [("i", 0), ("i", 0)]))
                 if not ack.is_set() and time.time() > t_ack:
                     raise OSError("pas de réponse à la poignée de main")
@@ -624,6 +634,7 @@ class Surface:
                     self.midi.short(h, 0xB0, 0x30 + s, 0)
                 if u == self.master_unit:
                     self.midi.short(h, 0x90, NOTE_TRACK, 0)
+                    self.midi.short(h, 0x90, NOTE_PAN, 0)
                 if u == self.master_unit:
                     self.midi.short(h, 0xE8, 0, 0)
                 self.midi.long(h, X.msg_colors(dev, [7] * 8))
@@ -713,6 +724,7 @@ NOTE_CHANNEL_LEFT, NOTE_CHANNEL_RIGHT = 0x30, 0x31
 # Assignation des encodeurs (norme Mackie, à confirmer) : TRACK 0x28. Encodeurs : CC 0x10-0x17 relatifs
 # (bit 6 = sens, bits 0-3 = vitesse), couronnes : CC 0x30-0x37.
 NOTE_TRACK = 0x28
+NOTE_PAN = 0x2A                   # PAN/SURROUND (vérifié le 14/10, journal 183905)
 NOTE_VPOT_PUSH = 0x20             # appui sur l'encodeur n : 0x20 + n (vérifié le 14/10, journal 183905)
 CC_VPOT, CC_RING = 0x10, 0x30
 SIDE_NAMES = {0: "L", 1: "R"}
@@ -727,6 +739,14 @@ def gain_label(gains, side=0):
     return "%+.1f" % gains[0]
 
 
+def pan_label(p):
+    """Pan -1..+1 -> « L45 » / « C » / « R12 » (échelle de la LV1), « ? » si inconnu."""
+    if p is None:
+        return "  ?"
+    v = int(round(p * 45))
+    return "  C" if v == 0 else ("L%d" % -v if v < 0 else "R%d" % v)
+
+
 class GainControl:
     """Étape 4 : TRACK = encodeurs sur le gain des préamplis X32 ; Rec tenu 1 s = 48 V. Via x32-gain-recall.
 
@@ -736,9 +756,14 @@ class GainControl:
     STEP_DB = 0.5
     PHANTOM_HOLD = 1.0
 
-    def __init__(self, state, link, write=True):
+    PAN_STEP = 1.0 / 45.0             # 1 cran = 1 pas de l'échelle LV1 (L45..R45)
+    PAN_HOLD = 0.5                    # s : retours LV1 de pan ignorés après notre envoi
+
+    def __init__(self, state, link, write=True, lv1=None):
         self.state, self.link, self.write = state, link, write
+        self.lv1 = lv1                    # LV1Link (envoi /Set/Track/Pan)
         self.mode = False                 # mode gain (TRACK)
+        self.pan_mode = False             # mode pan (PAN) ; exclusif avec le mode gain
         self.rec_down = {}                # tranche -> instant d'appui sur Rec
         self.side = {}                    # piste stéréo -> 0 (L, défaut) / 1 (R) : appui encodeur ; jamais les deux
         self.warned = set()
@@ -748,9 +773,39 @@ class GainControl:
         if kind == 0x90 and d1 == NOTE_TRACK:
             if d2:
                 self.mode = not self.mode
+                self.pan_mode = False
                 if not self.mode:
                     self.side.clear()             # en sortant du mode gain : stéréo de nouveau sur L
                 JOURNAL.mark("XT bouton Track -> mode gain %s" % ("ON" if self.mode else "OFF"))
+            return True
+        if kind == 0x90 and d1 == NOTE_PAN:
+            if d2:
+                self.pan_mode = not self.pan_mode
+                if self.pan_mode:
+                    self.mode = False
+                    self.side.clear()
+                JOURNAL.mark("XT bouton Pan -> mode pan %s" % ("ON" if self.pan_mode else "OFF"))
+            return True
+        if self.pan_mode and kind == 0x90 and NOTE_VPOT_PUSH <= d1 < NOTE_VPOT_PUSH + 8:
+            strip = 8 * unit + (d1 - NOTE_VPOT_PUSH)
+            e = entries[strip] if strip < len(entries) else None
+            if d2 and e is not None:
+                self._set_pan(e, 0.0, "appui encodeur %d -> pan centre" % (strip + 1))
+            return True
+        if self.pan_mode and kind == 0xB0 and CC_VPOT <= d1 < CC_VPOT + 8:
+            strip = 8 * unit + (d1 - CC_VPOT)
+            n = d2 & 0x0F
+            delta = -n if d2 & 0x40 else n
+            e = entries[strip] if strip < len(entries) else None
+            if e is None or not delta:
+                return True
+            with self.state.lock:
+                cur = self.state.tracks.get(e, {}).get("pan")
+            if cur is None:
+                self._warn("pan de départ inconnu pour %s : encodeur sans effet (bouge-le une fois sur la LV1)" % (e,))
+                return True
+            self._set_pan(e, max(-1.0, min(1.0, round((cur + delta * self.PAN_STEP) * 45) / 45.0)),
+                          "encodeur %d %+d" % (strip + 1, delta))
             return True
         if kind == 0x90 and NOTE_VPOT_PUSH <= d1 < NOTE_VPOT_PUSH + 8:
             strip = 8 * unit + (d1 - NOTE_VPOT_PUSH)
@@ -797,6 +852,14 @@ class GainControl:
             return True
         return False
 
+    def _set_pan(self, e, value, why):
+        with self.state.lock:
+            self.state.track(*e)["pan"] = value
+            self.state.pan_hold[e] = time.time() + self.PAN_HOLD
+        if self.write and self.lv1:
+            self.lv1.send("/Set/Track/Pan", [("i", e[0]), ("i", e[1]), ("d", value)])
+        JOURNAL.mark("XT %s -> pan %s %+.3f" % (why, e, value))
+
     def _warn(self, text):
         if text not in self.warned:
             print("  %s" % text)
@@ -805,7 +868,17 @@ class GainControl:
     def frame(self, entries, bot):
         """Ligne du bas (gain en mode gain), couronnes, LED Rec (48 V) pour les tranches affichées."""
         rings, recs = [], []
+        if self.pan_mode:
+            with self.state.lock:
+                pans = [self.state.tracks.get(e, {}).get("pan") if e is not None else None for e in entries]
         for i, e in enumerate(entries):
+            if self.pan_mode:
+                p = pans[i]
+                recs.append(bool(self.link and e is not None and self.link.phantom_on(e, self.side.get(e, 0))))
+                rings.append(0 if p is None else (6 + int(round(p * 5))))     # mode 0 : un point, centre = 6
+                if e is not None and i < len(bot):
+                    bot[i] = pan_label(p)
+                continue
             side = self.side.get(e, 0)
             g = self.link.gain(e, side) if (self.link and e is not None) else None
             recs.append(bool(self.link and e is not None and self.link.phantom_on(e, side)))
@@ -1273,7 +1346,28 @@ def main():
         xlink = xgr_link.GainRecallLink(a.x32)
         xlink.start()
         print("  Gain X32 via X/M32 Gain Recall (%s) : TRACK = encodeurs sur le gain, Rec tenu 1 s = 48 V." % a.x32)
-    gain = GainControl(state, xlink, write=not a.lecture_seule)
+    gain = GainControl(state, xlink, write=not a.lecture_seule, lv1=link)
+
+    def load_pans():
+        """Pans de départ des entrées (le réseau ne les donne pas) : copie de la base de la LV1."""
+        try:
+            import lv1_db
+            pans = lv1_db.input_pans()
+        except Exception as e:                # base absente (autre PC, test) : « ? » jusqu'au 1er changement
+            JOURNAL.mark("pans de départ illisibles : %r" % e)
+            return
+        with state.lock:
+            for key, v in pans.items():
+                t = state.track(*key)
+                if t["pan"] is None:
+                    t["pan"] = v
+        JOURNAL.mark("pans de départ lus dans la base LV1 : %d entrées" % len(pans))
+    if not a.dry_run:
+        link.on_connect = load_pans
+        with state.lock:
+            already = state.connected
+        if already:                           # connectée avant ce branchement : on lit tout de suite
+            threading.Thread(target=load_pans, daemon=True).start()
     if a.lecture_seule:
         print("  Mode lecture seule : rien n'est envoyé à la LV1.")
     if a.clic_lv1 and not a.lecture_seule:
@@ -1328,6 +1422,7 @@ def main():
             surface.push_leds(*state.last_leds, recs=recs)
             surface.push_rings(rings)
             surface.set_main_led(NOTE_TRACK, gain.mode)
+            surface.set_main_led(NOTE_PAN, gain.pan_mode)
             time.sleep(0.01 if faders.pending else TICK)
     except KeyboardInterrupt:
         pass

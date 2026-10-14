@@ -170,13 +170,20 @@ Elle servira à l'étape 4 (gain X32, EQ…).
 3. Tiens Rec d'une tranche 1 s : 48 V allumé (Gain Recall, X32, LED). Appui bref : rien.
 4. Envoie-moi le journal.
 
+## PAN
+
+**PAN** : encodeurs sur le pan des tranches (LED PAN ; TRACK et PAN s'excluent). 1 cran = 1 pas de la LV1,
+**appui sur l'encodeur = centre**. Écran : « L45 », « C », « R12 ». Le pan de départ des entrées est lu dans la
+base de la LV1 ; s'il est inconnu (« ? », ex. bus), l'encodeur ne fait rien tant que le pan n'a pas bougé une fois.
+
 ## La LV1 suit BANK et la sélection (`--clic-lv1`)
 
 L'API réseau de la LV1 n'a pas de commande de couche ni de sélection. Avec `--clic-lv1`, le pont **clique
 pour toi dans la fenêtre de la LV1** (la souris ne bouge pas) : BANK clique la case de couche, Select et
 CHANNEL cliquent le nom de la tranche. Conditions :
 - lancer le pont dans un **PowerShell en administrateur** (la LV1 l'est ; sinon Windows bloque) ;
-- la LV1 doit être **affichée** sur la page Mixer suivie (onglet lu à l'écran avant chaque clic) ;
+- la LV1 doit être **affichée** sur la page Mixer suivie, ou sur **Channel** (le pont passe un instant sur
+  Mixer, clique, puis revient sur Channel) (onglet lu à l'écran avant chaque clic) ;
   sinon aucun clic, la X-Touch continue en local et la raison s'affiche.
 
     py xtouch_lv1_display.py --clic-lv1
