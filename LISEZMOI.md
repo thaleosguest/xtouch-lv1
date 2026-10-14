@@ -149,6 +149,19 @@ Elle servira à l'étape 4 (gain X32, EQ…).
 3. BANK ► puis BANK ◄ : la LED Select revient sur le même canal.
 4. Envoie-moi le journal.
 
+## La LV1 suit BANK et la sélection (`--clic-lv1`)
+
+L'API réseau de la LV1 n'a pas de commande de couche ni de sélection. Avec `--clic-lv1`, le pont **clique
+pour toi dans la fenêtre de la LV1** (la souris ne bouge pas) : BANK clique la case de couche, Select et
+CHANNEL cliquent le nom de la tranche. Conditions :
+- lancer le pont dans un **PowerShell en administrateur** (la LV1 l'est ; sinon Windows bloque) ;
+- la LV1 doit être **affichée** sur la page Mixer suivie (onglet lu à l'écran avant chaque clic) ;
+  sinon aucun clic, la X-Touch continue en local et la raison s'affiche.
+
+    py xtouch_lv1_display.py --clic-lv1
+
+Outil d'essai séparé : `py lv1_clic.py verifier | couche N | tranche N`.
+
 ## Capture du trafic MyFOH (recherche des commandes couche / sélection)
 
 `lv1_capture.py` décode une capture réseau tablette <-> LV1 en messages lisibles. La capture se fait avec

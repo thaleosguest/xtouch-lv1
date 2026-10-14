@@ -694,6 +694,86 @@ NOTE_BANK_LEFT, NOTE_BANK_RIGHT = 0x2E, 0x2F
 NOTE_CHANNEL_LEFT, NOTE_CHANNEL_RIGHT = 0x30, 0x31
 
 
+class LV1Clicker(threading.Thread):
+    """Fait suivre la LV1 par clics simulés (option --clic-lv1) : couche (BANK) et sélection (Select, CHANNEL).
+
+    L'API réseau n'a pas ces commandes (Companion, capture MyFOH du 14/10). lv1_clic.py clique dans la fenêtre
+    LV1 (message Windows, la souris ne bouge pas), avec ses garde-fous (administrateur, onglet Mixer lu à
+    l'écran, case présente). Une file à part : jamais de clic dans la boucle MIDI. Une tranche n'est cliquée
+    que si la LV1 affiche la couche qui la contient (sinon le clic sélectionnerait un autre canal)."""
+    WAIT_LAYER = 1.0     # s d'attente de /Notify/CurrentLayer après un clic de couche
+
+    def __init__(self, state, page, click_layer=None, click_strip=None):
+        super().__init__(daemon=True)
+        self.state, self.page = state, page
+        if click_layer is None or click_strip is None:
+            import lv1_clic
+            click_layer = click_layer or lv1_clic.click_layer
+            click_strip = click_strip or lv1_clic.click_strip
+        self.click_layer, self.click_strip = click_layer, click_strip
+        self.q = queue.Queue()
+        self.last_why = None
+
+    def layer(self, k):
+        self.q.put(("couche", k))
+
+    def select(self, track):
+        if track is not None:
+            self.q.put(("sélection", track))
+
+    def _refused(self, what, why):
+        JOURNAL.mark("clic LV1 %s refusé : %s" % (what, why))
+        if why != self.last_why:
+            print("  Clic LV1 impossible (%s) : %s" % (what, why))
+            self.last_why = why
+
+    def run(self):
+        while True:
+            kind, arg = self.q.get()
+            if kind == "sélection":          # on ne garde que la dernière sélection en attente
+                try:
+                    while True:
+                        nxt = self.q.queue[0]
+                        if nxt[0] != "sélection":
+                            break
+                        kind, arg = self.q.get_nowait()
+                except IndexError:
+                    pass
+            try:
+                if kind == "couche":
+                    with self.state.lock:
+                        if self.state.current.get(self.page) == arg:
+                            continue
+                    ok, why = self.click_layer(arg, self.page + 1)
+                    JOURNAL.mark("clic LV1 couche %d : %s" % (arg + 1, "envoyé" if ok else why))
+                    if not ok:
+                        self._refused("couche", why or "envoi refusé par Windows")
+                        continue
+                    t_end = time.time() + self.WAIT_LAYER
+                    while time.time() < t_end:
+                        with self.state.lock:
+                            if self.state.current.get(self.page) == arg:
+                                break
+                        time.sleep(0.02)
+                else:
+                    with self.state.lock:
+                        layers, _ = self.state.layer_set(self.page)
+                        idx = self.state.current.get(self.page)
+                        ent = layers[idx][1] if layers and idx is not None and 0 <= idx < len(layers) else []
+                    i = ent.index(arg) if arg in ent else None
+                    if i is None or i >= 16:
+                        JOURNAL.mark("clic LV1 sélection %s : pas sur la couche affichée par la LV1" % (arg,))
+                        continue
+                    ok, why = self.click_strip(i, self.page + 1)
+                    JOURNAL.mark("clic LV1 tranche %d %s : %s" % (i + 1, arg, "envoyé" if ok else why))
+                    if not ok:
+                        self._refused("sélection", why or "envoi refusé par Windows")
+                    else:
+                        self.last_why = None
+            except Exception as e:           # un clic raté ne doit jamais arrêter le pont
+                JOURNAL.mark("clic LV1 : erreur %r" % e)
+
+
 class ButtonControl:
     """Mute / Solo -> LV1 ; ◄ BANK ► -> couche, Select / ◄ CHANNEL ► -> sélection (locales). Rec : rien."""
 
@@ -701,6 +781,7 @@ class ButtonControl:
         self.state, self.link, self.write = state, link, write
         self.page = page          # vue LV1 suivie (0 = Mixer 1)
         self.busy = busy          # vrai si un fader est sous le doigt : pas de changement de banque
+        self.lv1 = None           # LV1Clicker si --clic-lv1 : la LV1 suit couche et sélection
         self.warned = set()
 
     def on_bank(self, d1):
@@ -711,6 +792,8 @@ class ButtonControl:
         with self.state.lock:
             k = self.state.bank(self.page, step)
         JOURNAL.mark("XT bouton Bank %+d -> couche %s" % (step, k if k is not None else "inchangée (bout)"))
+        if k is not None and self.lv1:
+            self.lv1.layer(k)
         return True
 
     def on_channel(self, d1, entries):
@@ -720,6 +803,7 @@ class ButtonControl:
         Au bout de la couche, la banque suit (couche voisine non vide, 1er / dernier canal)."""
         step = -1 if d1 == NOTE_CHANNEL_LEFT else 1
         shown = [e for e in entries[:MASTER] if e is not None]
+        kb = None
         with self.state.lock:
             sel = self.state.selected
             if sel not in shown:
@@ -731,7 +815,7 @@ class ButtonControl:
                 elif self.busy():
                     JOURNAL.mark("XT bouton Channel %+d ignoré (fader tenu, changement de banque)" % step)
                     return True
-                elif self.state.bank(self.page, step) is None:
+                elif (kb := self.state.bank(self.page, step)) is None:
                     new = sel                     # tout au bout : on ne bouge pas
                 else:
                     _, ent = self.state.layer_entries(self.page)
@@ -739,6 +823,10 @@ class ButtonControl:
                     new = (nxt[0] if step > 0 else nxt[-1]) if nxt else sel
             self.state.selected = new
         JOURNAL.mark("XT bouton Channel %+d -> sélection %s" % (step, new))
+        if self.lv1:
+            if kb is not None:
+                self.lv1.layer(kb)
+            self.lv1.select(new)
         return True
 
     def on_midi(self, unit, status, d1, d2, t, entries, surface):
@@ -763,6 +851,8 @@ class ButtonControl:
             with self.state.lock:
                 self.state.selected = (g, ch)
             JOURNAL.mark("sélection %s" % ((g, ch),))
+            if self.lv1:
+                self.lv1.select((g, ch))
             return True
         if kind == "Rec":
             if kind not in self.warned:
@@ -934,6 +1024,8 @@ def main():
     ap.add_argument("--seconds", type=float, default=0, help="arrêt automatique après N s (test)")
     ap.add_argument("--no-journal", action="store_true", help="ne pas écrire le journal des messages LV1")
     ap.add_argument("--lecture-seule", action="store_true", help="n'envoie rien à la LV1 (faders sans effet)")
+    ap.add_argument("--clic-lv1", action="store_true",
+                    help="la LV1 suit BANK et la sélection par clics simulés (pont lancé en administrateur)")
     ap.add_argument("--master", default="3:0",
                     help="piste LV1 du fader master, groupe:canal (3:0 = LR, défaut ; 'aucun' pour désactiver)")
     a = ap.parse_args()
@@ -1004,6 +1096,13 @@ def main():
                             busy=lambda: bool(faders.held(time.time())))
     if a.lecture_seule:
         print("  Mode lecture seule : rien n'est envoyé à la LV1.")
+    if a.clic_lv1 and not a.lecture_seule:
+        import lv1_clic
+        if not lv1_clic.is_admin():
+            print("  --clic-lv1 : PAS administrateur, Windows bloquera les clics (relancer en administrateur).")
+        buttons.lv1 = LV1Clicker(state, a.mixer - 1)
+        buttons.lv1.start()
+        print("  Clics LV1 : la LV1 suit BANK et la sélection (page Mixer %d affichée)." % a.mixer)
     print("Recherche de la LV1… (Ctrl+C pour arrêter)")
     entries = [None] * surface.strips
     master_target = None

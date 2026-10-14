@@ -30,6 +30,14 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   bloquée pendant un toucher de fader). Test `tests/test_banque.py`.
 - **Sélection locale (vérifiée le 14/10, journal 180730, LED OK, BANK OK)** : Select = sélection (`LV1State.selected`, LED Select), ◄ CHANNEL ►
   = canal affiché préc./suiv., banque qui suit au bout de couche. Test `tests/test_selection.py`.
+- **Clics simulés dans la LV1** (`lv1_clic.py`, option `--clic-lv1`, classe `LV1Clicker`) : PostMessage
+  WM_LBUTTON* à la fenêtre enfant sous le point (souris immobile). **Vérifié le 14/10** : `couche 3` et `tranche 5`
+  marchent (PowerShell administrateur obligatoire : LV1 en admin, PrintWindow/clics refusés sinon).
+  Géométrie (1920x1080, fractions de la zone client) : couches x 1847, y 537+72k (cadre x 1795) ;
+  noms des tranches y 433, x 188+96i ; onglet Mixer 1 x 651 / Mixer 2 x 749, y 28, actif (56,201,255).
+  Garde-fous avant chaque clic : admin, fenêtre non réduite, onglet lu à l'écran, cadre de case présent.
+  Tranche cliquée seulement si la couche LV1 courante la contient ; sélections en rafale regroupées.
+  Intégration pont : à tester sur le matériel. Test `tests/test_clic_lv1.py`.
 - État mute/solo **initial** lu dans `/Channels` (test `tests/test_etat_initial.py`, LED au démarrage à vérifier sur le matériel).
 
 ## Fichiers
@@ -124,8 +132,8 @@ Messages vérifiés :
 
 ## Reste à faire / idées
 
-- Étape 3 suite : changer aussi la couche **dans la LV1** (commande à trouver : essai `/Set/CurrentLayer`,
-  ou User Key : voir si la LV1 permet d'assigner une User Key à une couche) ; FLIP (0x32) sans fonction.
+- FLIP (0x32) sans fonction. Sens inverse à faire : lire la sélection LV1 à l'écran (liseré jaune (255,242,0)
+  y 100/1080, cf. `x32-gain-recall` `lv1_selected_column_top`) pour que la LED Select suive la LV1.
 - **Étape 4** : encodeurs -> **gain X32** (OSC UDP 10023, via la logique de `x32-gain-recall` : table EXP -> canal LV1),
   48 V X32 sur Rec ?
 - Select : pas de commande LV1 connue. Piste : `/Notify/SelectedLinkTrackID i:vue i i` et `/Notify/LinkButton`
