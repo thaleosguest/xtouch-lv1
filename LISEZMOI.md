@@ -149,6 +149,24 @@ Elle servira à l'étape 4 (gain X32, EQ…).
 3. BANK ► puis BANK ◄ : la LED Select revient sur le même canal.
 4. Envoie-moi le journal.
 
+## Étape 4 : gain et 48 V des préamplis X32 (via X/M32 Gain Recall)
+
+**X/M32 Gain Recall doit tourner** et être connecté à la console : le pont lui passe les réglages
+(il connaît déjà quel préampli X32 alimente quel canal LV1).
+- **TRACK** : encodeurs en mode **gain** (LED TRACK allumée). Chaque encodeur règle le gain du préampli
+  de sa tranche, 0,5 dB par cran (canal stéréo : les deux préamplis ensemble). La ligne du bas affiche le
+  gain, la couronne le montre. Re-TRACK : retour à l'affichage des faders.
+- **Rec** : 48 V du préampli de la tranche. **Tenir 1 s** (un appui bref ne fait rien : protection des
+  micros à ruban). LED Rec = 48 V réel, tout le temps.
+- Tranche sans préampli X32 (pas d'EXP, Fx, bus…) : « - », couronne éteinte.
+- `--x32 aucun` désactive ; `--x32 http://…` autre adresse de Gain Recall.
+
+### Test (hors concert, micros débranchés pour le 48 V)
+1. Lance Gain Recall, puis `py xtouch_lv1_display.py`.
+2. TRACK, tourne l'encodeur de In 1 : le gain doit bouger dans Gain Recall et sur la X32.
+3. Tiens Rec d'une tranche 1 s : 48 V allumé (Gain Recall, X32, LED). Appui bref : rien.
+4. Envoie-moi le journal.
+
 ## La LV1 suit BANK et la sélection (`--clic-lv1`)
 
 L'API réseau de la LV1 n'a pas de commande de couche ni de sélection. Avec `--clic-lv1`, le pont **clique

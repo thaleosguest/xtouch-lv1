@@ -90,7 +90,7 @@ def inject():
     press(3.4, 0x11)        # Mute tranche 2 -> In 2 (toujours Ch 1-16)
 threading.Thread(target=inject, daemon=True).start()
 
-sys.argv = ["x", "--dry-run", "--no-journal", "--host", "127.0.0.1", "--port", str(PORT), "--seconds", "3.8"]
+sys.argv = ["x", "--dry-run", "--x32", "aucun", "--no-journal", "--host", "127.0.0.1", "--port", str(PORT), "--seconds", "3.8"]
 out = io.StringIO()
 with contextlib.redirect_stdout(out):
     D.main()

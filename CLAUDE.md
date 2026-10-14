@@ -137,8 +137,13 @@ Messages vérifiés :
 - Sens LV1 -> X-Touch de la sélection (codé, à tester) : `LV1SelectionWatcher` (avec --clic-lv1) lit le liseré
   jaune (255,242,0) y 98-102/1080, x 143+96i (`lv1_clic.selected_strip`, sans admin) toutes les 0,15 s ; ne réagit
   qu'aux changements. Test `tests/test_selection_lv1.py`.
-- **Demandé par Joseph** : bouton **TRACK** (assignation des encodeurs) = encodeurs en mode **gain X32** ;
-  **Rec** = 48 V du préampli X32 de la tranche.
+- **Étape 4 (codée, à tester)** : gain/48 V X32 **via x32-gain-recall** (choix de Joseph : pas d'OSC direct),
+  `xgr_link.py` (GET /api/state 2x/s : gains, phantom, exp_map idx->EXP, lv1_sources canal LV1 1-based->[EXP] ;
+  POST /api/gain {idx, db}, /api/phantom {idx, on} ; localhost sans code ; -12..+60 dB pas 0,5).
+  `GainControl` : **TRACK** (0x28, non vérifié) bascule le mode gain ; encodeurs CC 0x10-17 relatifs (bit 6 = sens),
+  couronnes CC 0x30-37 (mode 2) ; ligne du bas = gain ; stéréo = 2 préamplis ensemble ; **Rec tenu 1 s = 48 V**
+  (appui bref ignoré, protection rubans), LED Rec = 48 V réel. Option `--x32 URL|aucun`. Test `tests/test_gain.py`.
+  Les autres tests passent `--x32 aucun` (sinon ils liraient le vrai Gain Recall sur 8032).
 - **Étape 4** : encodeurs -> **gain X32** (OSC UDP 10023, via la logique de `x32-gain-recall` : table EXP -> canal LV1),
   48 V X32 sur Rec ?
 - Select : pas de commande LV1 connue. Piste : `/Notify/SelectedLinkTrackID i:vue i i` et `/Notify/LinkButton`

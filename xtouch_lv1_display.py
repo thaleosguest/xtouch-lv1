@@ -512,6 +512,7 @@ class Surface:
         self.sent_fader = {}   # (unité, tranche) -> valeur 14 bits
         self.motor = {}        # tranche -> (valeur, instant) de la dernière commande moteur
         self.sent_led = {}     # (unité, note) -> 0 | 127
+        self.sent_ring = {}    # (unité, encodeur) -> valeur de couronne
         # Le master est sur la X-Touch (canal MIDI 8) ; l'Extender n'en a pas.
         self.master_unit = next((i for i, un in enumerate(units) if un[0] == "X-Touch"), None)
 
@@ -547,14 +548,28 @@ class Surface:
             self.midi.short(self.units[unit][2], 0x90, note, v)
             self.sent_led[(unit, note)] = v
 
-    def push_leds(self, mutes, solos, selects=()):
+    def push_leds(self, mutes, solos, selects=(), recs=()):
         selects = list(selects) + [False] * (len(mutes) - len(selects))
-        for i, (m, so, se) in enumerate(zip(mutes, solos, selects)):
+        recs = list(recs) + [False] * (len(mutes) - len(recs))
+        for i, (m, so, se, r) in enumerate(zip(mutes, solos, selects, recs)):
             u, s = i // 8, i % 8
             self.set_led(u, NOTE_MUTE + s, bool(m))
             self.set_led(u, NOTE_SOLO + s, bool(so))
-            self.set_led(u, NOTE_REC + s, False)
+            self.set_led(u, NOTE_REC + s, bool(r))
             self.set_led(u, NOTE_SELECT + s, bool(se))
+
+    def push_rings(self, values):
+        """Couronnes de LED des encodeurs : CC 0x30+n, valeur Mackie (mode << 4) | position 0..11."""
+        for i, v in enumerate(values):
+            u, s = i // 8, i % 8
+            if u < len(self.units) and self.sent_ring.get((u, s)) != v:
+                self.midi.short(self.units[u][2], 0xB0, 0x30 + s, v)
+                self.sent_ring[(u, s)] = v
+
+    def set_main_led(self, note, on):
+        """LED d'un bouton de la X-Touch principale (TRACK…)."""
+        if self.master_unit is not None:
+            self.set_led(self.master_unit, note, on)
 
     @property
     def strips(self):
@@ -606,6 +621,9 @@ class Surface:
                     self.midi.short(h, 0xE0 | s, 0, 0)
                     for base in (NOTE_REC, NOTE_SOLO, NOTE_MUTE, NOTE_SELECT):
                         self.midi.short(h, 0x90, base + s, 0)
+                    self.midi.short(h, 0xB0, 0x30 + s, 0)
+                if u == self.master_unit:
+                    self.midi.short(h, 0x90, NOTE_TRACK, 0)
                 if u == self.master_unit:
                     self.midi.short(h, 0xE8, 0, 0)
                 self.midi.long(h, X.msg_colors(dev, [7] * 8))
@@ -692,6 +710,90 @@ NOTE_REC, NOTE_SOLO, NOTE_MUTE, NOTE_SELECT = 0x00, 0x08, 0x10, 0x18
 # Navigation, norme Mackie (vérifié le 14/10/2026) : ◄ BANK ► 0x2E/0x2F, ◄ CHANNEL ► 0x30/0x31.
 NOTE_BANK_LEFT, NOTE_BANK_RIGHT = 0x2E, 0x2F
 NOTE_CHANNEL_LEFT, NOTE_CHANNEL_RIGHT = 0x30, 0x31
+# Assignation des encodeurs (norme Mackie, à confirmer) : TRACK 0x28. Encodeurs : CC 0x10-0x17 relatifs
+# (bit 6 = sens, bits 0-3 = vitesse), couronnes : CC 0x30-0x37.
+NOTE_TRACK = 0x28
+CC_VPOT, CC_RING = 0x10, 0x30
+
+
+class GainControl:
+    """Étape 4 : TRACK = encodeurs sur le gain des préamplis X32 ; Rec tenu 1 s = 48 V. Via x32-gain-recall.
+
+    Choix de Joseph (14/10/2026) : le gain X32 passe par x32-gain-recall (xgr_link), pas directement à la X32.
+    48 V : il faut TENIR Rec PHANTOM_HOLD s (relâchement après) pour basculer, un appui bref ne fait rien
+    (protection des micros à ruban). LED Rec = état 48 V réel, toujours (pas seulement en mode gain)."""
+    STEP_DB = 0.5
+    PHANTOM_HOLD = 1.0
+
+    def __init__(self, state, link, write=True):
+        self.state, self.link, self.write = state, link, write
+        self.mode = False                 # mode gain (TRACK)
+        self.rec_down = {}                # tranche -> instant d'appui sur Rec
+        self.warned = set()
+
+    def on_midi(self, unit, status, d1, d2, t, entries, surface):
+        kind = status & 0xF0
+        if kind == 0x90 and d1 == NOTE_TRACK:
+            if d2:
+                self.mode = not self.mode
+                JOURNAL.mark("XT bouton Track -> mode gain %s" % ("ON" if self.mode else "OFF"))
+            return True
+        if kind == 0xB0 and CC_VPOT <= d1 < CC_VPOT + 8:
+            strip = 8 * unit + (d1 - CC_VPOT)
+            n = d2 & 0x0F
+            delta = -n if d2 & 0x40 else n
+            e = entries[strip] if strip < len(entries) else None
+            if not self.mode or e is None or not delta:
+                return True
+            if not self.link:
+                self._warn("pas de lien x32-gain-recall")
+                return True
+            if self.write:
+                new = self.link.nudge(e, delta * self.STEP_DB)
+                JOURNAL.mark("XT encodeur %d %+d -> gain %s %s" % (strip + 1, delta, e, new))
+                if new is None:
+                    self._warn("piste %s : pas de préampli X32 (ou gains pas encore lus)" % (e,))
+            return True
+        if kind == 0x90 and NOTE_REC <= d1 < NOTE_REC + 8:
+            strip = 8 * unit + (d1 - NOTE_REC)
+            if d2:
+                self.rec_down[strip] = t
+                return True
+            t0 = self.rec_down.pop(strip, None)
+            e = entries[strip] if strip < len(entries) else None
+            if t0 is None or e is None or not self.link:
+                return True
+            if t - t0 < self.PHANTOM_HOLD:
+                JOURNAL.mark("XT Rec tranche %d : appui bref (%.1f s), 48 V inchangé" % (strip + 1, t - t0))
+                self._warn("48 V : tenir Rec %.0f s" % self.PHANTOM_HOLD)
+                return True
+            on = not self.link.phantom_on(e)
+            if self.write and self.link.set_phantom(e, on):
+                JOURNAL.mark("XT Rec tranche %d tenu -> 48 V %s %s" % (strip + 1, "ON" if on else "OFF", e))
+            return True
+        return False
+
+    def _warn(self, text):
+        if text not in self.warned:
+            print("  %s" % text)
+            self.warned.add(text)
+
+    def frame(self, entries, bot):
+        """Ligne du bas (gain en mode gain), couronnes, LED Rec (48 V) pour les tranches affichées."""
+        rings, recs = [], []
+        for i, e in enumerate(entries):
+            g = self.link.gain(e) if (self.link and e is not None) else None
+            recs.append(bool(self.link and e is not None and self.link.phantom_on(e)))
+            if self.mode and g is not None:
+                pos = 1 + int(round((g + 12.0) / 72.0 * 10))
+                rings.append(0x20 | max(1, min(11, pos)))       # mode 2 : remplissage depuis la gauche
+                if i < len(bot):
+                    bot[i] = "%+.1f" % g
+            else:
+                rings.append(0)
+                if self.mode and i < len(bot) and e is not None:
+                    bot[i] = "  -"
+        return rings, recs
 
 
 class LV1Clicker(threading.Thread):
@@ -899,7 +1001,7 @@ class ButtonControl:
                 self.lv1.select((g, ch))
             return True
         if kind == "Rec":
-            if kind not in self.warned:
+            if kind not in self.warned:          # (Rec est pris par GainControl quand il est actif)
                 print("  Bouton %s : pas encore de fonction (noté dans le journal)." % kind)
                 self.warned.add(kind)
             return True
@@ -1068,6 +1170,8 @@ def main():
     ap.add_argument("--seconds", type=float, default=0, help="arrêt automatique après N s (test)")
     ap.add_argument("--no-journal", action="store_true", help="ne pas écrire le journal des messages LV1")
     ap.add_argument("--lecture-seule", action="store_true", help="n'envoie rien à la LV1 (faders sans effet)")
+    ap.add_argument("--x32", default="http://127.0.0.1:8032",
+                    help="adresse de X/M32 Gain Recall pour le gain / 48 V X32 ('aucun' pour désactiver)")
     ap.add_argument("--clic-lv1", action="store_true",
                     help="la LV1 suit BANK et la sélection par clics simulés (pont lancé en administrateur)")
     ap.add_argument("--master", default="3:0",
@@ -1138,6 +1242,13 @@ def main():
     faders = FaderControl(state, link, write=not a.lecture_seule)
     buttons = ButtonControl(state, link, write=not a.lecture_seule, page=a.mixer - 1,
                             busy=lambda: bool(faders.held(time.time())))
+    xlink = None
+    if a.x32.lower() not in ("aucun", "none", "off"):
+        import xgr_link
+        xlink = xgr_link.GainRecallLink(a.x32)
+        xlink.start()
+        print("  Gain X32 via X/M32 Gain Recall (%s) : TRACK = encodeurs sur le gain, Rec tenu 1 s = 48 V." % a.x32)
+    gain = GainControl(state, xlink, write=not a.lecture_seule)
     if a.lecture_seule:
         print("  Mode lecture seule : rien n'est envoyé à la LV1.")
     if a.clic_lv1 and not a.lecture_seule:
@@ -1170,6 +1281,7 @@ def main():
                 except queue.Empty:
                     break
                 if not (faders.on_midi(unit, st, d1, d2, t, entries, surface)
+                        or gain.on_midi(unit, st, d1, d2, t, entries, surface)
                         or buttons.on_midi(unit, st, d1, d2, t, entries, surface)):
                     JOURNAL.mark("MIDI unité %d : %02X %02X %02X" % (unit, st, d1, d2))
             held = faders.flush(now)
@@ -1186,8 +1298,11 @@ def main():
                     print("  Couche affichée : %s" % layer_name)
                     JOURNAL.mark("affiché : %s" % layer_name)
                 last_layer = layer_name
+            rings, recs = gain.frame(entries[:surface.strips], bot)
             surface.push(top, bot, cols, lvls, fads, now, held, master_fv)
-            surface.push_leds(*state.last_leds)
+            surface.push_leds(*state.last_leds, recs=recs)
+            surface.push_rings(rings)
+            surface.set_main_led(NOTE_TRACK, gain.mode)
             time.sleep(0.01 if faders.pending else TICK)
     except KeyboardInterrupt:
         pass

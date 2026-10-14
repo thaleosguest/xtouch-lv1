@@ -79,7 +79,7 @@ def inject():
     put(1.4, 0, 0x90, 0x00, 127)                                 # Rec : pas de fonction
 threading.Thread(target=inject, daemon=True).start()
 
-sys.argv = ["x", "--dry-run", "--host", "127.0.0.1", "--port", str(PORT), "--seconds", "3.3"]
+sys.argv = ["x", "--dry-run", "--x32", "aucun", "--host", "127.0.0.1", "--port", str(PORT), "--seconds", "3.3"]
 D.main()
 print("\n/Set envoyés à la LV1 :")
 for g in got: print("  ", g[0], g[1], P.short_args(g[2]))

@@ -95,7 +95,7 @@ def inject():
     press(2.20, 0, CH_R)         # -> In 1
 threading.Thread(target=inject, daemon=True).start()
 
-sys.argv = ["x", "--dry-run", "--no-journal", "--host", "127.0.0.1", "--port", str(PORT), "--seconds", "2.6"]
+sys.argv = ["x", "--dry-run", "--x32", "aucun", "--no-journal", "--host", "127.0.0.1", "--port", str(PORT), "--seconds", "2.6"]
 with contextlib.redirect_stdout(io.StringIO()):
     D.main()
 sel = [m.split("->")[-1].strip() if "Channel" in m else m for m in MARKS if "sélection" in m]
