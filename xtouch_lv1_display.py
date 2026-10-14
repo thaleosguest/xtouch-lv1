@@ -216,6 +216,7 @@ class LV1State:
         self.last_flag = {}       # vue -> 2e nombre de ce paquet (1 = custom d'après le module Companion)
         self.current = {}         # vue -> index de couche (/Notify/CurrentLayer)
         self.local = {}           # vue -> index choisi par ◄ BANK ► sur la X-Touch (effacé au clic LV1)
+        self.selected = None      # (g, ch) sélectionné dans le pont (Select / ◄ CHANNEL ►), local comme MyFOH
         self.custom_on = {}       # vue -> bouton Custom allumé ? (/Notify/CustomButton, hypothèse)
         self.spill_on = {}        # vue -> bouton Spill allumé ? (/Notify/SpillButton, hypothèse)
         self.version = ""
@@ -546,13 +547,14 @@ class Surface:
             self.midi.short(self.units[unit][2], 0x90, note, v)
             self.sent_led[(unit, note)] = v
 
-    def push_leds(self, mutes, solos):
-        for i, (m, so) in enumerate(zip(mutes, solos)):
+    def push_leds(self, mutes, solos, selects=()):
+        selects = list(selects) + [False] * (len(mutes) - len(selects))
+        for i, (m, so, se) in enumerate(zip(mutes, solos, selects)):
             u, s = i // 8, i % 8
             self.set_led(u, NOTE_MUTE + s, bool(m))
             self.set_led(u, NOTE_SOLO + s, bool(so))
             self.set_led(u, NOTE_REC + s, False)
-            self.set_led(u, NOTE_SELECT + s, False)
+            self.set_led(u, NOTE_SELECT + s, bool(se))
 
     @property
     def strips(self):
@@ -689,10 +691,11 @@ MASTER = 16                       # numéro interne du fader master (9e fader de
 NOTE_REC, NOTE_SOLO, NOTE_MUTE, NOTE_SELECT = 0x00, 0x08, 0x10, 0x18
 # Navigation, norme Mackie (vérifié le 14/10/2026) : ◄ BANK ► 0x2E/0x2F, ◄ CHANNEL ► 0x30/0x31.
 NOTE_BANK_LEFT, NOTE_BANK_RIGHT = 0x2E, 0x2F
+NOTE_CHANNEL_LEFT, NOTE_CHANNEL_RIGHT = 0x30, 0x31
 
 
 class ButtonControl:
-    """Mute / Solo -> LV1, ◄ BANK ► -> couche (locale). Rec et Select : pas encore de fonction."""
+    """Mute / Solo -> LV1 ; ◄ BANK ► -> couche, Select / ◄ CHANNEL ► -> sélection (locales). Rec : rien."""
 
     def __init__(self, state, link, write=True, page=0, busy=lambda: False):
         self.state, self.link, self.write = state, link, write
@@ -710,9 +713,39 @@ class ButtonControl:
         JOURNAL.mark("XT bouton Bank %+d -> couche %s" % (step, k if k is not None else "inchangée (bout)"))
         return True
 
+    def on_channel(self, d1, entries):
+        """◄ CHANNEL ► : sélection au canal affiché précédent / suivant (tranches vides sautées).
+
+        Si le canal sélectionné n'est pas affiché (ou aucun) : 1er canal de la couche affichée.
+        Au bout de la couche, la banque suit (couche voisine non vide, 1er / dernier canal)."""
+        step = -1 if d1 == NOTE_CHANNEL_LEFT else 1
+        shown = [e for e in entries[:MASTER] if e is not None]
+        with self.state.lock:
+            sel = self.state.selected
+            if sel not in shown:
+                new = shown[0] if shown else None
+            else:
+                k = shown.index(sel) + step
+                if 0 <= k < len(shown):
+                    new = shown[k]
+                elif self.busy():
+                    JOURNAL.mark("XT bouton Channel %+d ignoré (fader tenu, changement de banque)" % step)
+                    return True
+                elif self.state.bank(self.page, step) is None:
+                    new = sel                     # tout au bout : on ne bouge pas
+                else:
+                    _, ent = self.state.layer_entries(self.page)
+                    nxt = [e for e in (ent or []) if e is not None]
+                    new = (nxt[0] if step > 0 else nxt[-1]) if nxt else sel
+            self.state.selected = new
+        JOURNAL.mark("XT bouton Channel %+d -> sélection %s" % (step, new))
+        return True
+
     def on_midi(self, unit, status, d1, d2, t, entries, surface):
         if (status & 0xF0) == 0x90 and d1 in (NOTE_BANK_LEFT, NOTE_BANK_RIGHT):
             return True if d2 == 0 else self.on_bank(d1)
+        if (status & 0xF0) == 0x90 and d1 in (NOTE_CHANNEL_LEFT, NOTE_CHANNEL_RIGHT):
+            return True if d2 == 0 else self.on_channel(d1, entries)
         if (status & 0xF0) != 0x90 or d1 > 0x1F:
             return False
         if d2 == 0:
@@ -725,7 +758,13 @@ class ButtonControl:
         if e is None:
             return True
         g, ch = e
-        if kind in ("Rec", "Select"):
+        if kind == "Select":
+            # Sélection locale au pont (la LV1 n'a pas de commande de sélection, comme dans MyFOH).
+            with self.state.lock:
+                self.state.selected = (g, ch)
+            JOURNAL.mark("sélection %s" % ((g, ch),))
+            return True
+        if kind == "Rec":
             if kind not in self.warned:
                 print("  Bouton %s : pas encore de fonction (noté dans le journal)." % kind)
                 self.warned.add(kind)
@@ -843,7 +882,7 @@ def build_frame(state, mixer_page, n_strips, overrides):
         if not state.connected:
             top = ["LV1 ?"] + [""] * (n_strips - 1)
             bot = ["attente"] + [""] * (n_strips - 1)
-            state.last_leds = ([False] * n_strips, [False] * n_strips)
+            state.last_leds = ([False] * n_strips, [False] * n_strips, [False] * n_strips)
             return top, bot, [XT["blanc"]] + [XT["vide"]] * (n_strips - 1), [0] * n_strips, [0] * n_strips, None, [None] * n_strips
         layer_name, entries = state.layer_entries(mixer_page)
         if entries is None:
@@ -877,7 +916,7 @@ def build_frame(state, mixer_page, n_strips, overrides):
             right = state.meters.get((g, c, 1))
             vals = [v for v in (left, right) if v is not None]
             lvls.append(db_to_level(max(vals)) if vals else 0)
-        state.last_leds = (mutes, solos)
+        state.last_leds = (mutes, solos, [e is not None and e == state.selected for e in entries])
         return top, bot, cols, lvls, fads, layer_name, entries
 
 

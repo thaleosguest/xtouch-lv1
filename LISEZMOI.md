@@ -135,6 +135,20 @@ Fonctionne aussi en `--lecture-seule` (rien n'est envoyé à la LV1).
 3. Appuie aussi une fois sur ◄ CHANNEL ► et sur FLIP (pas encore de fonction, notés dans le journal).
 4. Envoie-moi le journal.
 
+## Sélection (Select, ◄ CHANNEL ►)
+
+**Select** d'une tranche sélectionne son canal (LED Select allumée). **◄ CHANNEL ►** passe au canal
+affiché précédent / suivant ; au bout de la couche, la banque suit (couche voisine). Si le canal
+sélectionné n'est plus affiché (après BANK ou un clic LV1), CHANNEL repart du 1er canal affiché.
+La sélection est **propre au pont**, comme dans MyFOH : l'écran de la LV1 ne la voit pas.
+Elle servira à l'étape 4 (gain X32, EQ…).
+
+### Test
+1. Select sur une tranche, puis CHANNEL ► / ◄ plusieurs fois : une seule LED Select, qui suit.
+2. Sur la dernière tranche, CHANNEL ► : on passe à la couche suivante, 1er canal sélectionné.
+3. BANK ► puis BANK ◄ : la LED Select revient sur le même canal.
+4. Envoie-moi le journal.
+
 ## Capture du trafic MyFOH (recherche des commandes couche / sélection)
 
 `lv1_capture.py` décode une capture réseau tablette <-> LV1 en messages lisibles. La capture se fait avec
