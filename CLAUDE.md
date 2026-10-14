@@ -25,7 +25,7 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
 - Suivi des couches : usine, custom, mix 80 canaux, Spill.
 - **Étape 1** : faders X-Touch -> LV1 (écriture), toucher, écho, garde-fous ; **fader master -> LR** ; calibration.
 - **Étape 2** : boutons **Mute** et **Solo** -> LV1, LED synchronisées (y compris changements faits à l'écran).
-- **Étape 3 (codée, à tester sur le matériel)** : ◄ BANK ► (notes Mackie 0x2E/0x2F, non vérifiées) = couche
+- **Étape 3 (codée, à tester sur le matériel)** : ◄ BANK ► (0x2E/0x2F, notes vérifiées le 14/10) = couche
   précédente/suivante **locale** (`LV1State.local`, sauts des couches vides, effacé par `/Notify/CurrentLayer`,
   bloquée pendant un toucher de fader). Test `tests/test_banque.py`.
 - État mute/solo **initial** lu dans `/Channels` (test `tests/test_etat_initial.py`, LED au démarrage à vérifier sur le matériel).
@@ -90,7 +90,8 @@ Messages vérifiés :
   l'ordinateur**. Il faut donc **renvoyer chaque position reçue de la main** (écho Mackie), sinon le fader revient
   en arrière et l'ancienne valeur repart vers la LV1 (bug vu et corrigé le 14/10).
 - Boutons : Rec 0x00-07, Solo 0x08-0F, Mute 0x10-17, Select 0x18-1F ; LED = note on 127/0 (Mute/Solo vérifiés).
-  Note 0x32 vue dans un journal (probablement Flip), pas encore traitée.
+  ◄ BANK ► 0x2E/0x2F, ◄ CHANNEL ► 0x30/0x31, FLIP 0x32 (vérifié, unité X-Touch). Erreur winmm « not enough memory »
+  à l'ouverture = port déjà pris (souvent une autre instance du script encore lancée).
 - Prise Ethernet des X-Touch = RTP-MIDI (fiches produit). Non testé ; USB pour l'instant.
 
 ## Garde-fous des faders (ne pas retirer sans raison)

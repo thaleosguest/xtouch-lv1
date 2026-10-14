@@ -687,7 +687,7 @@ MASTER = 16                       # numéro interne du fader master (9e fader de
 # Boutons de tranche, notes Mackie (à confirmer sur la X-Touch) : Rec 0x00-07, Solo 0x08-0F,
 # Mute 0x10-17, Select 0x18-1F. Appui = vélocité 127, relâchement = 0.
 NOTE_REC, NOTE_SOLO, NOTE_MUTE, NOTE_SELECT = 0x00, 0x08, 0x10, 0x18
-# Navigation, norme Mackie (à confirmer sur la X-Touch) : ◄ BANK ► 0x2E/0x2F, ◄ CHANNEL ► 0x30/0x31.
+# Navigation, norme Mackie (vérifié le 14/10/2026) : ◄ BANK ► 0x2E/0x2F, ◄ CHANNEL ► 0x30/0x31.
 NOTE_BANK_LEFT, NOTE_BANK_RIGHT = 0x2E, 0x2F
 
 
