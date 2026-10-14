@@ -44,7 +44,8 @@ def sysex(dev, body):
 
 def msg_colors(dev, colors):
     colors = list(colors)[:8] + [7] * (8 - len(list(colors)[:8]))
-    return sysex(dev, [0x72] + [c & 0x07 for c in colors])
+    # bits 0-2 = couleur ; X-Touch : +0x10 = ligne du haut inversée, +0x20 = ligne du bas inversée (à confirmer)
+    return sysex(dev, [0x72] + [c & 0x37 for c in colors])
 
 
 def msg_lcd(dev, offset, text):

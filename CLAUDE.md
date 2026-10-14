@@ -169,6 +169,11 @@ Messages vérifiés :
   Mon = 25). Retours : `/Notify/Aux/Send/Gain iii d T`, `/On iii T T`, `/Pan iii d B`. Rien n'est envoyé à la
   connexion -> niveaux/on de départ lus dans la base (`lv1_db.input_sends`, voir ce fichier). Test `tests/test_sends.py`.
   La LV1 ALLUME d'elle-même un envoi quand on monte son niveau (LED Mute qui s'éteint : normal).
+  Indication du mode (choix de Joseph) : afficheur « SE » + « SEL » (choix) / « F3 » + niveau du master de l'aux ;
+  ligne du bas des écrans en NÉGATIF (couleur + 0x20, `INVERT_BOTTOM` ; bit d'inversion X-Touch non vérifié) ;
+  écran du PC (`xtouch_overlay.py`, tkinter) : bandeau 2,5 s « SEND ON FADER : FX 1  <nom de la piste> » puis
+  cadre rouge clignotant doucement autour de la fenêtre LV1, fenêtres traversées par les clics. Piège : une fenêtre
+  WS_EX_LAYERED sans attribut -alpha n'est PAS dessinée. Option `--sans-cadre`.
 - Fader : sous -60 dB, descente continue jusqu'à -144 (plus de saut -144 -> -78) — vérifié le 15/10.
 - FLIP (0x32) sans fonction.
 - Sens LV1 -> X-Touch de la sélection (vérifié le 14/10, journal 185026) : `LV1SelectionWatcher` (avec --clic-lv1) lit le liseré

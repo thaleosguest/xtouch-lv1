@@ -1033,6 +1033,7 @@ class GainControl:
 
 
 NOTE_SEND = 0x29                  # SEND (norme Mackie ; « sends on fader »)
+INVERT_BOTTOM = 0x20              # couleur d'écran X-Touch : ligne du bas en négatif (demande de Joseph, à confirmer)
 
 
 def aux_short(name, aux):
@@ -1079,6 +1080,21 @@ class SendControl:
             if self.aux is not None and self.aux < len(aux):
                 return (aux[self.aux][0], aux[self.aux][1])
         return None
+
+    def overlay_text(self):
+        """Texte du bandeau / cadre à l'écran du PC (xtouch_overlay), ou None hors mode sends."""
+        if self.picking:
+            return "SEND ON FADER : choisis l'aux (Select)"
+        if self.aux is None:
+            return None
+        import xtouch_overlay
+        with self.state.lock:
+            aux = self.state.aux_tracks
+            if self.aux >= len(aux):
+                return None
+            g, ch, name = aux[self.aux]
+            track_name = self.state.tracks.get((g, ch), {}).get("name")
+        return xtouch_overlay.send_text(name, track_name)
 
     def label(self):
         with self.state.lock:
@@ -1193,6 +1209,7 @@ class SendControl:
                     bot[i] = fader_text(f) if f is not None else "  ?"
                     fads[i] = db_to_fader(f)
                     mutes[i] = s.get("on") is False
+                    cols[i] = (cols[i] & 0x07) | INVERT_BOTTOM      # ligne du bas en négatif : mode sends
         return mutes, solos, selects
 
 
@@ -1582,6 +1599,8 @@ def main():
     ap.add_argument("--lecture-seule", action="store_true", help="n'envoie rien à la LV1 (faders sans effet)")
     ap.add_argument("--x32", default="http://127.0.0.1:8032",
                     help="adresse de X/M32 Gain Recall pour le gain / 48 V X32 ('aucun' pour désactiver)")
+    ap.add_argument("--sans-cadre", action="store_true",
+                    help="pas de bandeau ni de cadre rouge à l'écran du PC en mode sends")
     ap.add_argument("--clic-lv1", action="store_true",
                     help="la LV1 suit BANK et la sélection par clics simulés (pont lancé en administrateur)")
     ap.add_argument("--master", default="3:0",
@@ -1660,6 +1679,11 @@ def main():
         print("  Gain X32 via X/M32 Gain Recall (%s) : TRACK = encodeurs sur le gain, Rec tenu 1 s = 48 V." % a.x32)
     gain = GainControl(state, xlink, write=not a.lecture_seule, lv1=link)
     sends = SendControl(state, link, write=not a.lecture_seule, gain=gain)
+    overlay = None
+    if not a.dry_run and not a.sans_cadre and sys.platform == "win32":
+        import xtouch_overlay
+        overlay = xtouch_overlay.LV1Overlay(a.mixer)
+        overlay.start()
     faders.key_of = sends.key_of
 
     def load_pans():
@@ -1769,6 +1793,8 @@ def main():
                 assign = seg_codes("SE", 2)
                 timecode = seg_codes(sends.label() or "--", 5) + timecode[5:]
             surface.push_master_display(assign, timecode)
+            if overlay:
+                overlay.set(sends.overlay_text())
             surface.set_main_led(NOTE_RUDE_SOLO, any_solo and int(now * 2) % 2 == 0)   # clignote si un solo
             time.sleep(0.01 if faders.pending else TICK)
     except KeyboardInterrupt:

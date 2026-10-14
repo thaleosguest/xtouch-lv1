@@ -72,12 +72,13 @@ def server():
     time.sleep(6)
 threading.Thread(target=server, daemon=True).start()
 
-LCD, MOTOR = {}, {}
+LCD, MOTOR, COLORS = {}, {}, []
 class Cap(X.DryOut):
     def short(self, h, st, d1, d2=0):
         if st & 0xF0 == 0xE0: MOTOR[(h, st & 0x0F, round(time.time() - T0, 1))] = d1 | (d2 << 7)
     def long(self, h, data):
         if time.time() - T0 < 4.6: LCD.setdefault(round(time.time() - T0, 1), []).append(bytes(data))
+        if bytes(data)[5:6] == b"r": COLORS.append((round(time.time() - T0, 1), h, bytes(data)[6:14]))
 X.DryOut = Cap
 
 def inject():
@@ -112,5 +113,8 @@ ok = ok and ("/Set/Aux/Send/On", [0, 0, 2]) in kinds and [v for a, v in SETS if 
 ok = ok and kinds[-1][0] == "/Set/Track/Out/Gain" and kinds[-1][1][:2] == [0, 1]
 ok = ok and not any(a == "/Set/Track/Out/Mute" for a, v in kinds)
 ok = ok and bool(picks)
+inv = [c for t, h, c in COLORS if 2.1 <= t < 3.6 and h == 1]
+print("Couleurs Extender en mode envois :", inv[-1].hex() if inv else None)
+ok = ok and bool(inv) and inv[-1][0] & 0x20 and not any(c[0] & 0x20 for t, h, c in COLORS if t > 3.7 and h == 1)
 print("OK" if ok else "ÉCHEC")
 sys.exit(0 if ok else 1)
