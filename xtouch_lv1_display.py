@@ -119,7 +119,7 @@ def rgb_to_xtouch(rgb):
 
 # Courbe dB -> course du fader (0..1). Provisoire : haut = +10 dB, 0 dB aux 3/4.
 FADER_CURVE = [(10.0, 1.0), (5.0, 0.875), (0.0, 0.75), (-5.0, 0.625), (-10.0, 0.5), (-20.0, 0.375),
-               (-30.0, 0.25), (-40.0, 0.16), (-50.0, 0.09), (-60.0, 0.04), (-80.0, 0.0)]
+               (-30.0, 0.25), (-40.0, 0.16), (-50.0, 0.09), (-60.0, 0.04), (-144.0, 0.004)]
 
 
 def db_to_fader(db):
@@ -154,8 +154,11 @@ def load_fader_curve():
             else:
                 pts.append((float(d), float(p)))
         pts.sort(key=lambda x: -x[0])
-        if pts and pts[-1][0] > -80.0 and pts[-1][1] > INF_POS:
-            pts.append((-80.0, INF_POS))   # sous le repère le plus bas : descente linéaire jusqu'au repère ∞
+        if pts and pts[-1][0] > FADER_MIN_DB and pts[-1][1] > INF_POS:
+            # Sous le repère le plus bas (-60) : descente continue jusqu'à -144 (= -inf LV1) au repère ∞, comme le
+            # fader de la LV1. Avant le 15/10 : point à -80 puis saut -80 -> -144 (remarque de Joseph : « on passe
+            # de -144 à -78 direct » en montant du bas).
+            pts.append((FADER_MIN_DB, INF_POS))
         if len(pts) >= 2:
             FADER_CURVE = pts
             print("  Courbe de fader personnalisée : %d points (xtouch_courbe_fader.json)" % len(pts))
