@@ -106,6 +106,13 @@ def tcp_segments(packets):
             while etype in (0x8100, 0x88A8) and len(p) >= off + 4:   # VLAN
                 etype = struct.unpack(">H", p[off + 2:off + 4])[0]
                 off += 4
+            if etype not in (0x0800, 0x86DD):
+                # Carte Wi-Fi : pktmon écrit des trames 802.11 (en-tête 24-34 o + LLC/SNAP) tout en
+                # annonçant de l'Ethernet (vu le 14/10/2026). On cherche l'en-tête SNAP.
+                k = p.find(b"\xaa\xaa\x03\x00\x00\x00", 24, 48)
+                if k < 0:
+                    continue
+                off, etype = k + 8, struct.unpack(">H", p[k + 6:k + 8])[0]
         elif link in (101, 228, 229):   # IP brut
             off, etype = 0, 0x0800 if p[:1] and p[0] >> 4 == 4 else 0x86DD
         elif link == 0:           # loopback BSD
