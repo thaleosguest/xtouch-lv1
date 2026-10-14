@@ -190,6 +190,13 @@ aux + niveau** (« F1 -12 »), et à l'écran du PC un bandeau « SEND ON FADER 
 clignote doucement (les clics passent au travers), au style de X/M32 Gain Recall v3 (Qt/PySide6 ; sans PySide6,
 version simple). `--sans-cadre` retire bandeau et cadre.
 
+## Touches F1 à F8 = User Keys 1 à 8 de la LV1
+
+**F1..F8** appuient sur les User Keys 1..8 de la LV1 (assigne-les dans la LV1). Si une User Key est un
+**Flip Sends** (ex. « Flip Sends: MX1: Mon 1 »), la X-Touch passe aussi en sends on fader vers cet aux (bandeau,
+cadre, « M1 -12 ») et la LED de la touche F s'allume ; un 2e appui ramène la LV1 et la X-Touch en mode normal.
+Autre fonction : la LV1 la fait, la X-Touch ne change pas de mode.
+
 ## La LV1 suit BANK et la sélection (`--clic-lv1`)
 
 L'API réseau de la LV1 n'a pas de commande de couche ni de sélection. Avec `--clic-lv1`, le pont **clique

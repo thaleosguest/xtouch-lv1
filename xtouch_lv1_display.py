@@ -223,6 +223,7 @@ class LV1State:
         self.pan_hold = {}        # (g, ch) -> instant jusqu'auquel les /Notify/Track/Pan sont ignorés (geste PAN)
         self.sends = {}           # (g, ch, aux) -> {"fader": dB, "on": bool, "pan": -1..1} (envois aux)
         self.aux_tracks = []      # /Aux/Tracks : [(groupe, canal, nom)] dans l'ordre des index aux (Fx 1-8, Mon 1-16)
+        self.user_keys = {}       # n° 0..15 -> (nom court, fonction, assignée) : /Notify/UserKeyInfo
         self.custom_on = {}       # vue -> bouton Custom allumé ? (/Notify/CustomButton, hypothèse)
         self.spill_on = {}        # vue -> bouton Spill allumé ? (/Notify/SpillButton, hypothèse)
         self.version = ""
@@ -374,6 +375,9 @@ def handle(state, address, args):
                     aux.append((args[k + 1][1], args[k][1], args[k + 2][1]))
             if aux:
                 state.aux_tracks = aux
+        elif address == "/Notify/UserKeyInfo" and len(args) >= 4 and args[0][0] == "i":
+            # ,issi [n°, nom court, fonction, assignée] ; ex. i:0 "Mon 1" "Flip Sends: MX1: Mon 1" i:1
+            state.user_keys[args[0][1]] = (args[1][1], args[2][1], bool(args[3][1]))
         elif address == "/Notify/Aux/Send/Gain" and len(args) >= 4 and args[3][0] in "fdi":
             # ,iiid [g, ch, aux, dB] : mêmes garde-fous que les faders de piste (geste en cours, valeur périmée)
             key = (args[0][1], args[1][1], args[2][1])
@@ -715,6 +719,8 @@ class Surface:
                     self.midi.short(h, 0x90, NOTE_PAN, 0)
                     self.midi.short(h, 0x90, NOTE_RUDE_SOLO, 0)
                     self.midi.short(h, 0x90, NOTE_SEND, 0)
+                    for k in range(8):
+                        self.midi.short(h, 0x90, NOTE_F1 + k, 0)
                     for cc in list(range(CC_TIMECODE, CC_TIMECODE + 10)) + [CC_ASSIGN_L, CC_ASSIGN_R]:
                         self.midi.short(h, 0xB0, cc, 0x20)
                 if u == self.master_unit:
@@ -1033,6 +1039,18 @@ class GainControl:
 
 
 NOTE_SEND = 0x29                  # SEND (norme Mackie ; « sends on fader »)
+NOTE_F1 = 0x36                    # F1..F8 = 0x36..0x3D (norme Mackie, à confirmer) -> User Keys 1..8 de la LV1
+
+
+def flip_target(func, aux_tracks):
+    """Fonction de User Key « Flip Sends: MX1: Mon 1 » -> index de l'aux (ordre /Aux/Tracks), sinon None."""
+    if not func or not func.lower().startswith("flip sends"):
+        return None
+    name = func.split(":")[-1].strip().lower()
+    for k, (_g, _ch, n) in enumerate(aux_tracks):
+        if n.strip().lower() == name:
+            return k
+    return None
 # Le négatif (couleur + 0x20) n'a AUCUN effet en mode Mackie (essai de Joseph, 15/10) : à la place, la ligne du
 # bas affiche l'aux devant le niveau d'envoi.
 
@@ -1071,6 +1089,7 @@ class SendControl:
         self.gain = gain                  # GainControl : en mode TRACK / PAN, les encodeurs restent à lui
         self.aux = None                   # index aux réglé, ou None
         self.picking = False
+        self.flip_key = None              # User Key (0..7) qui a mis la LV1 en Flip Sends (touches F1..F8)
         self.page = 0                     # choix : 0 = aux 0..15, 1 = aux 16..31
 
     def key_of(self, strip, e):
@@ -1120,12 +1139,53 @@ class SendControl:
             name = aux[self.aux][2] if self.aux is not None and self.aux < len(aux) else None
         return aux_short(name, self.aux) if self.aux is not None else None
 
+    def press_user_key(self, k):
+        """Appui momentané sur la User Key k de la LV1 (T puis F, comme MyFOH / module Companion)."""
+        if self.write:
+            self.link.send("/Set/UserKey", [("i", k), ("T", True)])
+            self.link.send("/Set/UserKey", [("i", k), ("F", False)])
+        JOURNAL.mark("-> LV1 User Key %d" % (k + 1))
+
+    def leave(self):
+        """Sortie du mode sends ; si la LV1 y a été mise par une User Key Flip Sends, on la ramène aussi."""
+        if self.flip_key is not None:
+            self.press_user_key(self.flip_key)
+            self.flip_key = None
+        self.picking, self.aux = False, None
+
+    def on_fkey(self, k):
+        """F1..F8 (demande de Joseph, 15/10) : User Key k+1 de la LV1. Si elle est assignée à un Flip Sends, la
+        X-Touch passe aussi en sends on fader vers cet aux ; un 2e appui ramène LV1 et X-Touch en mode normal."""
+        with self.state.lock:
+            _short, func, assigned = self.state.user_keys.get(k, ("", "", False))
+            target = flip_target(func, self.state.aux_tracks) if assigned else None
+        if target is None:
+            self.press_user_key(k)
+            JOURNAL.mark("XT F%d -> User Key %d (%s)" % (k + 1, k + 1, func or "non assignée"))
+            return
+        if self.flip_key == k:                       # même touche : retour au mode normal
+            self.leave()
+            JOURNAL.mark("XT F%d -> fin du Flip Sends" % (k + 1))
+            return
+        self.leave()                                 # autre mode sends en cours : on en sort proprement
+        self.press_user_key(k)
+        self.flip_key, self.aux, self.picking = k, target, False
+        JOURNAL.mark("XT F%d -> Flip Sends vers l'aux %d (%s)" % (k + 1, target, self.label()))
+
+    def fkey_leds(self):
+        """LED des touches F1..F8 : allumée = son Flip Sends est actif."""
+        return [self.flip_key == k and self.aux is not None for k in range(8)]
+
     def on_midi(self, unit, status, d1, d2, t, entries, surface):
         kind = status & 0xF0
+        if kind == 0x90 and NOTE_F1 <= d1 < NOTE_F1 + 8:
+            if d2:
+                self.on_fkey(d1 - NOTE_F1)
+            return True
         if kind == 0x90 and d1 == NOTE_SEND:
             if d2:
                 if self.picking or self.aux is not None:
-                    self.picking, self.aux = False, None
+                    self.leave()
                     JOURNAL.mark("XT bouton Send -> retour aux faders des canaux")
                 else:
                     self.picking, self.page = True, 0
@@ -1144,7 +1204,7 @@ class SendControl:
                     with self.state.lock:
                         n = len(self.state.aux_tracks)
                     if idx < n:
-                        self.aux, self.picking = idx, False
+                        self.aux, self.picking, self.flip_key = idx, False, None
                         JOURNAL.mark("XT Select -> sends vers l'aux %d (%s)" % (idx, self.label()))
                 return True
             if kind == 0x90 and d1 <= 0x1F:          # Rec / Solo / Mute bloqués pendant le choix
@@ -1796,6 +1856,8 @@ def main():
             surface.set_main_led(NOTE_TRACK, gain.mode)
             surface.set_main_led(NOTE_PAN, gain.pan_mode)
             surface.set_main_led(NOTE_SEND, sends.aux is not None or (sends.picking and int(now * 3) % 2 == 0))
+            for k, on in enumerate(sends.fkey_leds()):
+                surface.set_main_led(NOTE_F1 + k, on)
             with state.lock:
                 sel = state.selected
                 any_solo = any(t.get("solo") for t in state.tracks.values())
