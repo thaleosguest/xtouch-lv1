@@ -10,7 +10,10 @@ elles n'empêchent jamais un geste sur l'écran tactile de la LV1. Tout le tkint
 
     py xtouch_overlay.py       # démo 12 s (bandeau puis cadre) sur la fenêtre LV1, ou sur l'écran entier
 """
+import json
 import math
+import os
+import sys
 import threading
 import time
 
@@ -56,6 +59,18 @@ class LV1Overlay(threading.Thread):
         self.text = None          # texte voulu (None = rien à l'écran)
         self.changed_at = 0.0
         self.stop_flag = False
+
+    def set_info(self, text, sub=None, color=None):
+        """Même interface que QtOverlay : « SEND ON FADER : FX 1  Reverb »."""
+        if not text:
+            self.set(None)
+        elif text == "SELECT AN AUX":
+            self.set("SEND ON FADER : SELECT AN AUX")
+        else:
+            self.set(send_text(text, sub))
+
+    def stop(self):
+        self.stop_flag = True
 
     def set(self, text):
         """Texte à afficher (None = mode normal). Un changement relance le bandeau."""
@@ -139,6 +154,51 @@ class LV1Overlay(threading.Thread):
 
         root.after(60, tick)
         root.mainloop()
+
+
+class QtOverlay:
+    """Version Qt (style X/M32 Gain Recall v3) : processus xtouch_overlay_qt.py piloté par stdin (JSON).
+    Même interface que LV1Overlay : set_info(texte, sous-titre, couleur #rrggbb) ; None = mode normal."""
+
+    def __init__(self, mixer=1):
+        import subprocess
+        here = os.path.dirname(os.path.abspath(__file__))
+        args = [sys.executable, os.path.join(here, "xtouch_overlay_qt.py")] + (["--mixer=2"] if mixer == 2 else [])
+        flags = 0x08000000 if sys.platform == "win32" else 0          # CREATE_NO_WINDOW
+        self.proc = subprocess.Popen(args, stdin=subprocess.PIPE, creationflags=flags)
+        self.last = object()
+
+    def set_info(self, text, sub=None, color=None):
+        info = (text, sub, color) if text else None
+        if info == self.last:
+            return
+        self.last = info
+        msg = {"text": text, "sub": sub, "color": color} if text else {"text": None}
+        try:
+            self.proc.stdin.write((json.dumps(msg) + "\n").encode("utf-8"))
+            self.proc.stdin.flush()
+        except OSError:
+            pass
+
+    def stop(self):
+        try:
+            self.proc.stdin.write(b'{"quit": true}\n')
+            self.proc.stdin.close()
+        except OSError:
+            pass
+
+
+def make_overlay(mixer=1):
+    """Qt si PySide6 est installé (comme x32-gain-recall v3), sinon tkinter (bibliothèque standard)."""
+    import importlib.util
+    if importlib.util.find_spec("PySide6") is not None:
+        try:
+            return QtOverlay(mixer)
+        except OSError:
+            pass
+    o = LV1Overlay(mixer)
+    o.start()
+    return o
 
 
 def send_text(aux_name, track_name):

@@ -187,7 +187,8 @@ base de la LV1 ; s'il est inconnu (« ? », ex. bus), l'encodeur ne fait rien ta
 
 On sait qu'on est en mode sends : bouton SEND allumé, afficheur « SE » + aux, **ligne du bas des écrans =
 aux + niveau** (« F1 -12 »), et à l'écran du PC un bandeau « SEND ON FADER : FX 1 … » puis un **cadre rouge** autour de la LV1 qui
-clignote doucement (les clics passent au travers). `--sans-cadre` retire bandeau et cadre.
+clignote doucement (les clics passent au travers), au style de X/M32 Gain Recall v3 (Qt/PySide6 ; sans PySide6,
+version simple). `--sans-cadre` retire bandeau et cadre.
 
 ## La LV1 suit BANK et la sélection (`--clic-lv1`)
 

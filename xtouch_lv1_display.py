@@ -1096,20 +1096,23 @@ class SendControl:
                 return (aux[self.aux][0], aux[self.aux][1])
         return None
 
-    def overlay_text(self):
-        """Texte du bandeau / cadre à l'écran du PC (xtouch_overlay), ou None hors mode sends."""
+    def overlay_info(self):
+        """(texte, sous-titre, couleur #rrggbb) du bandeau / cadre à l'écran du PC, ou (None,) hors mode sends.
+        Textes en anglais (demande de Joseph)."""
         if self.picking:
-            return "SEND ON FADER : SELECT AN AUX"
+            return ("SELECT AN AUX", None, None)
         if self.aux is None:
-            return None
-        import xtouch_overlay
+            return (None,)
         with self.state.lock:
             aux = self.state.aux_tracks
             if self.aux >= len(aux):
-                return None
+                return (None,)
             g, ch, name = aux[self.aux]
-            track_name = self.state.tracks.get((g, ch), {}).get("name")
-        return xtouch_overlay.send_text(name, track_name)
+            t = self.state.tracks.get((g, ch), {})
+        track_name, rgb = t.get("name"), t.get("rgb")
+        sub = track_name.strip() if track_name and track_name.strip().lower() != name.lower() else None
+        color = "#%02x%02x%02x" % tuple(int(round(v * 255)) for v in rgb) if rgb else None
+        return (name.upper(), sub, color)
 
     def label(self):
         with self.state.lock:
@@ -1698,8 +1701,7 @@ def main():
     overlay = None
     if not a.dry_run and not a.sans_cadre and sys.platform == "win32":
         import xtouch_overlay
-        overlay = xtouch_overlay.LV1Overlay(a.mixer)
-        overlay.start()
+        overlay = xtouch_overlay.make_overlay(a.mixer)    # Qt (style Gain Recall v3) si PySide6, sinon tkinter
     faders.key_of = sends.key_of
 
     def load_pans():
@@ -1810,13 +1812,15 @@ def main():
                 timecode = seg_codes(sends.label() or "--", 5) + timecode[5:]
             surface.push_master_display(assign, timecode)
             if overlay:
-                overlay.set(sends.overlay_text())
+                overlay.set_info(*sends.overlay_info())
             surface.set_main_led(NOTE_RUDE_SOLO, any_solo and int(now * 2) % 2 == 0)   # clignote si un solo
             time.sleep(0.01 if faders.pending else TICK)
     except KeyboardInterrupt:
         pass
     finally:
         link.stop_flag = True
+        if overlay:
+            overlay.stop()
         if midi_in:
             midi_in.close_all()
         surface.clear()

@@ -172,7 +172,9 @@ Messages vérifiés :
   Indication du mode (choix de Joseph) : afficheur « SE » + « SEL » (choix) / « F3 » + niveau du master de l'aux ;
   ligne du bas = aux + niveau d'envoi « F1 -12 » (`send_label`) — le NÉGATIF (couleur + 0x20) n'a aucun effet en
   mode Mackie (essai du 15/10), ne pas y revenir ;
-  écran du PC (`xtouch_overlay.py`, tkinter) : bandeau 2,5 s « SEND ON FADER : FX 1  <nom de la piste> » puis
+  écran du PC : **Qt** (`xtouch_overlay_qt.py`, processus à part piloté en JSON sur stdin, style X/M32 Gain Recall
+  v3 : #111213 / #3a3e43 / #e9edf0, Segoe UI gras, pastille rouge 48 V en dégradé, liseré couleur de l'aux,
+  `Qt.WindowTransparentForInput`) si PySide6 est là (6.12 chez Joseph), sinon repli tkinter (`xtouch_overlay.py`) : bandeau 2,5 s « SEND ON FADER : FX 1  <nom de la piste> » puis
   cadre rouge clignotant doucement autour de la fenêtre LV1, fenêtres traversées par les clics. Piège : une fenêtre
   WS_EX_LAYERED sans attribut -alpha n'est PAS dessinée. Option `--sans-cadre`. Textes à l'écran du PC : en ANGLAIS (demande de Joseph).
 - Fader : sous -60 dB, descente continue jusqu'à -144 (plus de saut -144 -> -78) — vérifié le 15/10.
