@@ -133,8 +133,12 @@ Messages vérifiés :
 
 ## Reste à faire / idées
 
-- FLIP (0x32) sans fonction. Sens inverse à faire : lire la sélection LV1 à l'écran (liseré jaune (255,242,0)
-  y 100/1080, cf. `x32-gain-recall` `lv1_selected_column_top`) pour que la LED Select suive la LV1.
+- FLIP (0x32) sans fonction.
+- Sens LV1 -> X-Touch de la sélection (codé, à tester) : `LV1SelectionWatcher` (avec --clic-lv1) lit le liseré
+  jaune (255,242,0) y 98-102/1080, x 143+96i (`lv1_clic.selected_strip`, sans admin) toutes les 0,15 s ; ne réagit
+  qu'aux changements. Test `tests/test_selection_lv1.py`.
+- **Demandé par Joseph** : bouton **TRACK** (assignation des encodeurs) = encodeurs en mode **gain X32** ;
+  **Rec** = 48 V du préampli X32 de la tranche.
 - **Étape 4** : encodeurs -> **gain X32** (OSC UDP 10023, via la logique de `x32-gain-recall` : table EXP -> canal LV1),
   48 V X32 sur Rec ?
 - Select : pas de commande LV1 connue. Piste : `/Notify/SelectedLinkTrackID i:vue i i` et `/Notify/LinkButton`

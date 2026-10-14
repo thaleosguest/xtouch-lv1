@@ -4,7 +4,8 @@
 Essai (hors concert), dans un PowerShell lancé EN ADMINISTRATEUR (la LV1 l'est : Windows refuse sinon) :
     py lv1_clic.py verifier            # ne clique pas : dit ce qui serait fait et pourquoi
     py lv1_clic.py couche 2            # clique la 2e case de couche (Ch 17-32 en usine)
-    py lv1_clic.py tranche 5           # clique le nom de la tranche 5 (sélection ?)
+    py lv1_clic.py tranche 5           # clique le nom de la tranche 5 (sélection)
+    py lv1_clic.py selection           # lit à l'écran la tranche sélectionnée (sans clic, sans admin)
 Options : --mixer 2, --methode souris (SendInput : bouge vraiment la souris, LV1 devant).
 
 Géométrie relevée le 14/10/2026 sur la LV1 V17 de Joseph, page Mixer plein écran 1920x1080, en
@@ -184,6 +185,80 @@ class Target:
         return True
 
 
+# Tranche sélectionnée sur la LV1 (sens LV1 -> X-Touch) : liseré jaune pur en haut de sa case de source, présent
+# dans tous les modes (relevé par x32-gain-recall, `lv1_selected_column_top`, et sur la capture du 14/10).
+SEL_TOP_ROWS = (98, 100, 102)      # /1080
+SEL_YELLOW = (255, 242, 0)         # un canal de couleur jaune est (243, 250, 29) : distinct
+SEL_X0, SEL_PITCH = 143, 96        # /1920
+
+
+def yellow_column(rows, w):
+    """Colonne 0..15 du liseré jaune dans des lignes de pixels [(r, g, b)...] de largeur w (référence
+    1920 mise à l'échelle), ou None (aucune, ou ambigu)."""
+    for row in rows:
+        cols, start = set(), None
+        for i, c in enumerate(list(row) + [(0, 0, 0)]):
+            yel = _close(c, SEL_YELLOW, 6)
+            if yel and start is None:
+                start = i
+            elif not yel and start is not None:
+                if i - start >= 0.03 * w:
+                    k = int((start * REF_W / w - SEL_X0) / SEL_PITCH + 0.02)
+                    if 0 <= k < 16:
+                        cols.add(k)
+                start = None
+        if len(cols) == 1:
+            return cols.pop()
+    return None
+
+
+def screen_rows(x, ys, w):
+    """Lignes d'écran ys (absolues), largeur w, en une capture GDI : [[(r, g, b)...] par ligne]."""
+    g32, u = ctypes.windll.gdi32, u32()
+    vp = ctypes.c_void_p
+    for f in (g32.CreateCompatibleDC, g32.CreateCompatibleBitmap, g32.SelectObject):
+        f.restype = vp
+    g32.CreateCompatibleDC.argtypes = [vp]
+    g32.CreateCompatibleBitmap.argtypes = [vp, ctypes.c_int, ctypes.c_int]
+    g32.SelectObject.argtypes = [vp, vp]
+    g32.BitBlt.argtypes = [vp, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, vp, ctypes.c_int,
+                           ctypes.c_int, ctypes.c_uint]
+    g32.GetDIBits.argtypes = [vp, vp, ctypes.c_uint, ctypes.c_uint, vp, vp, ctypes.c_uint]
+    g32.DeleteObject.argtypes = g32.DeleteDC.argtypes = [vp]
+    y0, h = min(ys), max(ys) - min(ys) + 1
+    dc = u.GetDC(None)
+    mem = g32.CreateCompatibleDC(dc)
+    bmp = g32.CreateCompatibleBitmap(dc, w, h)
+    old = g32.SelectObject(mem, bmp)
+    try:
+        g32.BitBlt(mem, 0, 0, w, h, dc, x, y0, 0x00CC0020)
+        bmi = (ctypes.c_uint32 * 10)(40, w, (-h) & 0xFFFFFFFF, 1 | (32 << 16), 0, 0, 0, 0, 0, 0)
+        buf = (ctypes.c_ubyte * (4 * w * h))()
+        g32.GetDIBits(mem, bmp, 0, h, buf, bmi, 0)
+    finally:
+        g32.SelectObject(mem, old)
+        g32.DeleteObject(bmp)
+        g32.DeleteDC(mem)
+        u.ReleaseDC(None, dc)
+    out = []
+    for yy in ys:
+        o = 4 * (yy - y0) * w
+        out.append([(buf[o + 4 * i + 2], buf[o + 4 * i + 1], buf[o + 4 * i]) for i in range(w)])
+    return out
+
+
+def selected_strip(mixer=1):
+    """Tranche 0..15 sélectionnée sur la LV1 (lue à l'écran), ou (None, raison). Pas besoin d'administrateur."""
+    t = Target(mixer)
+    if not t.hwnd or not t.rect or u32().IsIconic(t.hwnd) or t.rect[2] < 800:
+        return None, "LV1 introuvable ou réduite"
+    if not t.detached and not _close(pixel(*t.screen(TAB_X[mixer], TAB_Y)), TAB_ACTIVE):
+        return None, "onglet Mixer %d pas affiché" % mixer
+    x, y, w, h = t.rect
+    rows = screen_rows(x, [y + round(h * r / REF_H) for r in SEL_TOP_ROWS], w)
+    return yellow_column(rows, w), None
+
+
 def layer_point(k):
     return LAYER_X, LAYER_Y0 + LAYER_PITCH * k
 
@@ -216,7 +291,7 @@ def click_strip(i, mixer=1, method="message"):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Clics simulés dans la LV1 (essai).")
-    ap.add_argument("action", choices=["verifier", "couche", "tranche"])
+    ap.add_argument("action", choices=["verifier", "couche", "tranche", "selection"])
     ap.add_argument("numero", nargs="?", type=int, help="couche 1..8 ou tranche 1..16")
     ap.add_argument("--mixer", type=int, choices=[1, 2], default=1)
     ap.add_argument("--methode", choices=["message", "souris"], default="message")
@@ -225,6 +300,10 @@ def main(argv=None):
     t = Target(a.mixer)
     print("Administrateur : %s" % ("oui" if is_admin() else "NON"))
     print("Fenêtre LV1 : %s%s, zone client %s" % (t.hwnd, " (Mixer détaché)" if t.detached else "", t.rect))
+    if a.action == "selection":
+        col, why = selected_strip(a.mixer)
+        print("Tranche sélectionnée sur la LV1 : %s" % (col + 1 if col is not None else (why or "aucune / illisible")))
+        return 0
     if a.action == "verifier":
         for k in range(8):
             print("  couche %d -> %s : %s" % (k + 1, t.screen(*layer_point(k)) if t.rect else "?",

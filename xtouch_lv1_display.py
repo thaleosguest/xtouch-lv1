@@ -774,6 +774,50 @@ class LV1Clicker(threading.Thread):
                 JOURNAL.mark("clic LV1 : erreur %r" % e)
 
 
+class LV1SelectionWatcher(threading.Thread):
+    """Sens LV1 -> X-Touch : la tranche sélectionnée sur l'écran de la LV1 (liseré jaune, lu à l'écran
+    toutes les 0,15 s, sans administrateur) devient la sélection du pont (LED Select).
+
+    On ne réagit qu'à un CHANGEMENT de la colonne lue : si la LV1 garde une sélection hors de la couche
+    affichée par la X-Touch, elle n'écrase pas une sélection faite sur la X-Touch."""
+    PERIOD = 0.15
+
+    def __init__(self, state, page, read=None):
+        super().__init__(daemon=True)
+        self.state, self.page = state, page
+        if read is None:
+            import lv1_clic
+            read = lambda: lv1_clic.selected_strip(page + 1)[0]
+        self.read = read
+        self.last = None
+        self.stop_flag = False
+
+    def step(self):
+        col = self.read()
+        if col is None or col == self.last:
+            if col is not None:
+                self.last = col
+            return
+        self.last = col
+        with self.state.lock:
+            layers, _ = self.state.layer_set(self.page)
+            idx = self.state.current.get(self.page)
+            ent = layers[idx][1] if layers and idx is not None and 0 <= idx < len(layers) else []
+            track = ent[col] if col < len(ent) else None
+            if track is None or track == self.state.selected:
+                return
+            self.state.selected = track
+        JOURNAL.mark("sélection lue sur la LV1 : tranche %d %s" % (col + 1, track))
+
+    def run(self):
+        while not self.stop_flag:
+            try:
+                self.step()
+            except Exception as e:            # lecture d'écran ratée : on réessaie au tour suivant
+                JOURNAL.mark("lecture sélection LV1 : erreur %r" % e)
+            time.sleep(self.PERIOD)
+
+
 class ButtonControl:
     """Mute / Solo -> LV1 ; ◄ BANK ► -> couche, Select / ◄ CHANNEL ► -> sélection (locales). Rec : rien."""
 
@@ -1102,7 +1146,8 @@ def main():
             print("  --clic-lv1 : PAS administrateur, Windows bloquera les clics (relancer en administrateur).")
         buttons.lv1 = LV1Clicker(state, a.mixer - 1)
         buttons.lv1.start()
-        print("  Clics LV1 : la LV1 suit BANK et la sélection (page Mixer %d affichée)." % a.mixer)
+        LV1SelectionWatcher(state, a.mixer - 1).start()
+        print("  Clics LV1 : la LV1 suit BANK et la sélection, la X-Touch suit la sélection LV1 (page Mixer %d)." % a.mixer)
     print("Recherche de la LV1… (Ctrl+C pour arrêter)")
     entries = [None] * surface.strips
     master_target = None
