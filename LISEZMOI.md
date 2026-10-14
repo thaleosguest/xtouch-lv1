@@ -114,10 +114,23 @@ Même script. **Mute** et **Solo** de chaque tranche pilotent la LV1 ; leurs LED
 (un mute fait sur l'écran allume aussi la LED). **Rec** et **Select** n'ont pas encore de fonction
 (ils sont notés dans le journal). `--lecture-seule` désactive aussi les boutons.
 
+L'état mute/solo **de départ** est lu à la connexion : les LED sont justes dès le lancement.
+
 ### Test
-1. **Avant de lancer le script**, dans la LV1 : mute In 1 et In 3, solo In 2.
-2. Lance `py xtouch_lv1_display.py`. Note si les LED de ces trois canaux s'allument dès le départ
-   (probablement non : l'état initial n'est pas encore décodé, c'est le but de ce test).
-3. Appuie sur Mute et Solo de quelques tranches, puis mute / démute depuis l'écran de la LV1.
-4. Appuie une fois sur Rec et sur Select.
-5. Envoie-moi le journal.
+1. Appuie sur Mute et Solo de quelques tranches, puis mute / démute depuis l'écran de la LV1.
+2. Envoie-moi le journal.
+
+## Étape 3 : banques (◄ BANK ►)
+
+Même script. **◄ BANK ►** sur la X-Touch passe à la couche précédente / suivante du jeu affiché
+(Ch 1-16 -> Ch 17-32 -> …), en sautant les couches vides. C'est **local à la X-Touch** : l'écran de la
+LV1 ne change pas (aucune commande LV1 connue pour ça). La console affiche alors « (banque X-Touch) ».
+Un clic de couche sur l'écran de la LV1 reprend la main. Banque bloquée tant qu'un fader est touché.
+Fonctionne aussi en `--lecture-seule` (rien n'est envoyé à la LV1).
+
+### Test
+1. Lance `py xtouch_lv1_display.py`, appuie 3 fois sur BANK ►, puis 1 fois sur BANK ◄.
+   Les noms et faders doivent suivre (Ch 17-32, Ch 33-48, …).
+2. Clique une couche sur l'écran de la LV1 : la X-Touch doit la reprendre.
+3. Appuie aussi une fois sur ◄ CHANNEL ► et sur FLIP (pas encore de fonction, notés dans le journal).
+4. Envoie-moi le journal.

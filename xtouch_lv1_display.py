@@ -215,6 +215,7 @@ class LV1State:
         self.last_set = {}        # vue -> dernier jeu de couches reçu [(nom, [(g, ch) | None, ...]), ...]
         self.last_flag = {}       # vue -> 2e nombre de ce paquet (1 = custom d'après le module Companion)
         self.current = {}         # vue -> index de couche (/Notify/CurrentLayer)
+        self.local = {}           # vue -> index choisi par ◄ BANK ► sur la X-Touch (effacé au clic LV1)
         self.custom_on = {}       # vue -> bouton Custom allumé ? (/Notify/CustomButton, hypothèse)
         self.spill_on = {}        # vue -> bouton Spill allumé ? (/Notify/SpillButton, hypothèse)
         self.version = ""
@@ -226,6 +227,24 @@ class LV1State:
     def track(self, g, ch):
         return self.tracks.setdefault((g, ch), {"name": None, "rgb": None, "pal": None, "fader": None,
                                                 "mute": None, "solo": None})
+
+    def bank(self, page, step):
+        """◄ BANK ► : couche précédente / suivante du jeu affiché, en sautant les couches vides.
+
+        Purement local : aucune commande LV1 connue pour changer de couche (module Companion du
+        29/09/2026). L'écran LV1 ne bouge pas ; un clic de couche sur la LV1 reprend la main.
+        Renvoie le nouvel index, ou None si on est déjà au bout."""
+        layers, _ = self.layer_set(page)
+        if not layers:
+            return None
+        idx = self.local.get(page, self.current.get(page, 0))
+        k = idx + step
+        while 0 <= k < len(layers):
+            if any(layers[k][1]):
+                self.local[page] = k
+                return k
+            k += step
+        return None
 
     def layer_set(self, page):
         """Jeu de couches affiché sur cette vue.
@@ -242,7 +261,7 @@ class LV1State:
 
     def layer_entries(self, mixer_page):
         """Les 16 tranches de la couche affichée, ou (None, None) si inconnue."""
-        idx = self.current.get(mixer_page)
+        idx = self.local.get(mixer_page, self.current.get(mixer_page))
         layers, kind = self.layer_set(mixer_page)
         if idx is None or not layers:
             return None, None
@@ -250,6 +269,8 @@ class LV1State:
             name, entries = layers[idx]
             if not any(entries):
                 name += " (vide)"
+            if mixer_page in self.local and self.local[mixer_page] != self.current.get(mixer_page):
+                name += " (banque X-Touch)"
             return name, entries
         return None, None
 
@@ -372,6 +393,7 @@ def handle(state, address, args):
             state.spill_on[args[0][1]] = args[1][1] != 0
         elif address == "/Notify/CurrentLayer" and len(args) >= 2:
             state.current[args[0][1]] = args[1][1]
+            state.local.pop(args[0][1], None)   # clic de couche sur la LV1 : elle reprend la main
         elif address == "/Notify/ServiceVersion" and args and args[0][0] == "s":
             state.version = args[0][1]
 
@@ -665,16 +687,32 @@ MASTER = 16                       # numéro interne du fader master (9e fader de
 # Boutons de tranche, notes Mackie (à confirmer sur la X-Touch) : Rec 0x00-07, Solo 0x08-0F,
 # Mute 0x10-17, Select 0x18-1F. Appui = vélocité 127, relâchement = 0.
 NOTE_REC, NOTE_SOLO, NOTE_MUTE, NOTE_SELECT = 0x00, 0x08, 0x10, 0x18
+# Navigation, norme Mackie (à confirmer sur la X-Touch) : ◄ BANK ► 0x2E/0x2F, ◄ CHANNEL ► 0x30/0x31.
+NOTE_BANK_LEFT, NOTE_BANK_RIGHT = 0x2E, 0x2F
 
 
 class ButtonControl:
-    """Mute / Solo -> LV1. Rec et Select : pas encore de fonction (notés dans le journal)."""
+    """Mute / Solo -> LV1, ◄ BANK ► -> couche (locale). Rec et Select : pas encore de fonction."""
 
-    def __init__(self, state, link, write=True):
+    def __init__(self, state, link, write=True, page=0, busy=lambda: False):
         self.state, self.link, self.write = state, link, write
+        self.page = page          # vue LV1 suivie (0 = Mixer 1)
+        self.busy = busy          # vrai si un fader est sous le doigt : pas de changement de banque
         self.warned = set()
 
+    def on_bank(self, d1):
+        step = -1 if d1 == NOTE_BANK_LEFT else 1
+        if self.busy():
+            JOURNAL.mark("XT bouton Bank %+d ignoré (fader tenu)" % step)
+            return True
+        with self.state.lock:
+            k = self.state.bank(self.page, step)
+        JOURNAL.mark("XT bouton Bank %+d -> couche %s" % (step, k if k is not None else "inchangée (bout)"))
+        return True
+
     def on_midi(self, unit, status, d1, d2, t, entries, surface):
+        if (status & 0xF0) == 0x90 and d1 in (NOTE_BANK_LEFT, NOTE_BANK_RIGHT):
+            return True if d2 == 0 else self.on_bank(d1)
         if (status & 0xF0) != 0x90 or d1 > 0x1F:
             return False
         if d2 == 0:
@@ -923,7 +961,8 @@ def main():
     link.start()
     surface = Surface(midi, units)
     faders = FaderControl(state, link, write=not a.lecture_seule)
-    buttons = ButtonControl(state, link, write=not a.lecture_seule)
+    buttons = ButtonControl(state, link, write=not a.lecture_seule, page=a.mixer - 1,
+                            busy=lambda: bool(faders.held(time.time())))
     if a.lecture_seule:
         print("  Mode lecture seule : rien n'est envoyé à la LV1.")
     print("Recherche de la LV1… (Ctrl+C pour arrêter)")
