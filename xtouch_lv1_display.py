@@ -715,19 +715,15 @@ NOTE_CHANNEL_LEFT, NOTE_CHANNEL_RIGHT = 0x30, 0x31
 NOTE_TRACK = 0x28
 NOTE_VPOT_PUSH = 0x20             # appui sur l'encodeur n : 0x20 + n (vérifié le 14/10, journal 183905)
 CC_VPOT, CC_RING = 0x10, 0x30
-SIDE_NAMES = {None: "L+R", 0: "L", 1: "R"}
+SIDE_NAMES = {0: "L", 1: "R"}
 
 
-def gain_label(gains, side):
-    """Texte (7 car. max) du gain d'une tranche : mono « +12.0 » ; stéréo L+R « +12.0 » si égaux, sinon
-    « +12/+11 » ; côté seul « L +12.0 » / « R +11.5 »."""
-    gains = [g for g in gains if g is not None]
-    if not gains:
+def gain_label(gains, side=0):
+    """Texte (7 car. max) du gain d'une tranche : mono « +12.0 » ; stéréo : côté réglé « L+12.0 » / « R+11.5 »."""
+    if not gains or any(g is None for g in gains):
         return "  -"
-    if side is not None and side < len(gains):
+    if len(gains) == 2:
         return "%s%+.1f" % ("LR"[side], gains[side])
-    if len(gains) == 2 and gains[0] != gains[1]:
-        return "%+.0f/%+.0f" % (gains[0], gains[1])
     return "%+.1f" % gains[0]
 
 
@@ -744,7 +740,7 @@ class GainControl:
         self.state, self.link, self.write = state, link, write
         self.mode = False                 # mode gain (TRACK)
         self.rec_down = {}                # tranche -> instant d'appui sur Rec
-        self.side = {}                    # piste stéréo -> None (L+R), 0 (L seul), 1 (R seul) : appui encodeur
+        self.side = {}                    # piste stéréo -> 0 (L, défaut) / 1 (R) : appui encodeur ; jamais les deux
         self.warned = set()
 
     def on_midi(self, unit, status, d1, d2, t, entries, surface):
@@ -753,15 +749,14 @@ class GainControl:
             if d2:
                 self.mode = not self.mode
                 if not self.mode:
-                    self.side.clear()             # en sortant du mode gain : stéréo de nouveau L+R
+                    self.side.clear()             # en sortant du mode gain : stéréo de nouveau sur L
                 JOURNAL.mark("XT bouton Track -> mode gain %s" % ("ON" if self.mode else "OFF"))
             return True
         if kind == 0x90 and NOTE_VPOT_PUSH <= d1 < NOTE_VPOT_PUSH + 8:
             strip = 8 * unit + (d1 - NOTE_VPOT_PUSH)
             e = entries[strip] if strip < len(entries) else None
             if d2 and self.mode and e is not None and self.link and len(self.link.preamps(e)) == 2:
-                cur = self.side.get(e)
-                nxt = {None: 0, 0: 1, 1: None}[cur]
+                nxt = 1 - self.side.get(e, 0)
                 self.side[e] = nxt
                 JOURNAL.mark("XT appui encodeur %d -> stéréo %s %s" % (strip + 1, SIDE_NAMES[nxt], e))
             return True
@@ -794,9 +789,11 @@ class GainControl:
                 JOURNAL.mark("XT Rec tranche %d : appui bref (%.1f s), 48 V inchangé" % (strip + 1, t - t0))
                 self._warn("48 V : tenir Rec %.0f s" % self.PHANTOM_HOLD)
                 return True
-            on = not self.link.phantom_on(e)
-            if self.write and self.link.set_phantom(e, on):
-                JOURNAL.mark("XT Rec tranche %d tenu -> 48 V %s %s" % (strip + 1, "ON" if on else "OFF", e))
+            side = self.side.get(e, 0)
+            on = not self.link.phantom_on(e, side)
+            if self.write and self.link.set_phantom(e, on, side):
+                JOURNAL.mark("XT Rec tranche %d tenu -> 48 V %s %s côté %s" % (strip + 1, "ON" if on else "OFF", e,
+                                                                         SIDE_NAMES[side]))
             return True
         return False
 
@@ -809,10 +806,10 @@ class GainControl:
         """Ligne du bas (gain en mode gain), couronnes, LED Rec (48 V) pour les tranches affichées."""
         rings, recs = [], []
         for i, e in enumerate(entries):
-            side = self.side.get(e)
+            side = self.side.get(e, 0)
             g = self.link.gain(e, side) if (self.link and e is not None) else None
-            recs.append(bool(self.link and e is not None and self.link.phantom_on(e)))
-            if self.mode and g is not None:
+            recs.append(bool(self.link and e is not None and self.link.phantom_on(e, side)))
+            if self.mode and g is not None:   # (gain_label : côté réglé du stéréo)
                 pos = 1 + int(round((g + 12.0) / 72.0 * 10))
                 rings.append(0x20 | max(1, min(11, pos)))       # mode 2 : remplissage depuis la gauche
                 if i < len(bot):
