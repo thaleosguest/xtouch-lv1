@@ -523,6 +523,7 @@ class Surface:
         self.motor = {}        # tranche -> (valeur, instant) de la dernière commande moteur
         self.sent_led = {}     # (unité, note) -> 0 | 127
         self.sent_ring = {}    # (unité, encodeur) -> valeur de couronne
+        self.sent_seg = {}     # CC de l'afficheur 7 segments -> code envoyé
         # Le master est sur la X-Touch (canal MIDI 8) ; l'Extender n'en a pas.
         self.master_unit = next((i for i, un in enumerate(units) if un[0] == "X-Touch"), None)
 
@@ -575,6 +576,21 @@ class Surface:
             if u < len(self.units) and self.sent_ring.get((u, s)) != v:
                 self.midi.short(self.units[u][2], 0xB0, 0x30 + s, v)
                 self.sent_ring[(u, s)] = v
+
+    def push_master_display(self, assign, timecode):
+        """Afficheur 7 segments : assign = 2 codes (gauche, droite), timecode = 10 codes (gauche -> droite)."""
+        if self.master_unit is None:
+            return
+        h = self.units[self.master_unit][2]
+        for cc, v in ((CC_ASSIGN_L, assign[0]), (CC_ASSIGN_R, assign[1])):
+            if self.sent_seg.get(cc) != v:
+                self.midi.short(h, 0xB0, cc, v)
+                self.sent_seg[cc] = v
+        for k, v in enumerate(timecode):
+            cc = CC_TIMECODE + (len(timecode) - 1 - k)
+            if self.sent_seg.get(cc) != v:
+                self.midi.short(h, 0xB0, cc, v)
+                self.sent_seg[cc] = v
 
     def set_main_led(self, note, on):
         """LED d'un bouton de la X-Touch principale (TRACK…)."""
@@ -635,6 +651,9 @@ class Surface:
                 if u == self.master_unit:
                     self.midi.short(h, 0x90, NOTE_TRACK, 0)
                     self.midi.short(h, 0x90, NOTE_PAN, 0)
+                    self.midi.short(h, 0x90, NOTE_RUDE_SOLO, 0)
+                    for cc in list(range(CC_TIMECODE, CC_TIMECODE + 10)) + [CC_ASSIGN_L, CC_ASSIGN_R]:
+                        self.midi.short(h, 0xB0, cc, 0x20)
                 if u == self.master_unit:
                     self.midi.short(h, 0xE8, 0, 0)
                 self.midi.long(h, X.msg_colors(dev, [7] * 8))
@@ -737,6 +756,57 @@ def gain_label(gains, side=0):
     if len(gains) == 2:
         return "%s%+.1f" % ("LR"[side], gains[side])
     return "%+.1f" % gains[0]
+
+
+# Afficheur 7 segments de la X-Touch (norme Mackie, à confirmer) : timecode = 10 caractères, CC 0x40 + i
+# (i = 0 le plus à DROITE) ; « Assignment » = 2 caractères, CC 0x4B (gauche) et 0x4A (droite).
+# Codes : ASCII 0x40-0x5F (@, A-Z…) -> valeur - 0x40 ; ASCII 0x20-0x3F (espace, chiffres, -) -> tel quel ;
+# + 0x40 = point décimal allumé. Choix de Joseph (option C) : canal sélectionné + son gain, fader LR.
+CC_TIMECODE, CC_ASSIGN_L, CC_ASSIGN_R = 0x40, 0x4B, 0x4A
+NOTE_RUDE_SOLO = 0x73             # LED « SOLO » près de l'afficheur (norme Mackie, à confirmer)
+
+
+def seg_codes(text, width):
+    """Texte -> `width` codes 7 segments (de gauche à droite), points fusionnés dans le caractère précédent,
+    aligné à droite. Caractères non affichables (+, minuscules…) : convertis ou remplacés par un espace."""
+    out = []
+    for c in text.upper():
+        if c == "." and out:
+            out[-1] |= 0x40
+            continue
+        o = ord(c)
+        if 0x40 <= o <= 0x5F:
+            out.append(o - 0x40)
+        elif 0x20 <= o <= 0x3F and c != "+":
+            out.append(o)
+        else:
+            out.append(0x20)
+    out = out[-width:]
+    return [0x20] * (width - len(out)) + out
+
+
+def master_display(selected, gain_db, side, stereo, lr_db):
+    """Option C : (2 car. assignment, 10 car. timecode) = n° du canal sélectionné ; son gain X32 (5) + fader LR (5)."""
+    if selected is None:
+        num = "--"
+    elif selected[0] == 0:
+        num = "%2d" % (selected[1] + 1) if selected[1] < 99 else "99"
+    else:
+        num = "%s%d" % ({1: "G", 2: "F", 3: "LR", 5: "M", 6: "T", 12: "D", 25: "A"}.get(selected[0], "?"),
+                        selected[1] + 1)
+    if gain_db is None:
+        g = "  -  "
+    else:
+        g = ("%s%.1f" % ("LR"[side] if stereo else "", gain_db))
+    if lr_db is None:
+        lr = "  -"
+    elif lr_db <= -144:
+        lr = " -oo"
+    else:
+        lr = "%.1f" % lr_db
+    left = seg_codes(g, 5)
+    right = seg_codes(lr, 5)
+    return seg_codes(num[-2:], 2), left + right
 
 
 def pan_label(p):
@@ -1423,6 +1493,15 @@ def main():
             surface.push_rings(rings)
             surface.set_main_led(NOTE_TRACK, gain.mode)
             surface.set_main_led(NOTE_PAN, gain.pan_mode)
+            with state.lock:
+                sel = state.selected
+                any_solo = any(t.get("solo") for t in state.tracks.values())
+                lr_db = state.tracks.get(master_target, {}).get("fader") if master_target else None
+            side = gain.side.get(sel, 0)
+            g_sel = xlink.gain(sel, side) if (xlink and sel) else None
+            stereo = bool(xlink and sel and len(xlink.preamps(sel)) == 2)
+            surface.push_master_display(*master_display(sel, g_sel, side, stereo, lr_db))
+            surface.set_main_led(NOTE_RUDE_SOLO, any_solo and int(now * 2) % 2 == 0)   # clignote si un solo
             time.sleep(0.01 if faders.pending else TICK)
     except KeyboardInterrupt:
         pass

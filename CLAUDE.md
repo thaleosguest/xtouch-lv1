@@ -144,7 +144,9 @@ Messages vérifiés :
   (Mixer 1, Mixer 2, All, Channel, Show, Patch, Setup), lus en y 14, actif = (56,201,255). La case « ‹ nom › » en
   haut à gauche (nom du canal sélectionné, flèches) existe sur toutes les pages : piste de secours.
 - Master : la X-Touch n'a ni écran ni vumètre master ; afficheur 7 segments (2 + 10 car.) et LED SOLO libres.
-  Options A/B/C proposées à Joseph (sélection + gain / LR / mixte), choix en attente.
+  **Option C choisie (codée, à tester)** : assignment = n° du canal sélectionné (D1, G3… hors entrées) ; timecode =
+  gain X32 du sélectionné (L/R si stéréo) + fader LR (`master_display`, `seg_codes`). CC Mackie non vérifiés :
+  timecode 0x40-0x49 (0x40 = à droite), assignment 0x4B/0x4A, point = +0x40 ; LED SOLO note 0x73 (clignote si solo).
 - FLIP (0x32) sans fonction.
 - Sens LV1 -> X-Touch de la sélection (vérifié le 14/10, journal 185026) : `LV1SelectionWatcher` (avec --clic-lv1) lit le liseré
   jaune (255,242,0) y 98-102/1080, x 143+96i (`lv1_clic.selected_strip`, sans admin) toutes les 0,15 s ; ne réagit
