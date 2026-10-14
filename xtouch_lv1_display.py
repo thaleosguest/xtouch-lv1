@@ -352,6 +352,15 @@ def handle(state, address, args):
                     # Hypothèse (non vérifiée) : 1er double = fader en dB (-144 = -inf).
                     if f[0] == "d" and t["fader"] is None:
                         t["fader"] = f[1]
+                    # Vérifié le 14/10/2026 (journaux 173028 -> 173215) : des 12 entiers,
+                    # le 1er = solo, le 2e = mute (0|1). Seul moyen d'avoir l'état à la connexion.
+                    if base + 6 >= len(args):
+                        break
+                    so, mu = args[base + 5], args[base + 6]
+                    if so[0] == "i":
+                        t["solo"] = so[1] != 0
+                    if mu[0] == "i":
+                        t["mute"] = mu[1] != 0
         elif address == "/Notify/Layers":
             page, is_custom, layers = parse_layers(args)
             if layers:

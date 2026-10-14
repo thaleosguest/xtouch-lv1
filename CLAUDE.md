@@ -25,6 +25,7 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
 - Suivi des couches : usine, custom, mix 80 canaux, Spill.
 - **Étape 1** : faders X-Touch -> LV1 (écriture), toucher, écho, garde-fous ; **fader master -> LR** ; calibration.
 - **Étape 2** : boutons **Mute** et **Solo** -> LV1, LED synchronisées (y compris changements faits à l'écran).
+- État mute/solo **initial** lu dans `/Channels` (test `tests/test_etat_initial.py`, LED au démarrage à vérifier sur le matériel).
 
 ## Fichiers
 
@@ -54,7 +55,9 @@ Waves, rétro-ingénierie). **Non documentée par Waves : à revérifier après 
 
 Messages vérifiés :
 - `/Channels` : `i:N` puis 19 args par piste (`s` nom, `i` groupe, `i` canal, `d` fader dB (-144 = -inf), `d`, 12 `i`, `h`, `d`).
-  Les 12 entiers ne sont pas décodés (l'état mute/solo initial y est peut-être).
+  Des 12 entiers : **1er = solo, 2e = mute** (0|1, vérifié le 14/10 : seule différence entre deux
+  connexions avant/après mute In 6 + solo In 7). Le 12e vaut 1/2 (mono/stéréo ?), `h` = champ de bits inconnu.
+  C'est la **seule** source de l'état initial : à la connexion, ni `/Notify/Solo` ni mute par piste.
 - `/Notify/TrackColor ii i f f f` : groupe, canal, **index palette** (= celui de `CurrentLV1.dat`, ex. 13 = #0FA2AB), RVB 0..1.
 - `/Notify/Track/Name ii s T`.
 - `/Notify/Meters` : `i:N` puis (groupe, canal, voie, dB float) ; **~23 trames/s** (le « 0,8 Hz » du code Companion est faux),
@@ -106,19 +109,21 @@ Messages vérifiés :
 
 ## Reste à faire / idées
 
-- État **initial** mute/solo à la connexion : décoder les 12 entiers de `/Channels` (test : muter In 1 et In 3,
-  solo In 2 AVANT de lancer, puis comparer le journal).
 - **Étape 3** : boutons de banque/couche de la X-Touch -> changer de couche dans la LV1 (commande à trouver).
 - **Étape 4** : encodeurs -> **gain X32** (OSC UDP 10023, via la logique de `x32-gain-recall` : table EXP -> canal LV1),
   48 V X32 sur Rec ?
-- Select : pas de commande LV1 connue (chercher dans le trafic MyFOH ou le code Companion).
+- Select : pas de commande LV1 connue. Piste : `/Notify/SelectedLinkTrackID i:vue i i` et `/Notify/LinkButton`
+  vus à la connexion (non décodés). Le module Companion (29/09/2026) n'a aucune commande de couche ni de sélection ;
+  il a `/Set/UserKey i:k T` puis `F` (appui momentané) et `/Set/SpillButton ii i`.
 - Écran master / vumètre master, couleur forcée par fichier, échelle des vumètres à ajuster.
 - Ethernet (RTP-MIDI), exe PyInstaller, intégration éventuelle dans `x32-gain-recall` (décision non prise).
 
 ## Tester
 
 - Simulation (Linux ou Windows, sans matériel) : `py tests/test_faders.py .` (options `--echo`, `--notouch`,
-  `--snapback`), `py tests/test_master.py .`, `py tests/test_buttons.py .`. Ils lancent une fausse LV1 locale,
+  `--snapback`), `py tests/test_master.py .`, `py tests/test_buttons.py .`, `py tests/test_etat_initial.py . [journal]`.
+  `py tests/analyser_channels.py journal.txt` : dump des 19 champs de `/Channels`. Attention : les tests écrivent
+  aussi des journaux `xtouch_journal_*` (pistes « Ch1/Kick/Snare ») dans le dossier. Ils lancent une fausse LV1 locale,
   injectent des messages X-Touch dans `xtouch_lv1_display.EVENTS` et vérifient les `/Set` envoyés et les moteurs/LED.
 - Rejouer un journal réel : analyser `/Notify/Layers` + `/Notify/CurrentLayer` avec `handle()` + `build_frame()`
   (méthode utilisée pour valider le suivi des couches).
