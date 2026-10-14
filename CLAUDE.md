@@ -133,6 +133,14 @@ Messages vérifiés :
 - Il a **MyFOH sur sa tablette** : source pour trouver les commandes couche / sélection (`lv1_capture.py` + pktmon).
 - Avancer par petites étapes testées, hors concert ; journal + rapport à chaque test.
 
+## À reprendre (arrêt du 14/10/2026 au soir)
+
+- **Sélection depuis l'onglet Channel** : l'aller-retour d'onglet est codé mais REFUSÉ sur le matériel (journal 191748 :
+  « onglet lu : None » sur la page Channel). Il faut une capture de la page Channel (script d'attente : LV1 au premier
+  plan ET hors Mixer 1/2) pour voir la barre d'onglets à cet endroit et corriger `lv1_clic.Target.active_tab`.
+- À tester sur le matériel : pan plus sensible (3/45 par cran), clic de sélection par recherche de la bande du nom
+  (essayer Big Fader / autres modes), afficheur 7 segments option C + LED SOLO (CC non vérifiés).
+
 ## Reste à faire / idées
 
 - **PAN (codé, à tester)** : bouton PAN (0x2A) = encodeurs sur le pan LV1 (exclusif avec TRACK). `/Set/Track/Pan ii d`
