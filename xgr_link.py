@@ -91,11 +91,18 @@ class GainRecallLink(threading.Thread):
         with self.lock:
             return [self.idx_of_exp[e] for e in self.sources.get(ch + 1, []) if e in self.idx_of_exp]
 
-    def gain(self, track):
-        """Gain du 1er préampli de la piste (dB), ou None."""
+    def gain(self, track, side=None):
+        """Gain (dB) du préampli de la piste : side None = 1er, 0 = gauche, 1 = droite ; None si aucun."""
+        p = self.preamps(track)
+        k = side or 0
+        with self.lock:
+            return self.gains.get(p[k]) if k < len(p) else None
+
+    def gains_of(self, track):
+        """Gains de tous les préamplis de la piste (stéréo : [gauche, droite])."""
         p = self.preamps(track)
         with self.lock:
-            return self.gains.get(p[0]) if p else None
+            return [self.gains.get(i) for i in p]
 
     def phantom_on(self, track):
         p = self.preamps(track)
@@ -103,10 +110,12 @@ class GainRecallLink(threading.Thread):
             return bool(p) and any(self.phantom.get(i) for i in p)
 
     # ── écriture ──
-    def nudge(self, track, delta_db):
-        """Ajoute delta_db au(x) préampli(s) de la piste (stéréo : les deux du même écart). Renvoie le
-        nouveau gain du 1er, ou None si pas de préampli."""
+    def nudge(self, track, delta_db, side=None):
+        """Ajoute delta_db au(x) préampli(s) de la piste. Stéréo : side None = les deux du même écart (l'écart
+        G/D est gardé), 0 = gauche seul, 1 = droite seul. Renvoie le nouveau gain du 1er réglé, ou None."""
         p = self.preamps(track)
+        if side is not None:
+            p = p[side:side + 1]
         if not p:
             return None
         now = time.time()

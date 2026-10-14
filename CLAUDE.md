@@ -140,9 +140,12 @@ Messages vérifiés :
 - **Étape 4 (codée, à tester)** : gain/48 V X32 **via x32-gain-recall** (choix de Joseph : pas d'OSC direct),
   `xgr_link.py` (GET /api/state 2x/s : gains, phantom, exp_map idx->EXP, lv1_sources canal LV1 1-based->[EXP] ;
   POST /api/gain {idx, db}, /api/phantom {idx, on} ; localhost sans code ; -12..+60 dB pas 0,5).
-  `GainControl` : **TRACK** (0x28, non vérifié) bascule le mode gain ; encodeurs CC 0x10-17 relatifs (bit 6 = sens),
+  `GainControl` : **TRACK** (0x28, vérifié) bascule le mode gain ; encodeurs CC 0x10-17 relatifs (bit 6 = sens),
   couronnes CC 0x30-37 (mode 2) ; ligne du bas = gain ; stéréo = 2 préamplis ensemble ; **Rec tenu 1 s = 48 V**
   (appui bref ignoré, protection rubans), LED Rec = 48 V réel. Option `--x32 URL|aucun`. Test `tests/test_gain.py`.
+  Gain vérifié sur le matériel le 14/10 (journal 183905 : TRACK + encodeur 1, 45 crans OK).
+  **Stéréo (demande de Joseph)** : appui sur l'encodeur (note 0x20+n, vérifiée) = L+R -> L seul -> R seul -> L+R ;
+  L+R garde l'écart G/D ; affichage « L+12.0 » / « R+11.5 » / « +12/+11 » (`gain_label`) ; remis en L+R en quittant TRACK.
   Les autres tests passent `--x32 aucun` (sinon ils liraient le vrai Gain Recall sur 8032).
 - **Étape 4** : encodeurs -> **gain X32** (OSC UDP 10023, via la logique de `x32-gain-recall` : table EXP -> canal LV1),
   48 V X32 sur Rec ?

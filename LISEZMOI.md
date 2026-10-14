@@ -156,6 +156,8 @@ Elle servira à l'étape 4 (gain X32, EQ…).
 - **TRACK** : encodeurs en mode **gain** (LED TRACK allumée). Chaque encodeur règle le gain du préampli
   de sa tranche, 0,5 dB par cran (canal stéréo : les deux préamplis ensemble). La ligne du bas affiche le
   gain, la couronne le montre. Re-TRACK : retour à l'affichage des faders.
+- **Canal stéréo** : appuyer sur l'encodeur choisit ce qu'il règle : L+R (les deux, écart gardé) -> L seul
+  -> R seul -> L+R. Écran : « L+12.0 », « R+11.5 », ou « +12/+11 » si G et D diffèrent.
 - **Rec** : 48 V du préampli de la tranche. **Tenir 1 s** (un appui bref ne fait rien : protection des
   micros à ruban). LED Rec = 48 V réel, tout le temps.
 - Tranche sans préampli X32 (pas d'EXP, Fx, bus…) : « - », couronne éteinte.
