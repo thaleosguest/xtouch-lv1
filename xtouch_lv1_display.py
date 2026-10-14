@@ -409,6 +409,12 @@ def handle(state, address, args):
 # ─── Lien réseau avec la LV1 (lecture seule, reconnexion automatique) ────────
 
 class LV1Link(threading.Thread):
+    # Vu le 15/10/2026 (journaux 001220, 001435) : juste après un redémarrage de la LV1, elle accepte la connexion
+    # mais n'envoie PAS son état (/Channels, /Notify/Layers, couleurs) -> plus de couleurs ni de banques. Si rien
+    # n'arrive : on redemande à STATE_ASK s, puis on se reconnecte à STATE_GIVEUP s (nouvelle poignée de main).
+    STATE_MSGS = ("/Channels", "/Notify/Layers", "/Notify/TrackColor")
+    STATE_ASK, STATE_GIVEUP = 5.0, 10.0
+
     def __init__(self, state, host=None, port=None, name="XTouch-Display"):
         super().__init__(daemon=True)
         self.state = state
@@ -466,6 +472,7 @@ class LV1Link(threading.Thread):
                          L.frame("/device_name", [("s", self.name_), ("s", "XTOUCH-LV1-DISPLAY-0001")]))
             asked = False
             t_ack = time.time() + 3
+            got_state, t_conn, reasked = False, None, False
             while not self.stop_flag:
                 try:
                     chunk = sock.recv(65536)
@@ -487,6 +494,8 @@ class LV1Link(threading.Thread):
                         elif address == "/handshake" and args[:1] == [("i", 1)]:
                             ack.set()
                         else:
+                            if address in self.STATE_MSGS:
+                                got_state = True
                             handle(self.state, address, args)
                 if ack.is_set() and not asked:
                     asked = True
@@ -498,6 +507,17 @@ class LV1Link(threading.Thread):
                     if self.on_connect:
                         threading.Thread(target=self.on_connect, daemon=True).start()
                     sock.sendall(L.frame("/Get/Aux/Tracks") + L.frame("/Get/Layers", [("i", 0), ("i", 0)]))
+                    t_conn = time.time()
+                if t_conn and not got_state:
+                    waited = time.time() - t_conn
+                    if waited > self.STATE_GIVEUP:
+                        JOURNAL.mark("état initial LV1 non reçu en %.0f s : reconnexion" % waited)
+                        raise OSError("la LV1 n'envoie pas son état (en cours de chargement ?) : reconnexion")
+                    if waited > self.STATE_ASK and not reasked:
+                        reasked = True
+                        JOURNAL.mark("état initial LV1 non reçu : nouvelle demande")
+                        with self.send_lock:
+                            sock.sendall(L.frame("/Get/Aux/Tracks") + L.frame("/Get/Layers", [("i", 0), ("i", 0)]))
                 if not ack.is_set() and time.time() > t_ack:
                     raise OSError("pas de réponse à la poignée de main")
         finally:
