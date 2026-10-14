@@ -1,0 +1,6 @@
+{
+  "_aide": "Renomme ce fichier en xtouch_couleurs.json pour forcer la couleur X-Touch d'une couleur LV1. Clé = numéro de palette LV1 (affiché dans le rapport de lv1_probe, champ arg2). Valeurs : vide, rouge, vert, jaune, bleu, violet, cyan, blanc.",
+  "13": "cyan",
+  "24": "rouge",
+  "6": "jaune"
+}

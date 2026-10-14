@@ -1,0 +1,5 @@
+__pycache__/
+xtouch_journal_*.txt
+lv1_probe_report_*.json
+lv1_probe_log_*.txt
+xtouch_probe_report_*.json

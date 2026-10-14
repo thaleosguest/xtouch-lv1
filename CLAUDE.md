@@ -1,0 +1,125 @@
+# xtouch-lv1-bridge — contexte projet
+
+> Fichier pour Claude Code, exécuté en local sur le PC de Joseph. Il résume ce qui a été établi
+> et testé le 14/10/2026 dans une discussion précédente (hors Claude Code), pour ne pas refaire
+> les recherches. Tout ce qui est marqué « vérifié » l'a été sur le matériel réel de Joseph.
+
+## Objectif
+
+Faire de la **Behringer X-Touch + X-Touch Extender** une surface de contrôle pour la **Waves eMotion
+LV1**, mieux qu'un FIT Controller : couleurs des canaux sur les écrans, vumètres, faders motorisés,
+boutons, et à terme le gain des préamplis **X32** sur les encodeurs (ce que ni le MCU natif ni le FIT
+ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, même auteur).
+
+## Architecture décidée
+
+- **Pas de MCU natif de la LV1.** Le script parle **directement** aux deux côtés :
+  - à la LV1 par son **API réseau privée** (celle des apps MyFOH/MyMon) ;
+  - aux X-Touch en **MIDI USB** (winmm par ctypes), le script est seul propriétaire des ports.
+- Dans la LV1, le contrôleur **Mackie doit être retiré** de System Inventory, sinon elle garde les ports MIDI.
+- Python 3 **bibliothèque standard uniquement** (rien à installer), Windows. Joseph lance avec `py`.
+
+## État : étapes faites (toutes vérifiées sur le matériel)
+
+- Affichage : nom (haut), fader en dB (bas), couleur du canal (7 couleurs X-Touch), vumètres post-fader ~23 Hz.
+- Suivi des couches : usine, custom, mix 80 canaux, Spill.
+- **Étape 1** : faders X-Touch -> LV1 (écriture), toucher, écho, garde-fous ; **fader master -> LR** ; calibration.
+- **Étape 2** : boutons **Mute** et **Solo** -> LV1, LED synchronisées (y compris changements faits à l'écran).
+
+## Fichiers
+
+- `xtouch_lv1_display.py` : le programme principal (affichage + faders + master + Mute/Solo).
+  Options : `--mixer 1|2`, `--ext-droite` (Extender à gauche par défaut), `--master g:c` (défaut `3:0` = LR,
+  `aucun`), `--lecture-seule`, `--no-journal`, `--dry-run`, `--host/--port`, `--main/--ext`, `--seconds`.
+  Écrit un journal `xtouch_journal_*.txt` (messages LV1 complets + gestes X-Touch + envois).
+- `lv1_probe.py` : sonde LV1 en lecture seule (rapport JSON). Contient l'OSC, le cadrage, la découverte zDNS.
+- `xtouch_probe.py` : test X-Touch (texte, couleurs, vumètres) + sortie MIDI winmm + construction des messages.
+- `xtouch_calibrer.py` : calibration des faders sur les repères imprimés -> `xtouch_courbe_fader.json`
+  (format `[[dB, course 0..1], ..., ["-inf", course]]`). **Le fichier calibré est sur le PC de Joseph : ne pas l'écraser.**
+- `xtouch_couleurs.exemple.json` : forçage couleur LV1 (index palette) -> couleur X-Touch.
+- `tests/` : tests contre une **fausse LV1** et une X-Touch simulée (voir « Tester »).
+- `LISEZMOI.md` : mode d'emploi utilisateur (français).
+
+## API réseau LV1 (LV1 V17, ServiceVersion v.17.6.26.456)
+
+Source de départ : module Companion communautaire `bitfocus/companion-module-waves-lv1` (MIT, non affilié à
+Waves, rétro-ingénierie). **Non documentée par Waves : à revérifier après chaque mise à jour LV1.**
+
+- Découverte : paquet OSC `/zDNS` en multicast UDP `225.1.1.1:13337` (service `_waveslv113._tcp`, port TCP variable,
+  change quand on change la config du mixer).
+- Trame TCP : `[taille 4 o BE (OSC seul)][en-tête 8 o 00 00 00 02 00 00 00 00][OSC]`.
+- Poignée de main MyFOH : `/handshake i:1 i:-1 i:1` + `/device_name s s` **dans un seul envoi TCP**, réponse `/handshake i:1`.
+- Maintien : la LV1 envoie `/ping h i` ~1/s, répondre `/pong` avec les mêmes arguments.
+- À la connexion : `/Get/Aux/Tracks`, `/Get/Layers ii 0 0`.
+
+Messages vérifiés :
+- `/Channels` : `i:N` puis 19 args par piste (`s` nom, `i` groupe, `i` canal, `d` fader dB (-144 = -inf), `d`, 12 `i`, `h`, `d`).
+  Les 12 entiers ne sont pas décodés (l'état mute/solo initial y est peut-être).
+- `/Notify/TrackColor ii i f f f` : groupe, canal, **index palette** (= celui de `CurrentLV1.dat`, ex. 13 = #0FA2AB), RVB 0..1.
+- `/Notify/Track/Name ii s T`.
+- `/Notify/Meters` : `i:N` puis (groupe, canal, voie, dB float) ; **~23 trames/s** (le « 0,8 Hz » du code Companion est faux),
+  134 valeurs/trame ; **post-fader** (confirmé par Joseph).
+- `/Notify/Track/Out/Gain ii d T` ; écriture `/Set/Track/Out/Gain ii d` (plage -144..+10).
+  **La LV1 RENVOIE nos propres réglages** (~1 message/22 ms pendant un geste), contrairement à la doc du module.
+- `/Notify/Track/Out/Mute ii i T` (groupe 13 = groupes de mute) ; écriture `/Set/Track/Out/Mute ii T|F`.
+- `/Notify/Solo ii i` ; écriture `/Set/Solo ii i(0|1)`.
+- Couches : à chaque clic, la LV1 envoie `/Notify/Layers` (le jeu affiché) PUIS `/Notify/CurrentLayer i:vue i:index`.
+  `/Notify/Layers` = vue, flag, nb, puis (nom, n, (groupe, canal)×n) ; (-1,-1) = vide. **Règle retenue : suivre le
+  dernier jeu reçu pour la vue.** Le flag (2e nombre) n'indique pas fiablement « custom » ; `/Notify/CustomButton`
+  et `/Notify/SpillButton` **ne changent pas** quand on allume Custom/Spill (vérifié) : ne pas s'en servir.
+- Groupes : 0 In, 1 Grp, 2 Fx/Aux, 3 LR, 4 C, 5 M, 6 Mtx, 7 Cue, 8 TB, 12 DCA, 25 Mon.
+- Aucune commande de **sélection** de canal trouvée. 48 V LV1 : `/SetTrackPhantomState i:0 i:ch i:0 i:on`
+  (n'agit pas sur les préamplis X32 de Joseph).
+
+## X-Touch / Extender (USB, mode Mackie Control)
+
+- Ports Windows : « X-Touch » et « X-Touch-Ext » (sortie 3 et 5 chez Joseph, à titre indicatif).
+- SysEx : en-tête `F0 00 00 66 <id>`, **id 0x14 X-Touch, 0x15 Extender** (vérifié).
+  - Couleurs écran : `<en-tête> 72 c1..c8 F7`, 0 vide, 1 rouge, 2 vert, 3 jaune, 4 bleu, 5 violet, 6 cyan, 7 blanc (vérifié).
+  - Texte : `<en-tête> 12 <pos> <ascii> F7`, 7 car./tranche, ligne 2 à 56 (vérifié).
+- Vumètres : channel pressure `D0`, valeur = tranche×16 + niveau 0..12 (vérifié ; échelle dB provisoire `METER_STEPS`).
+- Faders : pitch bend 14 bits `E0+tranche` (`E8` = master), course complète 0..16380 atteinte (vérifié).
+- Toucher : notes `0x68-0x6F` (faders 1-8), `0x70` master, vélocité 127/0 (vérifié).
+- **Piège majeur (vérifié)** : au relâchement, la X-Touch ramène le moteur à la **dernière position envoyée par
+  l'ordinateur**. Il faut donc **renvoyer chaque position reçue de la main** (écho Mackie), sinon le fader revient
+  en arrière et l'ancienne valeur repart vers la LV1 (bug vu et corrigé le 14/10).
+- Boutons : Rec 0x00-07, Solo 0x08-0F, Mute 0x10-17, Select 0x18-1F ; LED = note on 127/0 (Mute/Solo vérifiés).
+  Note 0x32 vue dans un journal (probablement Flip), pas encore traitée.
+- Prise Ethernet des X-Touch = RTP-MIDI (fiches produit). Non testé ; USB pour l'instant.
+
+## Garde-fous des faders (ne pas retirer sans raison)
+
+1. Fader non touché alors que le toucher a déjà été vu = moteur -> ignoré.
+2. Position proche d'une commande moteur récente (< 1,5 s) = écho moteur -> ignorée.
+3. Position identique à la dernière connue -> ignorée (évite toute boucle d'écho).
+4. Pendant le toucher (+0,3 s) : retours LV1 de cette piste ignorés (`held_tracks`).
+5. Pendant 2 s après relâchement : retour LV1 égal à l'ancienne valeur ou à une valeur intermédiaire du geste ignoré
+   (`stale`) ; une vraie nouvelle valeur passe tout de suite.
+6. Envoi limité à 1 valeur / 20 ms / fader ; mise à jour locale optimiste.
+
+## Choix de Joseph
+
+- Extender **à gauche** de la X-Touch (tranches 1-8 sur l'Extender). Master -> LR.
+- Calibration sur les **repères imprimés** de la X-Touch (pas sur l'écran LV1). Un seul fichier de courbe pour tous.
+- Vumètres : il préfère ceux de la LV1 (post-fader).
+- Avancer par petites étapes testées, hors concert ; journal + rapport à chaque test.
+
+## Reste à faire / idées
+
+- État **initial** mute/solo à la connexion : décoder les 12 entiers de `/Channels` (test : muter In 1 et In 3,
+  solo In 2 AVANT de lancer, puis comparer le journal).
+- **Étape 3** : boutons de banque/couche de la X-Touch -> changer de couche dans la LV1 (commande à trouver).
+- **Étape 4** : encodeurs -> **gain X32** (OSC UDP 10023, via la logique de `x32-gain-recall` : table EXP -> canal LV1),
+  48 V X32 sur Rec ?
+- Select : pas de commande LV1 connue (chercher dans le trafic MyFOH ou le code Companion).
+- Écran master / vumètre master, couleur forcée par fichier, échelle des vumètres à ajuster.
+- Ethernet (RTP-MIDI), exe PyInstaller, intégration éventuelle dans `x32-gain-recall` (décision non prise).
+
+## Tester
+
+- Simulation (Linux ou Windows, sans matériel) : `py tests/test_faders.py .` (options `--echo`, `--notouch`,
+  `--snapback`), `py tests/test_master.py .`, `py tests/test_buttons.py .`. Ils lancent une fausse LV1 locale,
+  injectent des messages X-Touch dans `xtouch_lv1_display.EVENTS` et vérifient les `/Set` envoyés et les moteurs/LED.
+- Rejouer un journal réel : analyser `/Notify/Layers` + `/Notify/CurrentLayer` avec `handle()` + `build_frame()`
+  (méthode utilisée pour valider le suivi des couches).
+- Sur le matériel : demander à Joseph un journal court et ciblé (un geste, 5 s d'attente).
