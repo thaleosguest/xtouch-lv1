@@ -719,6 +719,7 @@ class Surface:
                     self.midi.short(h, 0x90, NOTE_PAN, 0)
                     self.midi.short(h, 0x90, NOTE_RUDE_SOLO, 0)
                     self.midi.short(h, 0x90, NOTE_SEND, 0)
+                    self.midi.short(h, 0x90, NOTE_SOLO_ALL, 0)
                     for k in range(8):
                         self.midi.short(h, 0x90, NOTE_F1 + k, 0)
                     for cc in list(range(CC_TIMECODE, CC_TIMECODE + 10)) + [CC_ASSIGN_L, CC_ASSIGN_R]:
@@ -812,6 +813,8 @@ NOTE_CHANNEL_LEFT, NOTE_CHANNEL_RIGHT = 0x30, 0x31
 # Jog wheel (cranté sur la X-Touch) : CC 0x3C relatif, 0x01 = un cran horaire, 0x41 = anti-horaire (Mackie, à confirmer).
 # Page Channel : il règle le potard de plugin sélectionné (fader horizontal du bas) par crans de molette.
 CC_JOG = 0x3C
+NOTE_SOLO_ALL = 0x5A              # bouton SOLO (groupe Marker..Click..Solo, Mackie, à confirmer) : allumé si un solo
+                                  # est actif dans la LV1 ; appui = /ClearAllSolo (demande de Joseph, 15/10)
 # Assignation des encodeurs (norme Mackie, à confirmer) : TRACK 0x28. Encodeurs : CC 0x10-0x17 relatifs
 # (bit 6 = sens, bits 0-3 = vitesse), couronnes : CC 0x30-0x37.
 NOTE_TRACK = 0x28
@@ -1512,6 +1515,15 @@ class ButtonControl:
                 print("  Jog wheel : réglage des plugins avec --clic-lv1 seulement.")
                 self.warned.add("jog")
             return True
+        if (status & 0xF0) == 0x90 and d1 == NOTE_SOLO_ALL:
+            if d2:
+                with self.state.lock:
+                    for t_ in self.state.tracks.values():
+                        t_["solo"] = False          # mise à jour locale (la LV1 confirme par /Notify/Solo)
+                if self.write:
+                    self.link.send("/ClearAllSolo", [])
+                JOURNAL.mark("XT bouton Solo -> /ClearAllSolo")
+            return True
         if (status & 0xF0) == 0x90 and d1 in (NOTE_BANK_LEFT, NOTE_BANK_RIGHT):
             return True if d2 == 0 else self.on_bank(d1)
         if (status & 0xF0) == 0x90 and d1 in (NOTE_CHANNEL_LEFT, NOTE_CHANNEL_RIGHT):
@@ -1914,6 +1926,7 @@ def main():
             if overlay:
                 overlay.set_info(*sends.overlay_info())
             surface.set_main_led(NOTE_RUDE_SOLO, any_solo and int(now * 2) % 2 == 0)   # clignote si un solo
+            surface.set_main_led(NOTE_SOLO_ALL, any_solo)                                # SOLO : allumé si un solo
             time.sleep(0.01 if faders.pending else TICK)
     except KeyboardInterrupt:
         pass

@@ -29,7 +29,7 @@ def server():
             pk, buf = P.split_frames(buf)
             for p in pk:
                 a, args = P.osc_decode(p)
-                if a.startswith("/Set"):
+                if a.startswith("/Set") or a.startswith("/Clear"):
                     got.append((round(time.time() - T0, 2), a, args))
     threading.Thread(target=rx, daemon=True).start()
     time.sleep(0.1)
@@ -77,6 +77,7 @@ def inject():
     put(0.7, 0, 0x90, 0x08, 127); put(0.75, 0, 0x90, 0x08, 0)    # Solo tranche 1 (In 1)
     put(1.2, 0, 0x90, 0x11, 127); put(1.25, 0, 0x90, 0x11, 0)    # Mute tranche 2 : démute
     put(1.4, 0, 0x90, 0x00, 127)                                 # Rec : pas de fonction
+    put(2.9, 1, 0x90, 0x5A, 127); put(2.95, 1, 0x90, 0x5A, 0)  # SOLO : efface tous les solos
 threading.Thread(target=inject, daemon=True).start()
 
 sys.argv = ["x", "--dry-run", "--x32", "aucun", "--host", "127.0.0.1", "--port", str(PORT), "--seconds", "3.3"]
@@ -84,3 +85,6 @@ D.main()
 print("\n/Set envoyés à la LV1 :")
 for g in got: print("  ", g[0], g[1], P.short_args(g[2]))
 print("LED (instant, note, état) hors initialisation :", [l for l in LEDS if l[0] > 0.3])
+clear = [g for g in got if g[1] == "/ClearAllSolo"]
+print("ClearAllSolo :", clear)
+sys.exit(0 if clear else 1)

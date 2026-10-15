@@ -189,13 +189,16 @@ Messages vérifiés :
   User Key à nouveau + retour normal. Notes F1..F8 0x36..0x3D (Mackie, non vérifiées). Non vérifié : qu'un 2e appui
   sur la User Key ramène bien la LV1 ; si Joseph quitte le Flip sur l'écran LV1, le pont ne le voit pas (pas de
   notification connue). Test `tests/test_fkeys.py`.
-- **Jog wheel -> potard de plugin (codé, à tester)** — demande de Joseph : page Channel, un potard de plugin touché
+- **Jog wheel -> potard de plugin (vérifié le 15/10 avec la X-Touch)** — demande de Joseph : page Channel, un potard de plugin touché
   affiche son réglage en fader horizontal en bas (piste grise (54,54,54) x 690..1572, y 1040..1049, poignée claire).
   La MOLETTE souris dessus le règle (essai de Joseph ; le clavier non). Jog = CC 0x3C relatif (Mackie, non vérifié),
   -> `LV1Clicker.jog` (crans regroupés) -> `lv1_clic.jog_bottom_fader` : admin, onglet Channel lu, piste présente,
   puis WM_MOUSEWHEEL à la fenêtre (souris immobile) ou `--jog-methode souris` (pointeur déplacé un instant).
   Outil d'essai : `py lv1_clic.py molette 5` / `-5` (`--methode souris`).
   Vérifié le 15/10 : `py lv1_clic.py molette 5` (message WM_MOUSEWHEEL, souris immobile) fait bouger le réglage.
+- **Bouton SOLO** (0x5A, Mackie, non vérifié) : LED allumée si un solo est actif ; appui = `/ClearAllSolo` (sans argument,
+  commande du module Companion). Test dans `tests/test_buttons.py`.
+- `HISTORIQUE.md` : journal lisible du développement (à tenir à jour à chaque étape).
 - FLIP (0x32) sans fonction.
 - Sens LV1 -> X-Touch de la sélection (vérifié le 14/10, journal 185026) : `LV1SelectionWatcher` (avec --clic-lv1) lit le liseré
   jaune (255,242,0) y 98-102/1080, x 143+96i (`lv1_clic.selected_strip`, sans admin) toutes les 0,15 s ; ne réagit
