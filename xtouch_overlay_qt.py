@@ -201,6 +201,7 @@ class AbBadge(QWidget):
 RECALL_DEFAULT = {"ext": [0.0, 941.0], "xt": [941.0, 1811.0], "master": [1811.0, 1920.0], "y0": 745.0, "y1": 1076.0}
 CFG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "xtouch_ecran.json")
 GREEN, AMBER, WARN = QColor("#3ddc84"), QColor("#f2b63b"), QColor("#ff5b4d")
+COMPACT_W = 70               # case plus étroite que ça (px) : présentation compacte (vumètres + fader par-dessus)
 FADE_STEP = 0.16             # fondu du rappel : ~0,2 s à 30 ms par tour
 # Bandeau ENTIÈREMENT OPAQUE (Joseph, 15/10 : le dégradé de transparence vers le haut a été essayé puis refusé)
 
@@ -292,7 +293,72 @@ class StripRecall(QWidget):
         p.setFont(self.f_tag)
         p.drawText(r, Qt.AlignCenter, text)
 
+    def paint_meters(self, p, m, meters):
+        """1 ou 2 vumètres (stéréo) côte à côte dans le rectangle m."""
+        meters = meters or [None]
+        gap = 2 if len(meters) > 1 else 0
+        mw = (m.width() - gap * (len(meters) - 1)) / len(meters)
+        for k, db in enumerate(meters):
+            b = QRectF(m.left() + k * (mw + gap), m.top(), mw, m.height())
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor("#25282c"))
+            p.drawRoundedRect(b, 3, 3)
+            fr = meter_frac(db)
+            if fr > 0:
+                h = b.height() * fr
+                g = QLinearGradient(b.bottomLeft(), b.topLeft())
+                g.setColorAt(0, GREEN)
+                g.setColorAt(meter_frac(-12), GREEN)
+                g.setColorAt(meter_frac(-6), AMBER)
+                g.setColorAt(1, WARN)
+                p.setBrush(g)
+                p.drawRoundedRect(QRectF(b.left(), b.bottom() - h, b.width(), h), 3, 3)
+
+    def paint_cap(self, p, cx, cy, w):
+        cap = QRectF(cx - w / 2, cy - 7, w, 14)
+        g = QLinearGradient(cap.topLeft(), cap.bottomLeft())
+        g.setColorAt(0, QColor("#9aa1aa"))
+        g.setColorAt(1, QColor("#4a4f56"))
+        p.setBrush(g)
+        p.setPen(QPen(QColor("#22252a"), 1))
+        p.drawRoundedRect(cap, 3, 3)
+        p.setPen(QPen(QColor(TXT), 1.4))
+        p.drawLine(int(cap.left() + 3), int(cy), int(cap.right() - 3), int(cy))
+
+    def paint_compact(self, p, r, c):
+        """Case étroite (< COMPACT_W, ex. master réglé à 36 px) : couleur + nom court, vumètres sur toute la largeur
+        avec le capuchon du fader par-dessus, valeur en petit (demande de Joseph, 15/10)."""
+        col = QColor(c.get("color") or LINE2)
+        path = QPainterPath()
+        path.addRoundedRect(r, 6, 6)
+        p.save()
+        p.setClipPath(path)
+        p.fillRect(QRectF(r.left(), r.top(), r.width(), 22), col)
+        p.restore()
+        dark = 0.299 * col.red() + 0.587 * col.green() + 0.114 * col.blue() > 150
+        p.setPen(QColor(PANEL) if dark else QColor("#ffffff"))
+        p.setFont(self.f_tag)
+        p.drawText(QRectF(r.left(), r.top(), r.width(), 22), Qt.AlignCenter, (c.get("name") or "")[:3])
+        y = r.top() + 26
+        if c.get("mute"):
+            self.pill(p, QRectF(r.left() + 3, y, r.width() - 6, 15), "M", QColor(225, 22, 32))
+            y += 18
+        bottom = r.bottom() - 20
+        m = QRectF(r.left() + 4, y + 2, r.width() - 8, bottom - y - 4)
+        self.paint_meters(p, m, c.get("meters"))
+        if c.get("pos") is not None:
+            self.paint_cap(p, m.center().x(), m.bottom() - m.height() * c["pos"], r.width() - 4)
+        p.setPen(QColor(TXT))
+        p.setFont(self.f_tag)
+        p.drawText(QRectF(r.left() - 2, bottom, r.width() + 4, 18), Qt.AlignCenter, c.get("value", ""))
+
     def paint_cell(self, p, r, c, hot, send):
+        if c and r.width() < COMPACT_W:
+            p.setPen(QPen(QColor("#ffffff") if hot else QColor(LINE2), 2.0 if hot else 1.0))
+            p.setBrush(QColor("#1b1d20") if hot else QColor(PANEL))
+            p.drawRoundedRect(r, 6, 6)
+            self.paint_compact(p, r, c)
+            return
         sel = bool(c and c.get("sel"))
         p.setPen(QPen(QColor("#ffffff") if hot else (QColor(255, 242, 0) if sel else QColor(LINE2)),
                       2.4 if (hot or sel) else 1.0))
@@ -355,34 +421,11 @@ class StripRecall(QWidget):
         p.drawRoundedRect(QRectF(fx - 2, top_f, 4, bot_f - top_f), 2, 2)
         pos = c.get("pos")
         if pos is not None:
-            cy = bot_f - (bot_f - top_f) * pos
-            cap = QRectF(fx - 11, cy - 7, 22, 14)
-            g = QLinearGradient(cap.topLeft(), cap.bottomLeft())
-            g.setColorAt(0, QColor("#9aa1aa"))
-            g.setColorAt(1, QColor("#4a4f56"))
-            p.setBrush(g)
-            p.setPen(QPen(QColor("#22252a"), 1))
-            p.drawRoundedRect(cap, 3, 3)
-            p.setPen(QPen(QColor(TXT), 1.4))
-            p.drawLine(int(cap.left() + 3), int(cy), int(cap.right() - 3), int(cy))
-        meters = c.get("meters") or []
+            self.paint_cap(p, fx, bot_f - (bot_f - top_f) * pos, 22)
+        meters = c.get("meters") or [None]
         mw = 11 if len(meters) < 2 else 9
-        mx = r.right() - 8 - mw * len(meters) - 3 * max(0, len(meters) - 1)
-        for k, db in enumerate(meters or [None]):
-            m = QRectF(mx + k * (mw + 3), top_f, mw, bot_f - top_f)
-            p.setPen(Qt.NoPen)
-            p.setBrush(QColor("#25282c"))
-            p.drawRoundedRect(m, 3, 3)
-            fr = meter_frac(db)
-            if fr > 0:
-                h = m.height() * fr
-                g = QLinearGradient(m.bottomLeft(), m.topLeft())
-                g.setColorAt(0, GREEN)
-                g.setColorAt(meter_frac(-12), GREEN)
-                g.setColorAt(meter_frac(-6), AMBER)
-                g.setColorAt(1, WARN)
-                p.setBrush(g)
-                p.drawRoundedRect(QRectF(m.left(), m.bottom() - h, m.width(), h), 3, 3)
+        width = mw * len(meters) + 3 * (len(meters) - 1)
+        self.paint_meters(p, QRectF(r.right() - 8 - width, top_f, width, bot_f - top_f), meters)
         p.setPen(QColor(TXT))
         p.setFont(self.f_val)
         p.drawText(QRectF(r.left(), bottom, r.width(), 30), Qt.AlignCenter, c.get("value", ""))

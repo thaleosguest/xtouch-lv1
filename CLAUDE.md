@@ -216,6 +216,8 @@ Messages vérifiés :
   bandeau ENTIÈREMENT OPAQUE (dégradé de transparence essayé puis refusé par Joseph). Case : bandeau couleur + nom,
   pastilles SEND > aux / OFF / MUTE / SOLO / 48V, gain X32 (côté L/R en stéréo) + pan, petit fader avec repères
   (courbe calibrée), 1 ou 2 vumètres (stéréo), valeur en grand ; contour jaune = sélection, blanc = fader touché.
+  Case de moins de 70 px (`COMPACT_W`, ex. master réglé à 36 px par Joseph) : version compacte = vumètres sur toute
+  la largeur, capuchon du fader PAR-DESSUS, nom sur 3 lettres, « M » rouge si mute, valeur en petit.
   **Réglage à la main** : `py xtouch_overlay_qt.py --reglage` (3 blocs Extender 8 / X-Touch 8 / master 1, bords =
   étirer, intérieur = déplacer, haut/bas = hauteur ; Entrée = enregistrer, Échap = annuler) -> `xtouch_ecran.json`
   ({ext, xt, master: [x0, x1] sur 1920, y0, y1 sur 1080}), relu à chaud par le pont. `recall_payload`, `StripRecall`,
