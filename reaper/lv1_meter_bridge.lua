@@ -168,23 +168,20 @@ local function draw_scale(top, bottom)
   end
 end
 
--- Hauteur des formes d'onde (comme le zoom d'amplitude de Tracks Live) : actions « View: Increase / Decrease peaks
--- view gain », cherchées par leur NOM dans la liste d'actions (n° non vérifiés de mémoire).
+-- Hauteur des formes d'onde (comme le zoom d'amplitude de Tracks Live) : actions « Peaks: Increase / Decrease peaks
+-- display zoom for project » (noms relevés dans Reaper 7.82 de Joseph le 16/10), cherchées par leur NOM exact.
 local function find_action(words)
   if not reaper.kbd_enumerateActions then return nil end
   local i = 0
   while true do
     local id, name = reaper.kbd_enumerateActions(0, i)
     if not id or id == 0 then return nil end
-    local low = name:lower()
-    local all = true
-    for _, w in ipairs(words) do if not low:find(w, 1, true) then all = false end end
-    if all then return id end
+    if name == words then return id end
     i = i + 1
   end
 end
-local WAVE_UP = find_action({"increase", "peaks view gain"})
-local WAVE_DOWN = find_action({"decrease", "peaks view gain"})
+local WAVE_UP = find_action("Peaks: Increase peaks display zoom for project")
+local WAVE_DOWN = find_action("Peaks: Decrease peaks display zoom for project")
 
 local buttons = {}                      -- boutons globaux dessinés : {x, y, w, h, act}
 
@@ -310,7 +307,7 @@ local function click(x, y)                                 -- boutons : dès l'a
       elseif b.act == "wave_up" or b.act == "wave_down" then  -- hauteur des formes d'onde
         local id = b.act == "wave_up" and WAVE_UP or WAVE_DOWN
         if id then reaper.Main_OnCommand(id, 0)
-        else reaper.ShowConsoleMsg("LV1 Meter Bridge: action 'peaks view gain' not found\n") end
+        else reaper.ShowConsoleMsg("LV1 Meter Bridge: action 'peaks display zoom' not found\n") end
       elseif b.act == "arm" then                               -- tout armé -> tout désarmer, sinon tout armer
         local on = common(list, "I_RECARM") == 1
         set_all(list, "I_RECARM", on and 0 or 1, on and "disarm all" or "arm all")

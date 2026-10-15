@@ -230,8 +230,8 @@ Messages vérifiés :
   - clic droit : mixer (40078), master (SetMasterTrackVisibility), hauteur des pistes (I_HEIGHTOVERRIDE), LV1 seulement, dock.
   ARM ALL (I_RECARM de toutes les pistes affichées) et MON OFF/ON/AUTO (I_RECMON 0/1/2) à gauche, R de colonne =
   armer une piste (Joseph, 16/10) ; nouvelles pistes de la synchro : désarmées, monitoring OFF (lv1_common.new_track).
-  ÉCRAN TACTILE (Joseph) : boutons 70x40 à gauche (ARM ALL, MON, WAVE -/+ = actions « peaks view gain » cherchées
-  par nom via kbd_enumerateActions, FIT, MENU), case R 28 px, glisser = défiler, colonnes au relâché, pas d'info-bulle.
+  ÉCRAN TACTILE (Joseph) : boutons 70x40 à gauche (ARM ALL, MON, WAVE -/+ = « Peaks: Increase/Decrease peaks display zoom for
+  project » (Reaper 7.82) cherchées par nom via kbd_enumerateActions, FIT, MENU), case R 28 px, glisser = défiler, colonnes au relâché, pas d'info-bulle.
   Réglages en ExtState lv1_meter_bridge. Pas de Lua sur le PC : syntaxe non vérifiée hors Reaper.
 - **DISPLAY = bascule LV1 <-> Reaper au premier plan, SAVE selon la fenêtre active (codé le 15/10, test
   `tests/test_apps.py`, notes Mackie 0x34 / 0x50 non vérifiées)** — choix du bouton : DISPLAY (NAME/VALUE), FLIP étant
