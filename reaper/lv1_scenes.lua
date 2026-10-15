@@ -93,11 +93,11 @@ local C = dofile(dir .. "lv1_common.lua")
 local tracks_text, tracks_t, entries, routed_text = nil, 0, {}, nil
 
 local function add_missing(tagged)
-  local _, mode = reaper.GetProjExtState(0, "lv1", "sync_mode")      -- "all" | "named" | "" (pas encore de synchro)
-  if mode ~= "all" and mode ~= "named" then return end
+  local _, mode = reaper.GetProjExtState(0, "lv1", "sync_mode")      -- "routed" | "all" | "named" | "" (pas de synchro)
+  if mode == "" then return end
   local todo = false
   for _, e in ipairs(entries) do
-    if not tagged[e.ch] and (mode == "all" or not C.is_default_name(e)) then todo = true break end
+    if not tagged[e.ch] and C.wanted(e, mode) then todo = true break end
   end
   if not todo then return end
   reaper.Undo_BeginBlock()
@@ -105,7 +105,7 @@ local function add_missing(tagged)
   local last, added = -1, 0
   for _, e in ipairs(entries) do
     local tr = tagged[e.ch]
-    if not tr and (mode == "all" or not C.is_default_name(e)) then
+    if not tr and C.wanted(e, mode) then
       tr = C.new_track(last + 1, e)
       C.apply_look(tr, e)
       C.apply_routing(tr, e)
@@ -140,7 +140,7 @@ local function follow_tracks()
     if routed_text ~= tracks_text then                    -- routage changé (ou pas encore appliqué)
       routed_text = tracks_text
       local _, mode = reaper.GetProjExtState(0, "lv1", "sync_mode")
-      if mode == "all" or mode == "named" then
+      if mode ~= "" then
         for _, e in ipairs(entries) do
           if tagged[e.ch] then C.apply_routing(tagged[e.ch], e) end
         end

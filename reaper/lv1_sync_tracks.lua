@@ -22,29 +22,36 @@ if reaper.GetPlayState() & 4 == 4 then
   return
 end
 local tagged = C.tagged_tracks()
-local named, existing, routed = 0, 0, 0
+local routed, existing, odd = 0, 0, {}
 for _, e in ipairs(list) do
-  if not C.is_default_name(e) then named = named + 1 end
+  if #e.rec > 0 then routed = routed + 1 end
   if tagged[e.ch] then existing = existing + 1 end
-  if #e.rec > 0 or #e.play > 0 then routed = routed + 1 end
+  if C.mismatch(e) then
+    odd[#odd + 1] = string.format("  %s : enregistré sur %d, entrée B sur %d", e.name, e.rec[1] + 1, e.play[1] + 1)
+  end
+end
+local warn = ""
+if #odd > 0 then
+  warn = "\n\nEntrée B pas sur le même numéro que l'enregistrement (" .. #odd .. ") :\n" ..
+         table.concat(odd, "\n", 1, math.min(#odd, 6)) .. (#odd > 6 and "\n  …" or "")
 end
 local answer = reaper.ShowMessageBox(string.format(
-  "%d entrées LV1 (%d renommées, %d routées vers le pilote de ce PC), %d déjà présentes dans Reaper.\n\n" ..
-  "OUI : toutes les entrées\nNON : seulement les entrées renommées (pas « Channel N »)\nANNULER : ne rien faire\n\n" ..
-  "Les pistes prennent le nom, la couleur et le routage de la LV1 (entrée d'enregistrement, sortie vers l'entrée B).\n" ..
-  "Rien n'est supprimé, les autres pistes ne sont pas touchées.",
-  #list, named, routed, existing), TITLE, 3)
+  "%d entrées LV1, dont %d qui reçoivent une source enregistrée sur le pilote de ce PC ; %d déjà dans Reaper.\n\n" ..
+  "OUI : seulement les canaux qui reçoivent une source (%d)\nNON : toutes les entrées (%d)\nANNULER : ne rien faire\n\n" ..
+  "Chaque piste prend le nom, la couleur et le routage : entrée = canal du pilote enregistré, sortie = entrée B " ..
+  "(ou, si l'entrée B n'est pas sur le pilote, le même numéro que l'enregistrement). Rien n'est supprimé.%s",
+  #list, routed, existing, routed, #list, warn), TITLE, 3)
 if answer ~= 6 and answer ~= 7 then return end
-local only_named = answer == 7
+local mode = answer == 6 and "routed" or "all"
 -- choix gardé dans le projet : lv1_scenes.lua ajoute ensuite tout seul les nouvelles entrées (Reaper à l'arrêt)
-reaper.SetProjExtState(0, "lv1", "sync_mode", only_named and "named" or "all")
+reaper.SetProjExtState(0, "lv1", "sync_mode", mode)
 
 reaper.Undo_BeginBlock()
 reaper.PreventUIRefresh(1)
 local created, updated, last = 0, 0, -1
 for _, e in ipairs(list) do
   local tr = tagged[e.ch]
-  if tr or not only_named or not C.is_default_name(e) then
+  if tr or C.wanted(e, mode) then
     if not tr then
       tr = C.new_track(last + 1, e)
       created = created + 1
