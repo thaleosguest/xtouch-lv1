@@ -525,9 +525,10 @@ class RecallSetup(QWidget):
               ("master", "MASTER", 1, QColor("#f2b63b")))
     GRAB = 18
 
-    def __init__(self, rect):
+    def __init__(self, rect, on_done=None):
         super().__init__(None, Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
+        self.on_done = on_done or QApplication.quit       # ouvert par le bouton ADJUST : retour au rappel
         self.cfg = load_recall_cfg()
         self.drag = None
         x, y, w, h = rect
@@ -599,7 +600,7 @@ class RecallSetup(QWidget):
         if h and h[0] == "button":
             if h[1] == "save":
                 save_recall_cfg(self.cfg)
-            QApplication.quit()
+            self.on_done()
             return
         self.drag = (h, pos, json.loads(json.dumps(self.cfg))) if h else None
 
@@ -626,9 +627,89 @@ class RecallSetup(QWidget):
     def keyPressEvent(self, e):
         if e.key() in (Qt.Key_Return, Qt.Key_Enter):
             save_recall_cfg(self.cfg)
-            QApplication.quit()
+            self.on_done()
         elif e.key() == Qt.Key_Escape:
-            QApplication.quit()
+            self.on_done()
+
+
+# Boutons du rappel de pistes (demande de Joseph, 15/10 : basculer petit / grand et entrer dans le réglage depuis
+# l'écran ; base du futur bouton « agrandir / rapetisser » de l'appli). Deux boutons l'un sous l'autre dans la zone
+# vide en bas à gauche de la LV1 (sous Output L/R, endroit montré par Joseph sur sa capture ; bandeau grand : ils
+# remontent au-dessus), BTN_RECT en pixels de
+# référence 1920x1080. Ils apparaissent AVEC le bandeau et restent BTN_HOLD s de plus pour qu'on ait le temps d'y
+# aller (souris ou tactile) ; pointeur dessus = le bandeau reste affiché. Seule fenêtre du rappel qui reçoit les
+# clics, sans prendre le focus de la LV1.
+BTN_HOLD = 3.0
+BTN_RECT = (6, 866, 56, 124)          # x, y, largeur, hauteur des deux boutons ensemble
+
+
+class RecallButtons(QWidget):
+    def __init__(self, on_size, on_adjust):
+        super().__init__(None, Qt.FramelessWindowHint | Qt.Tool | Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+        self.setMouseTracking(True)
+        self.on_size, self.on_adjust = on_size, on_adjust
+        self.taille, self.hover, self.over = "grand", None, False
+        self.f_icon = QFont("Segoe UI Symbol", 13, QFont.Bold)
+        self.f = QFont("Segoe UI", 7, QFont.Bold)
+
+    def zones(self):
+        w, h = self.width(), self.height()
+        half = (h - 6) / 2.0
+        return {"size": QRectF(1, 1, w - 2, half), "adjust": QRectF(1, half + 5, w - 2, half)}
+
+    def set_taille(self, taille):
+        if taille != self.taille:
+            self.taille = taille
+            self.update()
+
+    def paintEvent(self, _e):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        big = self.taille == "grand"
+        for key, r in self.zones().items():
+            p.setPen(QPen(QColor(A_BLUE) if key == self.hover else QColor(LINE2), 1.5))
+            p.setBrush(QColor("#25282c") if key == self.hover else QColor(PANEL))
+            p.drawRoundedRect(r, 8, 8)
+            if key == "size":                              # action proposée : rapetisser si grand, agrandir si petit
+                icon, label = ("\u25bc", "SMALL") if big else ("\u25b2", "LARGE")
+                col = A_BLUE
+            else:
+                icon, label, col = "\u2699", "ADJUST", QColor(TXT)
+            top = QRectF(r.left(), r.top() + 4, r.width(), r.height() * 0.55)
+            p.setPen(col)
+            p.setFont(self.f_icon)
+            p.drawText(top, Qt.AlignCenter, icon)
+            p.setPen(QColor(TXT))
+            p.setFont(self.f)
+            p.drawText(QRectF(r.left(), top.bottom() - 2, r.width(), r.bottom() - top.bottom()), Qt.AlignCenter, label)
+
+    def hit(self, pos):
+        for key, r in self.zones().items():
+            if r.contains(pos):
+                return key
+        return None
+
+    def mouseMoveEvent(self, e):
+        h = self.hit(e.position())
+        if h != self.hover:
+            self.hover = h
+            self.update()
+
+    def enterEvent(self, _e):
+        self.over = True
+
+    def leaveEvent(self, _e):
+        self.over, self.hover = False, None
+        self.update()
+
+    def mousePressEvent(self, e):
+        h = self.hit(e.position())
+        if h == "size":
+            self.on_size("petit" if self.taille == "grand" else "grand")
+        elif h == "adjust":
+            self.on_adjust()
 
 
 class Bus(QObject):
@@ -642,12 +723,70 @@ class Overlay:
         self.badge, self.ab, self.ab_key = AbBadge(), None, None
         self.recall, self.recall_on = StripRecall(), False
         self.recall_alpha, self.cfg_mtime, self.cfg_t = 0.0, None, 0.0
+        self.buttons = RecallButtons(self.set_taille, self.open_setup)
+        self.btn_until, self.btn_alpha, self.setup = 0.0, 0.0, None
+        self.mixer = mixer
         self.state = None            # (text, sub, color) voulu
         self.since = 0.0
         self.rect, self.rect_t = None, 0.0
         self.timer = QTimer()
         self.timer.timeout.connect(self.tick)
         self.timer.start(30)
+
+    def set_taille(self, taille):
+        """Bouton SMALL / LARGE : change de hauteur mémorisée (enregistrée dans xtouch_ecran.json)."""
+        cfg = load_recall_cfg()
+        cfg["taille"] = taille
+        cfg["y0"], cfg["y1"] = cfg[taille]
+        save_recall_cfg(cfg)
+        self.recall.cfg = cfg
+        self.recall.update()
+        self.buttons.set_taille(taille)
+        self.btn_until = time.time() + BTN_HOLD
+
+    def open_setup(self):
+        """Bouton ADJUST : réglage à la main (le même que --reglage) ; rappel et boutons cachés pendant ce temps."""
+        if self.setup:
+            return
+        self.setup = RecallSetup(self.rect or lv1_rect(self.mixer) or (0, 0, 1920, 1080), on_done=self.close_setup)
+        self.setup.show()
+        self.setup.raise_()
+        self.setup.activateWindow()
+
+    def close_setup(self):
+        self.setup.hide()
+        self.setup.deleteLater()
+        self.setup = None
+        self.recall.cfg = load_recall_cfg()
+        self.recall.update()
+        self.btn_until = time.time() + BTN_HOLD
+
+    def tick_buttons(self, now):
+        if self.recall_alpha > 0.0:
+            self.btn_until = max(self.btn_until, now + BTN_HOLD)
+        elif self.buttons.over:
+            self.btn_until = max(self.btn_until, now + 0.5)
+        target = 1.0 if (self.rect and not self.setup and now < self.btn_until) else 0.0
+        if self.btn_alpha < target:
+            self.btn_alpha = min(target, self.btn_alpha + FADE_STEP)
+        elif self.btn_alpha > target:
+            self.btn_alpha = max(target, self.btn_alpha - FADE_STEP)
+        if self.btn_alpha <= 0.0:
+            if self.buttons.isVisible():
+                self.buttons.hide()
+            return
+        x, y, w, h = self.rect
+        sx, sy = w / 1920.0, h / 1080.0
+        bx, by, bw, bh = BTN_RECT
+        by = min(by, self.recall.cfg["y0"] - bh - 6)           # bandeau grand : les boutons remontent au-dessus
+        geo = (x + round(bx * sx), y + round(by * sy), round(bw * sx), round(bh * sy))
+        if self.buttons.geometry().getRect() != geo:
+            self.buttons.setGeometry(*geo)
+        self.buttons.set_taille(self.recall.cfg["taille"])
+        self.buttons.setWindowOpacity(self.btn_alpha)
+        if not self.buttons.isVisible():
+            self.buttons.show()
+        self.buttons.raise_()                                   # toujours au-dessus du bandeau
 
     def tick_recall(self):
         now = time.time()
@@ -661,7 +800,9 @@ class Overlay:
                 self.cfg_mtime = mt
                 self.recall.cfg = load_recall_cfg()
                 self.recall.update()
-        target = 1.0 if (self.recall_on and self.rect) else 0.0
+        # pointeur sur les boutons : le bandeau reste (ou revient) pour voir l'effet ; caché pendant le réglage
+        want = (self.recall_on or (self.buttons.over and self.recall.data.get("cells"))) and not self.setup
+        target = 1.0 if (want and self.rect) else 0.0
         if self.recall_alpha == target == 0.0:
             return
         if self.recall_alpha < target:              # fondu vers la cible, sans la dépasser (bug du 15/10 : à 100 %
@@ -726,6 +867,7 @@ class Overlay:
             self.rect, self.rect_t = self.rect_fn(), now
         self.tick_badge(now)
         self.tick_recall()
+        self.tick_buttons(now)
         if not self.state or not self.rect:
             for w in (self.banner, self.frame):
                 if w.isVisible():

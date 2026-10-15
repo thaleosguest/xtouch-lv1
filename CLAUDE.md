@@ -220,7 +220,10 @@ Messages vérifiés :
   la largeur, capuchon du fader PAR-DESSUS, nom sur 3 lettres, « M » rouge si mute, valeur en petit.
   **Deux hauteurs mémorisées** (demande de Joseph, futur bouton « agrandir / rapetisser » de l'appli) : `taille`
   petit | grand dans `xtouch_ecran.json`, chacune avec son [y0, y1] ; `--taille petit|grand` bascule (à chaud),
-  `--reglage` règle le profil en cours. Bandeau < 140 px (`MINI_H`) = présentation « petit » : couleur + nom en haut,
+  `--reglage` règle le profil en cours. **Boutons à l'écran** (`RecallButtons`, demande de Joseph) : ▲ LARGE / ▼ SMALL + ⚙ ADJUST,
+  en bas à gauche (BTN_RECT x 6, y 866, 56x124 sur 1920x1080, endroit montré par Joseph ; remontés au-dessus du bandeau
+  en grand), apparaissent avec le bandeau, restent 3 s (`BTN_HOLD`), seule fenêtre cliquable (sans focus) ; ADJUST ouvre
+  `RecallSetup` dans le même processus (`on_done`). Bandeau < 140 px (`MINI_H`) = présentation « petit » : couleur + nom en haut,
   valeur + diode(s) de vumètre (verte / ambre > -12 / rouge > -3, éteinte < -50 ; 2 en stéréo), « M » si mute.
   Réglage de Joseph : petit = 1017-1076, grand = 745-1076, master 1884-1920 (trop étroit pour la valeur en petit).
   **Réglage à la main** : `py xtouch_overlay_qt.py --reglage` (3 blocs Extender 8 / X-Touch 8 / master 1, bords =

@@ -199,6 +199,10 @@ mute / solo / 48V, gain, pan). Bascule (le pont suit tout de suite) :
 
 Le réglage (`--reglage`) modifie la taille en cours.
 
+**Boutons à l'écran** : avec le bandeau apparaissent deux boutons en bas à gauche de la LV1 (sous Output L/R ;
+remontés au-dessus du bandeau en taille grand) : ▲ LARGE / ▼ SMALL bascule la taille, ⚙ ADJUST ouvre le réglage.
+Ils restent 3 s après la disparition du bandeau ; pointeur dessus = le bandeau reste affiché.
+
 ## Sends on fader (SEND)
 
 1. **SEND** : les écrans affichent les aux (Fx 1-8 sur l'Extender, Mon 1-8 sur la X-Touch ; BANK = Mon 9-16).
