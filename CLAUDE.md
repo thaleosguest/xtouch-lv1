@@ -160,7 +160,7 @@ Messages vérifiés :
 - À vérifier sur le matériel : rappel de pistes avec les vrais faders (alignement réglé par Joseph : ext 0-911, xt
   953-1867, master 1884-1920 ; tailles petit / grand), FLIP A/B (LED + pastille), PAN plus sensible,
   afficheur 7 segments option C, Mon 9-16 dans les sends, faders = masters des aux pendant le choix SEND.
-- Plus tard : Reaper (OSC, transport, jog selon la page LV1), 64/32/16 ch et Mixer 2.
+- Plus tard : 64/32/16 ch et Mixer 2. Reaper : transport codé (à vérifier avec Reaper).
 - Tests : `for t in tests/test_*.py; do py $t .; done` (15 tests, tous OK au 15/10).
 
 ## Reste à faire / idées
@@ -173,6 +173,16 @@ Messages vérifiés :
   Reaper sur la même machine que la LV1 (pilote SoundGrid) : plausible (TracksLive-FL / LV1-PORT déjà dans le rack),
   à essayer.
 
+- **Transport -> Reaper (codé le 15/10, test `tests/test_reaper.py`, à vérifier avec Reaper)** : `reaper_link.py`
+  (OSC UDP, envoi 127.0.0.1:8000, retours écoutés sur 9000, pattern Default.ReaperOSC : /play /stop /record /repeat
+  /click déclencheurs, /rewind /forward tenus 1/0, /action i:n) ; `TransportControl` (notes Mackie 0x54-0x65, non
+  vérifiées sur la X-Touch) : MARKER seul = action 40157, flèches = marqueurs 40172/40173 et pistes 40286/40285,
+  ZOOM = 1011/1012/40111/40112, jog = 40084/40085 (SCRUB : 40104/40105 au pixel). Jog : LV1Clicker essaie le
+  fader de plugin, sinon `jog_fallback` -> Reaper. LED = retours /play /record /repeat /click. `--reaper aucun`.
+  Rien en --dry-run (tests) sauf `--reaper` explicite.
+- **Overlay visible seulement si la LV1 est au premier plan** (Joseph, 15/10 : la pastille FLIP restait devant
+  les autres programmes) : processus de la fenêtre de premier plan = celui de la LV1 (fenêtres détachées et
+  boîtes de dialogue comprises) ou l'overlay lui-même (réglage).
 - **PAN (codé, à tester)** : bouton PAN (0x2A) = encodeurs sur le pan LV1 (exclusif avec TRACK). `/Set/Track/Pan ii d`
   (-1..+1), retour `/Notify/Track/Pan ii d i` envoyé SEULEMENT aux changements (rien à la connexion, rien dans
   /Channels) -> pan de départ lu dans la base : `lv1_db.py`, copie de CurrentLV1.dat(+wal), snapshot -1, param 436

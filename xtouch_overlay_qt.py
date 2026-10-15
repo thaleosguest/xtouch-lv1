@@ -49,6 +49,37 @@ def lv1_rect(mixer=1):
         return None
 
 
+def window_pid(hwnd):
+    import ctypes
+    pid = ctypes.c_ulong(0)
+    u = ctypes.windll.user32
+    u.GetWindowThreadProcessId.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong)]
+    u.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    return pid.value
+
+
+def foreground_pid():
+    """Processus de la fenêtre au premier plan (0 si inconnu)."""
+    try:
+        import ctypes
+        u = ctypes.windll.user32
+        u.GetForegroundWindow.restype = ctypes.c_void_p
+        h = u.GetForegroundWindow()
+        return window_pid(h) if h else 0
+    except Exception:
+        return 0
+
+
+def lv1_pid(mixer=1):
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import lv1_clic
+        h, _ = lv1_clic.lv1_window(mixer)
+        return window_pid(h) if h else None
+    except Exception:
+        return None
+
+
 def red_gradient(r):
     g = QLinearGradient(r.topLeft(), r.bottomLeft())
     g.setColorAt(0, RED_TOP)
@@ -714,6 +745,10 @@ class Bus(QObject):
 
 class Overlay:
     def __init__(self, mixer=1, rect_fn=None):
+        # Tout l'affichage n'apparaît que si la LV1 (ou une de ses fenêtres / boîtes de dialogue) est au premier
+        # plan : remarque de Joseph du 15/10, la pastille FLIP restait par-dessus les autres programmes.
+        self.pid_fn = (lambda: None) if rect_fn else (lambda: lv1_pid(mixer))     # démo : toujours affiché
+        self.pid, self.lv1_rect = None, None
         self.rect_fn = rect_fn or (lambda: lv1_rect(mixer))
         self.banner, self.frame = Banner(), Frame()
         self.badge, self.ab, self.ab_key = AbBadge(), None, None
@@ -792,7 +827,8 @@ class Overlay:
             self.recall_alpha = min(target, self.recall_alpha + FADE_STEP)   # il oscillait 84 % <-> 100 %)
         elif self.recall_alpha > target:
             self.recall_alpha = max(target, self.recall_alpha - FADE_STEP)
-        if self.recall_alpha <= 0.0:
+        if self.recall_alpha <= 0.0 or not self.rect:      # LV1 plus au premier plan : caché tout de suite
+            self.recall_alpha = 0.0
             self.recall.hide()
             return
         x, y, w, h = self.rect
@@ -847,7 +883,10 @@ class Overlay:
     def tick(self):
         now = time.time()
         if now - self.rect_t > 1.0:
-            self.rect, self.rect_t = self.rect_fn(), now
+            self.lv1_rect, self.rect_t = self.rect_fn(), now
+            self.pid = self.pid_fn()
+        front = self.pid is None or foreground_pid() in (self.pid, os.getpid())
+        self.rect = self.lv1_rect if front else None       # None = tout se cache (fondu pour le rappel)
         self.tick_badge(now)
         self.tick_recall()
         self.tick_buttons(now)

@@ -1342,6 +1342,7 @@ class LV1Clicker(threading.Thread):
             import lv1_clic
             jog = lambda n: lv1_clic.jog_bottom_fader(n, page + 1, jog_method)
         self.jog_fn = jog
+        self.jog_fallback = None     # jog refusé (pas de fader de plugin à l'écran) -> Reaper (TransportControl.jog)
         self.q = queue.Queue()
         self.last_why = None
 
@@ -1386,7 +1387,9 @@ class LV1Clicker(threading.Thread):
                     if arg:
                         ok, why = self.jog_fn(arg)
                         JOURNAL.mark("molette LV1 %+d : %s" % (arg, "envoyée" if ok else why))
-                        if not ok:
+                        if not ok and self.jog_fallback:
+                            self.jog_fallback(arg)       # choix de Joseph : jog selon la page LV1
+                        elif not ok:
                             self._refused("jog", why or "envoi refusé par Windows")
                     continue
                 if kind == "couche":
@@ -1470,6 +1473,88 @@ class LV1SelectionWatcher(threading.Thread):
             time.sleep(self.PERIOD)
 
 
+# ─── Transport X-Touch -> REAPER (demande de Joseph, 15/10 : la surface coupée en deux, tranches = LV1,
+# transport / navigation = Reaper pour le virtual soundcheck). Notes Mackie (norme, non vérifiées sur la X-Touch).
+NOTE_MARKER, NOTE_NUDGE, NOTE_CYCLE, NOTE_DROP, NOTE_REPLACE, NOTE_CLICK = 0x54, 0x55, 0x56, 0x57, 0x58, 0x59
+NOTE_REW, NOTE_FF, NOTE_STOP, NOTE_PLAY, NOTE_RECORD = 0x5B, 0x5C, 0x5D, 0x5E, 0x5F
+NOTE_UP, NOTE_DOWN, NOTE_LEFT, NOTE_RIGHT, NOTE_ZOOM, NOTE_SCRUB = 0x60, 0x61, 0x62, 0x63, 0x64, 0x65
+TRANSPORT_NOTES = {NOTE_MARKER, NOTE_CYCLE, NOTE_CLICK, NOTE_REW, NOTE_FF, NOTE_STOP, NOTE_PLAY, NOTE_RECORD,
+                   NOTE_UP, NOTE_DOWN, NOTE_LEFT, NOTE_RIGHT, NOTE_ZOOM, NOTE_SCRUB}
+
+
+class TransportControl:
+    """◄◄ ►► ■ ► ● -> transport Reaper (◄◄ / ►► tenus) ; CYCLE = boucle, CLICK = métronome.
+    MARKER seul = poser un marqueur ; flèches ◄ ► = marqueur précédent / suivant, ▲ ▼ = piste précédente / suivante ;
+    ZOOM (bascule) : ◄ ► = zoom horizontal, ▲ ▼ = zoom vertical. Jog -> Reaper hors fader de plugin LV1 :
+    déplacement du curseur (SCRUB allumé : pas fin). LED = état renvoyé par Reaper."""
+
+    def __init__(self, reaper):
+        self.reaper = reaper
+        self.zoom = self.scrub = False
+        self.marker_down = self.marker_used = False
+
+    def jog(self, notches):
+        import reaper_link as R
+        if self.scrub:
+            act = R.ACT_SCRUB_FWD if notches > 0 else R.ACT_SCRUB_BACK
+        else:
+            act = R.ACT_JOG_FWD if notches > 0 else R.ACT_JOG_BACK
+        for _ in range(min(abs(notches), 8)):
+            self.reaper.action(act)
+
+    def on_midi(self, unit, status, d1, d2, t, entries, surface):
+        if (status & 0xF0) != 0x90 or d1 not in TRANSPORT_NOTES or unit != surface.master_unit:
+            return False
+        down = d2 > 0
+        if not self.reaper:
+            return True
+        import reaper_link as R
+        name = {NOTE_REW: "rewind", NOTE_FF: "forward"}.get(d1)
+        if name:                                         # tenus : avance / retour rapide tant qu'on appuie
+            self.reaper.hold(name, down)
+            JOURNAL.mark("XT %s %s -> Reaper" % (name, "appui" if down else "relâché"))
+            return True
+        if d1 == NOTE_MARKER:
+            if down:
+                self.marker_down, self.marker_used = True, False
+            else:
+                if not self.marker_used:
+                    self.reaper.action(R.ACT_ADD_MARKER)
+                    JOURNAL.mark("XT Marker -> Reaper : marqueur posé")
+                self.marker_down = False
+            return True
+        if not down:
+            return True
+        if d1 in (NOTE_STOP, NOTE_PLAY, NOTE_RECORD, NOTE_CYCLE, NOTE_CLICK):
+            cmd = {NOTE_STOP: "stop", NOTE_PLAY: "play", NOTE_RECORD: "record", NOTE_CYCLE: "repeat",
+                   NOTE_CLICK: "click"}[d1]
+            self.reaper.trigger(cmd)
+            JOURNAL.mark("XT %s -> Reaper" % cmd)
+        elif d1 == NOTE_ZOOM:
+            self.zoom = not self.zoom
+        elif d1 == NOTE_SCRUB:
+            self.scrub = not self.scrub
+        elif d1 in (NOTE_LEFT, NOTE_RIGHT, NOTE_UP, NOTE_DOWN):
+            self.marker_used = True
+            if self.zoom:
+                act = {NOTE_LEFT: R.ACT_ZOOM_OUT_H, NOTE_RIGHT: R.ACT_ZOOM_IN_H,
+                       NOTE_UP: R.ACT_ZOOM_IN_V, NOTE_DOWN: R.ACT_ZOOM_OUT_V}[d1]
+            else:
+                act = {NOTE_LEFT: R.ACT_PREV_MARKER, NOTE_RIGHT: R.ACT_NEXT_MARKER,
+                       NOTE_UP: R.ACT_PREV_TRACK, NOTE_DOWN: R.ACT_NEXT_TRACK}[d1]
+            self.reaper.action(act)
+            JOURNAL.mark("XT flèche %02X -> Reaper action %d" % (d1, act))
+        return True
+
+    def leds(self):
+        """{note: allumée} pour les boutons de transport."""
+        st = self.reaper.state if self.reaper else {}
+        return {NOTE_PLAY: st.get("play", False), NOTE_STOP: st.get("stop", False) and not st.get("play", False),
+                NOTE_RECORD: st.get("record", False), NOTE_CYCLE: st.get("repeat", False),
+                NOTE_CLICK: st.get("click", False), NOTE_ZOOM: self.zoom, NOTE_SCRUB: self.scrub,
+                NOTE_MARKER: self.marker_down}
+
+
 class ButtonControl:
     """Mute / Solo -> LV1 ; ◄ BANK ► -> couche, Select / ◄ CHANNEL ► -> sélection (locales). Rec : rien."""
 
@@ -1478,6 +1563,7 @@ class ButtonControl:
         self.page = page          # vue LV1 suivie (0 = Mixer 1)
         self.busy = busy          # vrai si un fader est sous le doigt : pas de changement de banque
         self.lv1 = None           # LV1Clicker si --clic-lv1 : la LV1 suit couche et sélection
+        self.transport = None     # TransportControl (Reaper) : reçoit le jog quand il ne va pas à la LV1
         self.warned = set()
 
     def on_bank(self, d1):
@@ -1532,6 +1618,8 @@ class ButtonControl:
             JOURNAL.mark("XT jog %+d" % notches)
             if self.lv1:
                 self.lv1.jog(notches)
+            elif self.transport and self.transport.reaper:
+                self.transport.jog(notches)
             elif "jog" not in self.warned:
                 print("  Jog wheel : réglage des plugins avec --clic-lv1 seulement.")
                 self.warned.add("jog")
@@ -1830,6 +1918,8 @@ def main():
     ap.add_argument("--lecture-seule", action="store_true", help="n'envoie rien à la LV1 (faders sans effet)")
     ap.add_argument("--x32", default="http://127.0.0.1:8032",
                     help="adresse de X/M32 Gain Recall pour le gain / 48 V X32 ('aucun' pour désactiver)")
+    ap.add_argument("--reaper", default=None,
+                    help="Reaper OSC hôte:port d'envoi:port des retours (transport de la X-Touch) ; 'aucun' pour désactiver")
     ap.add_argument("--sans-cadre", action="store_true",
                     help="pas de bandeau ni de cadre rouge à l'écran du PC en mode sends")
     ap.add_argument("--jog-methode", choices=["message", "souris"], default="message",
@@ -1912,6 +2002,16 @@ def main():
         print("  Gain X32 via X/M32 Gain Recall (%s) : TRACK = encodeurs sur le gain, Rec tenu 1 s = 48 V." % a.x32)
     gain = GainControl(state, xlink, write=not a.lecture_seule, lv1=link)
     sends = SendControl(state, link, write=not a.lecture_seule, gain=gain)
+    reaper = None
+    import reaper_link
+    if a.reaper is None:                  # défaut : Reaper local ; rien en --dry-run (tests), sauf s'il est demandé
+        a.reaper = "aucun" if a.dry_run else "127.0.0.1:8000:9000"
+    target = reaper_link.parse_target(a.reaper)
+    if target:
+        reaper = reaper_link.ReaperLink(*target, journal=lambda m: JOURNAL.mark(m))
+        print("  Reaper (OSC %s:%d, retours sur %d) : transport, marqueurs, zoom, jog hors plugin LV1." % target)
+    transport = TransportControl(reaper)
+    buttons.transport = transport
     overlay = OVERLAY_FACTORY(a.mixer) if OVERLAY_FACTORY else None     # tests : faux affichage d'écran
     if overlay is None and not a.dry_run and not a.sans_cadre and sys.platform == "win32":
         import xtouch_overlay
@@ -1974,6 +2074,8 @@ def main():
         if not lv1_clic.is_admin():
             print("  --clic-lv1 : PAS administrateur, Windows bloquera les clics (relancer en administrateur).")
         buttons.lv1 = LV1Clicker(state, a.mixer - 1, jog_method=a.jog_methode)
+        if reaper:
+            buttons.lv1.jog_fallback = transport.jog
         buttons.lv1.start()
         LV1SelectionWatcher(state, a.mixer - 1).start()
         print("  Clics LV1 : la LV1 suit BANK et la sélection, la X-Touch suit la sélection LV1 (page Mixer %d)." % a.mixer)
@@ -2006,6 +2108,7 @@ def main():
                 if not (faders.on_midi(unit, st, d1, d2, t, entries, surface)
                         or sends.on_midi(unit, st, d1, d2, t, entries, surface)
                         or gain.on_midi(unit, st, d1, d2, t, entries, surface)
+                        or transport.on_midi(unit, st, d1, d2, t, entries, surface)
                         or buttons.on_midi(unit, st, d1, d2, t, entries, surface)):
                     JOURNAL.mark("MIDI unité %d : %02X %02X %02X" % (unit, st, d1, d2))
             held = faders.flush(now)
@@ -2031,6 +2134,9 @@ def main():
             surface.set_main_led(NOTE_TRACK, gain.mode)
             surface.set_main_led(NOTE_PAN, gain.pan_mode)
             surface.set_main_led(NOTE_SEND, sends.aux is not None or (sends.picking and int(now * 3) % 2 == 0))
+            if reaper:
+                for note, on in transport.leds().items():
+                    surface.set_main_led(note, on)
             for k, on in enumerate(sends.fkey_leds()):
                 surface.set_main_led(NOTE_F1 + k, on)
             with state.lock:

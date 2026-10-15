@@ -260,6 +260,33 @@ La LV1 demande une confirmation : clique-la à l'écran. Sur l'écran du PC, la 
 
 Le bouton **SOLO** de la X-Touch s'allume dès qu'un solo est actif dans la LV1 ; un appui **retire tous les solos**.
 
+## Transport → Reaper
+
+Dans Reaper : Préférences > Control/OSC/web > Add > **OSC (Open Sound Control)** :
+- Mode : *Configure device IP+local port* ;
+- Device IP **127.0.0.1**, Device port **9000** (Reaper y renvoie son état : LED) ;
+- Local listen port **8000** (Reaper y reçoit les commandes) ;
+- Pattern config : *Default*.
+
+Le pont s'y connecte tout seul (autre réglage : `--reaper hôte:8000:9000`, `--reaper aucun` pour couper).
+
+| Bouton X-Touch | Reaper |
+|---|---|
+| ► ■ ● | lecture, stop, enregistrement (LED = état de Reaper) |
+| ◄◄ ►► (tenus) | retour / avance rapide |
+| CYCLE / CLICK | boucle / métronome |
+| MARKER seul | pose un marqueur |
+| ◄ ► (flèches) | marqueur précédent / suivant |
+| ▲ ▼ | piste précédente / suivante |
+| ZOOM (allumé) + flèches | ◄ ► zoom horizontal, ▲ ▼ zoom vertical |
+| Jog | déplace le curseur (SCRUB allumé : pas fin) — sauf page Channel de la LV1 avec un fader de plugin en bas : là il règle le plugin |
+
+Essai sans X-Touch : `py reaper_link.py play`, `py reaper_link.py stop`, `py reaper_link.py marker`.
+
+## Affichage à l'écran
+
+Pastille FLIP, rappel de pistes, bandeau / cadre SEND : affichés **seulement quand la LV1 est au premier plan**.
+
 ## Capture du trafic MyFOH (recherche des commandes couche / sélection)
 
 `lv1_capture.py` décode une capture réseau tablette <-> LV1 en messages lisibles. La capture se fait avec
