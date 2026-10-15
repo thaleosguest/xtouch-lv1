@@ -1302,7 +1302,8 @@ class LV1Clicker(threading.Thread):
     WAIT_LAYER = 1.0     # s d'attente de /Notify/CurrentLayer après un clic de couche
 
     def __init__(self, state, page, click_layer=None, click_strip=None):
-        # click_strip(i, mixer, rgb) : rgb = couleur du canal (0..255), pour trouver la bande du nom à l'écran
+        # click_strip(i, mixer, rgb=...) : couleur du canal (0..255) pour trouver la bande du nom à l'écran.
+        # Bug du 15/10 : passée en 3e position, elle tombait dans « method » -> aucune sélection cliquée.
         super().__init__(daemon=True)
         self.state, self.page = state, page
         if click_layer is None or click_strip is None:
@@ -1366,7 +1367,7 @@ class LV1Clicker(threading.Thread):
                     with self.state.lock:
                         f = self.state.tracks.get(arg, {}).get("rgb")
                     rgb = tuple(int(round(v * 255)) for v in f) if f else None
-                    ok, why = self.click_strip(i, self.page + 1, rgb)
+                    ok, why = self.click_strip(i, self.page + 1, rgb=rgb)   # mot-clé : 3e paramètre = méthode
                     JOURNAL.mark("clic LV1 tranche %d %s : %s" % (i + 1, arg, "envoyé" if ok else why))
                     if not ok:
                         self._refused("sélection", why or "envoi refusé par Windows")

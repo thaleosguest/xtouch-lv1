@@ -12,6 +12,8 @@ import xtouch_lv1_display as D
 
 st = D.LV1State()
 layers = [("Ch %d-%d" % (16 * k + 1, 16 * k + 16), [(0, 16 * k + i) for i in range(16)]) for k in range(5)]
+for k in range(80):
+    st.track(0, k)["rgb"] = (0.059, 0.635, 0.671)          # couleurs reçues (/Notify/TrackColor)
 st.last_set[0] = layers
 st.current[0] = 0
 CLICKS = []
@@ -31,9 +33,12 @@ def fake_layer(k, mixer):
     return True, None
 
 
-def fake_strip(i, mixer, rgb=None):
+def fake_strip(i, mixer=1, method="message", rgb=None):     # même signature que lv1_clic.click_strip
     with st.lock:
         cur = st.current[0]
+    if rgb is None or method != "message":
+        CLICKS.append(("tranche SANS COULEUR", i, cur))
+        return False, "couleur du canal inconnue"
     CLICKS.append(("tranche", i, cur))
     return True, None
 

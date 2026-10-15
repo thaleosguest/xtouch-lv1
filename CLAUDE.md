@@ -36,7 +36,8 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   Géométrie (1920x1080, fractions de la zone client) : couches x 1847, y 537+72k (cadre x 1795) ;
   noms des tranches : bande CHERCHÉE à l'écran (sa position change avec Top/Middle/Bottom/Big Fader) dans la colonne
   x 145+96i (3 px du bord, hors texte), y 300..700, couleur exacte du canal (/Notify/TrackColor), hauteur 12..34,
-  la plus proche de y 433 ; introuvable = PAS de clic (sinon risque de cliquer un MUTE) ; onglet Mixer 1 x 651 / Mixer 2 x 749, y 28, actif (56,201,255).
+  la plus proche de y 433 ; introuvable = PAS de clic (sinon risque de cliquer un MUTE) ; couleur passée en
+  MOT-CLÉ `rgb=` (bug du 15/10 : en 3e position elle tombait dans `method` -> plus aucune sélection cliquée) ; onglet Mixer 1 x 651 / Mixer 2 x 749, y 28, actif (56,201,255).
   Garde-fous avant chaque clic : admin, fenêtre non réduite, onglet lu à l'écran, cadre de case présent.
   Tranche cliquée seulement si la couche LV1 courante la contient ; sélections en rafale regroupées.
   Intégration pont **vérifiée le 14/10** (journal 182527 : 146 clics, 0 refus, LV1 réagit en ~50 ms, max 123).
@@ -134,6 +135,9 @@ Messages vérifiés :
 - Vumètres : il préfère ceux de la LV1 (post-fader).
 - ◄ CHANNEL ► = **sélection** canal suivant / précédent (pas de décalage de tranches, il n'en veut pas).
 - Il a **MyFOH sur sa tablette** : source pour trouver les commandes couche / sélection (`lv1_capture.py` + pktmon).
+- **Décision du 15/10/2026** : la LV1 sur **un seul écran en 1920x1080** (comme la LV1 classique) — pas de travail
+  de compatibilité multi-écrans / autres résolutions. Développement sur **80 canaux, Mixer 1, LV1 V17** ; 64/32/16 ch
+  et Mixer 2 à vérifier plus tard (le suivi des couches est générique ; `--mixer 2` et l'onglet Mixer 2 sont prévus).
 - Avancer par petites étapes testées, hors concert ; journal + rapport à chaque test.
 
 ## À reprendre (arrêt du 14/10/2026 au soir)
@@ -178,7 +182,7 @@ Messages vérifiés :
   cadre rouge clignotant doucement autour de la fenêtre LV1, fenêtres traversées par les clics. Piège : une fenêtre
   WS_EX_LAYERED sans attribut -alpha n'est PAS dessinée. Option `--sans-cadre`. Textes à l'écran du PC : en ANGLAIS (demande de Joseph).
 - Fader : sous -60 dB, descente continue jusqu'à -144 (plus de saut -144 -> -78) — vérifié le 15/10.
-- **F1..F8 -> User Keys 1..8 de la LV1 (codé, à tester)** — demande de Joseph (accès rapide aux envois en live) :
+- **F1..F8 -> User Keys 1..8 de la LV1 (vérifié le 15/10)** — demande de Joseph (accès rapide aux envois en live) :
   `/Set/UserKey i:k T` puis `F` (comme MyFOH). Fonctions lues dans `/Notify/UserKeyInfo i s s i` (n°, nom court, fonction,
   assignée), envoyées à la connexion. Si la fonction est « Flip Sends: MX1: <aux> » : la X-Touch passe AUSSI en sends
   on fader vers cet aux (`flip_target`, `SendControl.on_fkey`), LED de la touche F allumée ; 2e appui (ou SEND) =
