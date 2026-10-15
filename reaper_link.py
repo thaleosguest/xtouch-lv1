@@ -37,6 +37,9 @@ ACT_PREV_TRACK = 40286         # Track: Go to previous track
 ACT_NEXT_TRACK = 40285         # Track: Go to next track
 ACT_SCRUB_BACK = 40104         # View: Move cursor left one pixel  (SCRUB : pas fin)
 ACT_SCRUB_FWD = 40105          # View: Move cursor right one pixel
+ACT_EDIT_TO_PLAY = 40434       # View: Move edit cursor to play cursor (en lecture : In / Out à la position jouée)
+ACT_LOOP_START = 40222         # Loop points: Set start point (In)
+ACT_LOOP_END = 40223           # Loop points: Set end point (Out)
 ACT_REFRESH = 41743            # Control surface: Refresh all surfaces (Reaper renvoie tout son état)
 
 

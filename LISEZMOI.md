@@ -275,6 +275,7 @@ Le pont s'y connecte tout seul (autre réglage : `--reaper hôte:8000:9000`, `--
 | ► ■ ● | lecture, stop, enregistrement (LED = état de Reaper) |
 | ◄◄ ►► (tenus) | retour / avance rapide |
 | CYCLE / CLICK | boucle / métronome |
+| DROP / REPLACE | **In / Out de la boucle** au curseur (pendant la lecture : à la position jouée) |
 | MARKER seul | pose un marqueur |
 | ◄ ► (flèches) | marqueur précédent / suivant |
 | ▲ ▼ | piste précédente / suivante |

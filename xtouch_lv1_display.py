@@ -1537,12 +1537,13 @@ class LV1SelectionWatcher(threading.Thread):
 NOTE_MARKER, NOTE_NUDGE, NOTE_CYCLE, NOTE_DROP, NOTE_REPLACE, NOTE_CLICK = 0x54, 0x55, 0x56, 0x57, 0x58, 0x59
 NOTE_REW, NOTE_FF, NOTE_STOP, NOTE_PLAY, NOTE_RECORD = 0x5B, 0x5C, 0x5D, 0x5E, 0x5F
 NOTE_UP, NOTE_DOWN, NOTE_LEFT, NOTE_RIGHT, NOTE_ZOOM, NOTE_SCRUB = 0x60, 0x61, 0x62, 0x63, 0x64, 0x65
-TRANSPORT_NOTES = {NOTE_MARKER, NOTE_CYCLE, NOTE_CLICK, NOTE_REW, NOTE_FF, NOTE_STOP, NOTE_PLAY, NOTE_RECORD,
+TRANSPORT_NOTES = {NOTE_MARKER, NOTE_CYCLE, NOTE_CLICK, NOTE_DROP, NOTE_REPLACE, NOTE_REW, NOTE_FF, NOTE_STOP, NOTE_PLAY, NOTE_RECORD,
                    NOTE_UP, NOTE_DOWN, NOTE_LEFT, NOTE_RIGHT, NOTE_ZOOM, NOTE_SCRUB}
 
 
 class TransportControl:
-    """◄◄ ►► ■ ► ● -> transport Reaper (◄◄ / ►► tenus) ; CYCLE = boucle, CLICK = métronome.
+    """◄◄ ►► ■ ► ● -> transport Reaper (◄◄ / ►► tenus) ; CYCLE = boucle, CLICK = métronome ; DROP / REPLACE =
+    In / Out de la boucle (position jouée en lecture).
     MARKER seul = poser un marqueur ; flèches ◄ ► = marqueur précédent / suivant, ▲ ▼ = piste précédente / suivante ;
     ZOOM (bascule) : ◄ ► = zoom horizontal, ▲ ▼ = zoom vertical. Jog -> Reaper hors fader de plugin LV1 :
     déplacement du curseur (SCRUB allumé : pas fin). LED = état renvoyé par Reaper."""
@@ -1589,6 +1590,11 @@ class TransportControl:
                    NOTE_CLICK: "click"}[d1]
             self.reaper.trigger(cmd)
             JOURNAL.mark("XT %s -> Reaper" % cmd)
+        elif d1 in (NOTE_DROP, NOTE_REPLACE):          # In / Out de la boucle (demande de Joseph, 15/10)
+            self.reaper.action(R.ACT_EDIT_TO_PLAY)       # en lecture : à la position jouée (à l'arrêt : sans effet)
+            self.reaper.action(R.ACT_LOOP_START if d1 == NOTE_DROP else R.ACT_LOOP_END)
+            JOURNAL.mark("XT %s -> Reaper : %s de la boucle" % ("Drop" if d1 == NOTE_DROP else "Replace",
+                                                                "In" if d1 == NOTE_DROP else "Out"))
         elif d1 == NOTE_ZOOM:
             self.zoom = not self.zoom
         elif d1 == NOTE_SCRUB:

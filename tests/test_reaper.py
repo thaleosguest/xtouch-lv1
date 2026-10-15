@@ -63,6 +63,7 @@ def inject():
     tap(2.2, D.NOTE_ZOOM); tap(2.3, D.NOTE_LEFT); tap(2.4, D.NOTE_UP); tap(2.5, D.NOTE_ZOOM)
     put(2.6, 1, 0xB0, D.CC_JOG, 0x02)                                             # jog +2 (sans --clic-lv1)
     put(2.7, 1, 0xB0, D.CC_JOG, 0x41)                                             # jog -1
+    tap(2.8, D.NOTE_DROP); tap(2.9, D.NOTE_REPLACE)                               # In / Out de la boucle
 threading.Thread(target=inject, daemon=True).start()
 
 sys.argv = ["x", "--dry-run", "--no-journal", "--x32", "aucun", "--host", "127.0.0.1",
@@ -76,7 +77,8 @@ acts = [v[0] for a, v in got if a == "/action"]
 ok = [a for a, _ in got[:5]] == ["/play", "/stop", "/record", "/repeat", "/click"]
 ok = ok and ("/rewind", [1.0]) in got and ("/rewind", [0.0]) in got
 ok = ok and acts[:4] == [R.ACT_ADD_MARKER, R.ACT_NEXT_MARKER, R.ACT_ZOOM_OUT_H, R.ACT_ZOOM_IN_V]
-ok = ok and acts[4:] == [R.ACT_JOG_FWD, R.ACT_JOG_FWD, R.ACT_JOG_BACK]
+ok = ok and acts[4:7] == [R.ACT_JOG_FWD, R.ACT_JOG_FWD, R.ACT_JOG_BACK]
+ok = ok and acts[7:] == [R.ACT_EDIT_TO_PLAY, R.ACT_LOOP_START, R.ACT_EDIT_TO_PLAY, R.ACT_LOOP_END]
 ok = ok and acts.count(R.ACT_ADD_MARKER) == 1                     # MARKER + flèche : pas de marqueur posé
 play = [v for (h, n), v in LEDS.items() if n == D.NOTE_PLAY]
 ok = ok and play == [127]                                           # LED PLAY = retour /play 1 de Reaper

@@ -186,7 +186,7 @@ Messages vérifiés :
   /click déclencheurs, /rewind /forward tenus 1/0, /action i:n) ; `TransportControl` (notes Mackie 0x54-0x65, non
   vérifiées sur la X-Touch) ; Reaper n'envoie son état qu'aux changements -> action 41743 (Refresh all surfaces)
   au démarrage et toutes les 5 s sans réponse (vérifié le 15/10 : état complet reçu) ; MARKER seul = action 40157, flèches = marqueurs 40172/40173 et pistes 40286/40285,
-  ZOOM = 1011/1012/40111/40112, jog = 40084/40085 (SCRUB : 40104/40105 au pixel). Jog : LV1Clicker essaie le
+  DROP / REPLACE = In / Out de la boucle (40434 curseur d'édition sur la lecture, puis 40222 / 40223), ZOOM = 1011/1012/40111/40112, jog = 40084/40085 (SCRUB : 40104/40105 au pixel). Jog : LV1Clicker essaie le
   fader de plugin, sinon `jog_fallback` -> Reaper. LED = retours /play /record /repeat /click. `--reaper aucun`.
   Rien en --dry-run (tests) sauf `--reaper` explicite.
 - **Scènes LV1 <-> marqueurs Reaper (codé le 15/10, test `tests/test_scenes.py` côté pont ; script Lua et
