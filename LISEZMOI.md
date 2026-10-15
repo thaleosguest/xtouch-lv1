@@ -317,6 +317,25 @@ une nouvelle entrée (ou, en mode NON, une entrée que tu renommes) a sa piste a
 seulement**. Attention : une piste synchronisée que tu supprimes dans Reaper revient à l'arrêt suivant (relance la
 synchro en mode NON et laisse l'entrée en « Channel N » sur la LV1 pour qu'elle ne revienne pas).
 
+## Reaper façon Tracks Live 2 : barre de vumètres
+
+Charger `reaper/lv1_meter_bridge.lua` (Actions > New action > Load ReaScript…) et le lancer. La fenêtre
+« LV1 Meter Bridge » s'ancre dans le docker. Pour la mettre en haut comme dans Tracks Live : clic droit sur l'onglet du
+docker > Attach docker to: Top.
+
+- Une colonne par piste : n° du canal LV1, couleur, nom court (nom complet au survol), vumètre (2 barres si stéréo)
+  avec maintien de crête et voyant rouge d'écrêtage (clic dessus = effacer), « R » rouge si la piste est armée.
+- Clic sur une colonne = sélectionne la piste et la montre dans la vue.
+- Losange à droite = toutes les colonnes tiennent dans la fenêtre, ou largeur fixe (défilement à la molette).
+- Clic droit :
+  - **Show mixer** et **Show master track** (les décocher toutes les deux = vue « pistes seulement ») ;
+  - hauteur de toutes les pistes (Micro … Extreme) ;
+  - pistes LV1 seulement ;
+  - ancrer / détacher.
+- Relancer l'action = fermer la fenêtre.
+
+À vérifier : sur une piste armée, le vumètre montre-t-il bien le signal d'ENTRÉE (avant de lancer l'enregistrement) ?
+
 ## Diagonale B (virtual soundcheck)
 
 Entrée B de la n-ième ligne (voie) de la grille = canal n du pilote SoundGrid de Reaper. Quand un canal passe de mono

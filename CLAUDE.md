@@ -222,6 +222,13 @@ Messages vérifiés :
   haut est occupée chez Joseph) ; Joseph refait la diagonale À LA MAIN (un glisser de la 1re case en bas à droite, plus
   rapide) ; **ENTER (0x53, non
   vérifié) = refait la diagonale** (page Patch > Input B ouverte).
+- **Reaper façon Tracks Live 2 (16/10, demande de Joseph : pistes + vumètres seulement ; non essayé)** :
+  `reaper/lv1_meter_bridge.lua` (gfx, defer, bascule) = « Meter Bridge » de Tracks Live :
+  - une colonne par piste visible : n° LV1 (P_EXT:lv1_in + 1), couleur, nom, Track_GetPeakInfo, stéréo = P_EXT:lv1_stereo ;
+  - crête 1,5 s, écrêtage mémorisé, R armée ;
+  - clic = sélection + 40913 ; losange = tout voir / largeur fixe (molette) ;
+  - clic droit : mixer (40078), master (SetMasterTrackVisibility), hauteur des pistes (I_HEIGHTOVERRIDE), LV1 seulement, dock.
+  Réglages en ExtState lv1_meter_bridge. Pas de Lua sur le PC : syntaxe non vérifiée hors Reaper.
 - **DISPLAY = bascule LV1 <-> Reaper au premier plan, SAVE selon la fenêtre active (codé le 15/10, test
   `tests/test_apps.py`, notes Mackie 0x34 / 0x50 non vérifiées)** — choix du bouton : DISPLAY (NAME/VALUE), FLIP étant
   pris par Flip A/B. `fenetres.py` (front_app, bring : AttachThreadInput + SetForegroundWindow) ; `AppControl` :
