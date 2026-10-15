@@ -39,7 +39,7 @@ Chaque ligne correspond à un ou plusieurs commits git (`git log` pour le détai
 | **F1..F8 = User Keys 1..8** de la LV1 ; un Flip Sends met aussi la X-Touch en sends | vérifié |
 | Sélection **depuis l'onglet Channel** (aller-retour d'onglet) | vérifié |
 | **Jog wheel** = potard de plugin sélectionné (page Channel), par crans de molette | vérifié |
-| Bouton **SOLO** : allumé si un solo est actif ; appui = efface tous les solos | codé |
+| Bouton **SOLO** : allumé si un solo est actif ; appui = efface tous les solos | vérifié |
 | Bouton **FLIP** = Flip A/B (via la User Key « Flip AB »), LED = entrées sur B | codé |
 | Indicateur **FLIP A / FLIP B** posé sur la touche FlipAB de la LV1 (Qt) | codé |
 

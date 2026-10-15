@@ -222,7 +222,7 @@ Channel ou si aucun potard n'est sélectionné. Si la LV1 ne réagit pas : `--jo
 Assigne une User Key de la LV1 à **« Flip AB Input channel »** (ex. User Key 16) : **FLIP** de la X-Touch appuie
 dessus. La LED FLIP est allumée quand des entrées sont sur **B** (virtual soundcheck).
 La LV1 demande une confirmation : clique-la à l'écran. Sur l'écran du PC, la touche FlipAB affiche en permanence
-**FLIP A** (bleu) ou **FLIP B** (rouge, qui respire doucement).
+**FLIP A** (bleu) ou **FLIP B** (rouge).
 
 ## Bouton SOLO
 

@@ -148,6 +148,10 @@ class Frame(QWidget):
 # entrées sont sur A ou B). Rangée des User Keys, visible sur toutes les pages : touche k = x 145+96k .. 229+96k,
 # y 62..90 (1920x1080, relevé du 15/10). Pastille dans la partie droite de la touche.
 UK_X0, UK_PITCH, UK_W, UK_Y0, UK_H = 145, 96, 84, 62, 28
+# Touche d'origine relevée au pixel (15/10) : contour clair (160) x 144+96k .. 230+96k, y 61..90, coins ~5 px, intérieur
+# (17,17,17), fond de la rangée (71,71,71). La pastille la recopie en débordant de PAD px : rien ne transparaît.
+KEY_L, KEY_T, KEY_W, KEY_H, KEY_R, PAD = 144, 61, 87, 30, 5, 2
+ROW_BG, KEY_BG, KEY_LINE = QColor(71, 71, 71), QColor(17, 17, 17), QColor(160, 160, 160)
 A_BLUE = QColor(56, 201, 255)          # bouton A/B actif de la LV1
 
 
@@ -159,7 +163,7 @@ class AbBadge(QWidget):
         self.ab = "A"
         self.f = QFont("Segoe UI", 11, QFont.Bold)
         self.f_lbl = QFont("Segoe UI", 10, QFont.Bold)
-        self.resize(UK_W, UK_H)
+        self.resize(KEY_W + 2 * PAD, KEY_H + 2 * PAD)
 
     def set(self, ab):
         self.ab = ab
@@ -169,10 +173,11 @@ class AbBadge(QWidget):
         """Recouvre toute la touche FlipAB, à l'allure des boutons LV1 : « FLIP » + pastille A (bleue) / B (rouge)."""
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
-        r = QRectF(self.rect()).adjusted(1, 1, -1, -1)
-        p.setPen(QPen(QColor(200, 200, 200), 1.6))       # contour clair arrondi, comme les touches de la LV1
-        p.setBrush(QColor(17, 17, 17))
-        p.drawRoundedRect(r, 6, 6)
+        p.fillRect(self.rect(), ROW_BG)                   # fond de la rangée : cache la touche d'origine en entier
+        r = QRectF(PAD + 0.75, PAD + 0.75, KEY_W - 1.5, KEY_H - 1.5)
+        p.setPen(QPen(KEY_LINE, 1.5))                     # même contour que les touches de la LV1
+        p.setBrush(KEY_BG)
+        p.drawRoundedRect(r, KEY_R, KEY_R)
         p.setPen(QColor(TXT))
         p.setFont(self.f_lbl)
         p.drawText(QRectF(r.left() + 8, r.top(), r.width() / 2, r.height()), Qt.AlignLeft | Qt.AlignVCenter, "FLIP")
@@ -208,12 +213,13 @@ class Overlay:
             return
         x, y, w, h = self.rect
         sx, sy = w / 1920.0, h / 1080.0
-        bx, by = x + round((UK_X0 + UK_PITCH * self.ab_key) * sx), y + round(UK_Y0 * sy)
+        bx = x + round((KEY_L + UK_PITCH * self.ab_key - PAD) * sx)
+        by = y + round((KEY_T - PAD) * sy)
         if self.badge.pos().x() != bx or self.badge.pos().y() != by:
             self.badge.move(bx, by)
-        # B : respiration douce (on ne doit pas oublier qu'on est en virtual soundcheck) ; A : fixe
-        k = 0.7 + 0.3 * (0.5 + 0.5 * math.sin(2 * math.pi * now / BREATH_S)) if self.ab == "B" else 1.0
-        self.badge.setWindowOpacity(k)
+        # Toujours OPAQUE (Joseph, 15/10 : la respiration en semi-transparence n'est pas esthétique)
+        if self.badge.windowOpacity() != 1.0:
+            self.badge.setWindowOpacity(1.0)
         if not self.badge.isVisible():
             self.badge.show()
 
