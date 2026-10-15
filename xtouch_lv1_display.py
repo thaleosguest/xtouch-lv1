@@ -1757,6 +1757,10 @@ def recall_payload(state, entries, sends, touched, xlink=None, gain=None):
     """Contenu du rappel de pistes (16 tranches + master) : nom, couleur, valeur et position du fader (ou de l'envoi
     en mode sends), vumètres L/R, mute, solo, sélection, pan, gain X32 et 48 V (côté réglé en stéréo)."""
     cells = []
+    if sends.picking:      # choix de l'aux : l'overlay montre les aux de la page (faders = leurs masters), pas la couche
+        with state.lock:
+            page = state.aux_tracks[16 * sends.page:16 * sends.page + MASTER]
+        entries = [(g, ch) for g, ch, _n in page] + [None] * (MASTER - len(page)) + list(entries[MASTER:MASTER + 1])
     with state.lock:
         aux = sends.aux
         sel = state.selected
@@ -1973,16 +1977,20 @@ def main():
     if master_target and surface.master_unit is not None:
         print("  Fader master -> %s" % default_label(*master_target))
     last_layer = object()
+    woke = []                    # message reçu pendant l'attente de fin de tour, traité au début du suivant
     recall_until, recall_sent = [0.0], [0.0]
     t_end = time.time() + a.seconds if a.seconds else None
     try:
         while not (t_end and time.time() > t_end):
             now = time.time()
             while True:
-                try:
-                    unit, st, d1, d2, t = events.get_nowait()
-                except queue.Empty:
-                    break
+                if woke:
+                    unit, st, d1, d2, t = woke.pop()
+                else:
+                    try:
+                        unit, st, d1, d2, t = events.get_nowait()
+                    except queue.Empty:
+                        break
                 if not (faders.on_midi(unit, st, d1, d2, t, entries, surface)
                         or sends.on_midi(unit, st, d1, d2, t, entries, surface)
                         or gain.on_midi(unit, st, d1, d2, t, entries, surface)
@@ -2053,7 +2061,13 @@ def main():
             if ch_at != ab_seen[0] and now - ch_at > 1.0 and not a.dry_run:              # état renvoyé (Flip A/B…)
                 ab_seen[0] = ch_at
                 threading.Thread(target=load_ab, daemon=True).start()
-            time.sleep(0.01 if faders.pending else TICK)
+            # Attente : réveil DÈS qu'un message X-Touch arrive (plus de sommeil fixe de 50 ms). L'écho d'un fader
+            # bougé part ainsi en ~1 ms : moins de résistance du moteur quand le toucher n'est pas détecté (ongle)
+            # ou en retard (geste très rapide) — remarque de Joseph du 15/10.
+            try:
+                woke.append(events.get(timeout=0.01 if faders.pending else TICK))
+            except queue.Empty:
+                pass
     except KeyboardInterrupt:
         pass
     finally:

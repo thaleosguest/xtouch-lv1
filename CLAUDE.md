@@ -124,6 +124,10 @@ Messages vérifiés :
    commande depuis moins de 1,5 s (`MOTOR_BUSY`) ; moteur au repos = geste sans toucher détecté (ongle, remarque de
    Joseph du 15/10), accepté s'il s'écarte de plus de 80 (`UNTOUCHED_MIN`) ; il déclenche aussi le rappel à l'écran
    (`faders.held`).
+0. **Écho immédiat** : la boucle principale ATTEND les messages X-Touch (`events.get(timeout)`, plus de sommeil fixe de
+   50 ms) -> l'écho d'un fader part en ~1 ms. Résistance du moteur sentie par Joseph (15/10) à l'ongle et en geste très
+   rapide : sans toucher détecté, le moteur de la X-Touch reste actif et vise la dernière position envoyée (pas de
+   commande Mackie pour couper les moteurs) ; on ne peut que le faire suivre plus vite.
 0. **Master sur LR = lecture seule** (Joseph, 15/10 : fader critique, monitoring) : `FaderControl.readonly`, rien
    n'est envoyé, `sent_fader` oublié au relâchement -> le moteur reprend la position LV1. En sends on fader (SEND ou
    F-keys), master = master de l'aux, ÉCRITURE (test_sends). Libellé aux (`aux_short`) tiré du groupe/canal, pas du
@@ -227,7 +231,7 @@ Messages vérifiés :
   la largeur, capuchon du fader PAR-DESSUS, nom sur 3 lettres, « M » rouge si mute, valeur en petit.
   **Deux hauteurs mémorisées** (demande de Joseph, futur bouton « agrandir / rapetisser » de l'appli) : `taille`
   petit | grand dans `xtouch_ecran.json`, chacune avec son [y0, y1] ; `--taille petit|grand` bascule (à chaud),
-  `--reglage` règle le profil en cours. **Boutons à l'écran** (`RecallButtons`, demande de Joseph) : ▲ LARGE / ▼ SMALL + ⚙ ADJUST,
+  `--reglage` règle le profil en cours. Pendant le CHOIX de l'aux (SEND), l'overlay montre les aux de la page (comme les écrans X-Touch). **Boutons à l'écran** (`RecallButtons`, demande de Joseph) : ▲ LARGE / ▼ SMALL + ⚙ ADJUST,
   en bas à gauche (BTN_RECT x 38, y 862, 54x134 sur 1920x1080, zone rouge de Joseph ; remontés au-dessus du bandeau
   en grand), FONT PARTIE DU BANDEAU (même fondu, disparaissent avec lui ; on tient un fader et on appuie au tactile),
   seule fenêtre cliquable (sans focus) ; ADJUST ouvre

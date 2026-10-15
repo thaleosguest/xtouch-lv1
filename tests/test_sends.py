@@ -120,5 +120,15 @@ ok = ok and bool(picks)
 bottom = [v for t, d in sorted(LCD.items()) if 2.1 <= t < 3.6 for v in d if v[5:7] == b"8"]
 print("Ligne du bas en mode envois :", bottom[-1][7:30] if bottom else None)
 ok = ok and bool(bottom) and bottom[-1][7:14].startswith(b"F3 -")
+# Overlay (rappel à l'écran) pendant le choix de l'aux : les aux de la page, pas la dernière couche (Joseph, 15/10)
+class _Pick:
+    picking, page, aux = True, 0, None
+    def overlay_info(self): return ("SELECT AN AUX", None, None)
+_st = D.LV1State()
+_st.aux_tracks = [(2, i, "Fx %d" % (i + 1)) for i in range(8)] + [(25, i, "Mon %d" % (i + 1)) for i in range(16)]
+for _g, _c, _n in _st.aux_tracks: _st.tracks[(_g, _c)] = {"name": _n, "fader": -10.0}
+_names = [c and c["name"] for c in D.recall_payload(_st, [(0, 0)] * 16 + [(3, 0)], _Pick(), [])["cells"]]
+print("Overlay pendant le choix :", _names[:3], "...", _names[8:10])
+ok = ok and _names[0] == "Fx 1" and _names[8] == "Mon 1"
 print("OK" if ok else "ÉCHEC")
 sys.exit(0 if ok else 1)
