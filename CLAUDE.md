@@ -212,7 +212,10 @@ Messages vérifiés :
   17 cases ALIGNÉES SUR LA SURFACE : 8 (Extender) de 0 à `split` (0,49 de la largeur, mesuré sur la photo), 8 + master
   à droite. Case : bandeau couleur + nom, valeur (fader ou envoi), vumètre vertical, contour blanc = fader touché ;
   mode sends : pastille « SEND > FX 1 ». Reste 0,5 s après le relâchement (`RECALL_HOLD`), 20 rafraîchissements/s.
-  Fondu d'apparition / disparition (~0,2 s) ; opaque en bas, dégradé du haut (40 %) jusqu'à 25 % de la hauteur.
+  Fondu d'apparition / disparition (~0,2 s, sans dépasser la cible : bug d'oscillation 84 % <-> 100 % corrigé) ;
+  bandeau ENTIÈREMENT OPAQUE (dégradé de transparence essayé puis refusé par Joseph). Case : bandeau couleur + nom,
+  pastilles SEND > aux / OFF / MUTE / SOLO / 48V, gain X32 (côté L/R en stéréo) + pan, petit fader avec repères
+  (courbe calibrée), 1 ou 2 vumètres (stéréo), valeur en grand ; contour jaune = sélection, blanc = fader touché.
   **Réglage à la main** : `py xtouch_overlay_qt.py --reglage` (3 blocs Extender 8 / X-Touch 8 / master 1, bords =
   étirer, intérieur = déplacer, haut/bas = hauteur ; Entrée = enregistrer, Échap = annuler) -> `xtouch_ecran.json`
   ({ext, xt, master: [x0, x1] sur 1920, y0, y1 sur 1080}), relu à chaud par le pont. `recall_payload`, `StripRecall`,

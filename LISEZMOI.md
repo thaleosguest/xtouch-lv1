@@ -181,7 +181,8 @@ base de la LV1 ; s'il est inconnu (« ? », ex. bus), l'encodeur ne fait rien ta
 Les X-Touch sont plus larges que l'écran : quand tu **touches un fader**, un bandeau apparaît en bas de l'écran
 (zone des faders de la LV1) avec **17 cases alignées sur la surface** (8 Extender, 8 X-Touch + master) : couleur et
 nom du canal, valeur, vumètre ; le fader touché est entouré de blanc. En sends : « SEND > FX 1 ». Il disparaît
-0,5 s après avoir lâché, en fondu (opaque en bas, plus transparent vers le haut).
+0,5 s après avoir lâché, en fondu. Chaque case : couleur et nom, MUTE / SOLO / 48V, gain X32 et pan, fader,
+vumètre (deux en stéréo), valeur ; contour jaune = tranche sélectionnée, blanc = fader touché.
 
 **Régler l'alignement** (même pendant que le pont tourne) :
 

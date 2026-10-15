@@ -1734,28 +1734,46 @@ RECALL_HOLD = 0.5        # s : le rappel de pistes reste affiché après le rel�
 RECALL_EVERY = 0.05      # s : rafraîchissement du rappel (vumètres) pendant qu'il est affiché
 
 
-def recall_payload(state, entries, sends, touched):
-    """Contenu du rappel de pistes : 16 tranches + master, nom, couleur, valeur (fader ou envoi), vumètre."""
+def recall_payload(state, entries, sends, touched, xlink=None, gain=None):
+    """Contenu du rappel de pistes (16 tranches + master) : nom, couleur, valeur et position du fader (ou de l'envoi
+    en mode sends), vumètres L/R, mute, solo, sélection, pan, gain X32 et 48 V (côté réglé en stéréo)."""
     cells = []
     with state.lock:
         aux = sends.aux
-        for e in list(entries[:MASTER]) + [entries[MASTER] if len(entries) > MASTER else None]:
+        sel = state.selected
+        for idx, e in enumerate(list(entries[:MASTER]) + [entries[MASTER] if len(entries) > MASTER else None]):
             if e is None:
                 cells.append(None)
                 continue
             t = state.tracks.get(e, {})
             rgb = t.get("rgb")
-            if aux is not None and e is not entries[MASTER]:
-                val = state.sends.get((e[0], e[1], aux), {}).get("fader")
+            send_off = False
+            if aux is not None and idx < MASTER:
+                s = state.sends.get((e[0], e[1], aux), {})
+                val, send_off = s.get("fader"), s.get("on") is False
             else:
                 val = t.get("fader")
-            mt = [v for v in (state.meters.get((e[0], e[1], 0)), state.meters.get((e[0], e[1], 1))) if v is not None]
+            meters = [state.meters.get((e[0], e[1], k)) for k in (0, 1)]
+            meters = [m for m in meters if m is not None] or [None]
             name = (t.get("name") or default_label(*e)).strip()
             cells.append({"name": name[:12], "color": "#%02x%02x%02x" % tuple(int(round(v * 255)) for v in rgb)
                           if rgb else None, "value": fader_text(val).strip() if val is not None else "?",
-                          "meter": max(mt) if mt else None})
+                          "pos": round(db_to_fader(val) / 16383.0, 4) if val is not None else None,
+                          "meters": meters, "meter": max([m for m in meters if m is not None], default=None),
+                          "mute": bool(t.get("mute")), "solo": bool(t.get("solo")), "sel": e == sel,
+                          "send_off": send_off, "pan": pan_label(t.get("pan")).strip() if t.get("pan") is not None else None})
+    for idx, c in enumerate(cells):                   # gain X32 / 48 V : hors verrou (lien x32-gain-recall)
+        e = (list(entries[:MASTER]) + [entries[MASTER] if len(entries) > MASTER else None])[idx]
+        if c is None or xlink is None or e is None:
+            continue
+        side = gain.side.get(e, 0) if gain else 0
+        g = xlink.gain(e, side)
+        if g is not None:
+            c["gain"] = ("%s%+.1f" % ("LR"[side], g)) if len(xlink.preamps(e)) == 2 else "%+.1f" % g
+            c["ph"] = xlink.phantom_on(e, side)
     info = sends.overlay_info() if aux is not None else (None,)
-    return {"cells": cells, "touched": touched, "send": info[0]}      # nom de l'aux : « FX 1 », « REVERB HALL »
+    curve = [[d, p] for d, p in FADER_CURVE]          # le petit fader de l'écran suit la courbe calibrée
+    return {"cells": cells, "touched": touched, "send": info[0], "curve": curve}   # aux : « FX 1 »…
 
 
 OVERLAY_FACTORY = None   # tests : fabrique d'un faux affichage d'écran (sinon Qt / tkinter hors --dry-run)
@@ -1996,7 +2014,7 @@ def main():
                 if now < recall_until[0]:
                     if now - recall_sent[0] >= RECALL_EVERY:
                         recall_sent[0] = now
-                        overlay.set_recall(recall_payload(state, entries, sends, touched))
+                        overlay.set_recall(recall_payload(state, entries, sends, touched, xlink, gain))
                 elif recall_sent[0]:
                     recall_sent[0] = 0.0
                     overlay.set_recall(None)

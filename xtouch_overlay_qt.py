@@ -202,7 +202,7 @@ RECALL_DEFAULT = {"ext": [0.0, 941.0], "xt": [941.0, 1811.0], "master": [1811.0,
 CFG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "xtouch_ecran.json")
 GREEN, AMBER, WARN = QColor("#3ddc84"), QColor("#f2b63b"), QColor("#ff5b4d")
 FADE_STEP = 0.16             # fondu du rappel : ~0,2 s à 30 ms par tour
-TOP_ALPHA, SOLID_FROM = 0.40, 0.25   # haut du bandeau à 40 % d'opacité, opaque à partir de 25 % de la hauteur
+# Bandeau ENTIÈREMENT OPAQUE (Joseph, 15/10 : le dégradé de transparence vers le haut a été essayé puis refusé)
 
 
 def load_recall_cfg():
@@ -260,78 +260,144 @@ class StripRecall(QWidget):
         self.setAttribute(Qt.WA_ShowWithoutActivating)
         self.data = {}
         self.cfg = load_recall_cfg()
-        self.f_name = QFont("Segoe UI", 12, QFont.Bold)
+        self.f_name = QFont("Segoe UI", 11, QFont.Bold)
         self.f_val = QFont("Consolas", 15, QFont.Bold)
-        self.f_tag = QFont("Segoe UI", 9, QFont.Bold)
+        self.f_tag = QFont("Segoe UI", 8, QFont.Bold)
+        self.f_scale = QFont("Segoe UI", 7)
 
     def set(self, data):
         self.data = data or {}
         self.update()
 
     def paintEvent(self, _e):
+        """Case : bandeau couleur + nom ; pastilles MUTE / SOLO / 48V / SEND ; gain X32 et pan ; fader avec repères
+        à gauche, 1 ou 2 vumètres (stéréo) à droite ; valeur en grand en bas. Contour jaune = sélection LV1,
+        blanc = fader touché (demande de Joseph : plus d'infos, fader, vumètres plus gros, 2 en stéréo)."""
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         cells = self.data.get("cells") or []
         touched = set(self.data.get("touched") or [])
         send = self.data.get("send")
-        p.fillRect(self.rect(), QColor(8, 9, 10, 235))
+        p.fillRect(self.rect(), QColor(8, 9, 10))           # fond plein
         for i, (cx, cw) in enumerate(recall_cells(self.width(), self.cfg)):
             if i >= len(cells):
                 break
-            c = cells[i]
-            r = QRectF(cx + 3, 4, cw - 6, self.height() - 8)
-            hot = i in touched
-            p.setPen(QPen(QColor("#ffffff") if hot else QColor(LINE2), 2.4 if hot else 1.0))
-            p.setBrush(QColor("#1b1d20") if hot else QColor(PANEL))
-            p.drawRoundedRect(r, 10, 10)
-            if not c:
-                continue
-            col = QColor(c.get("color") or LINE2)
-            path = QPainterPath()
-            path.addRoundedRect(r, 10, 10)
-            p.save()
-            p.setClipPath(path)
-            p.fillRect(QRectF(r.left(), r.top(), r.width(), 34), col)       # bandeau à la couleur du canal
-            p.restore()
-            dark = 0.299 * col.red() + 0.587 * col.green() + 0.114 * col.blue() > 150   # luminosité perçue
-            p.setPen(QColor(PANEL) if dark else QColor("#ffffff"))
-            p.setFont(self.f_name)
-            p.drawText(QRectF(r.left() + 4, r.top(), r.width() - 8, 34), Qt.AlignCenter, c.get("name", ""))
-            y = r.top() + 42
-            if send:                                                          # mode sends : pastille rouge
-                pill = QRectF(r.left() + 8, y, r.width() - 16, 22)
-                p.setPen(Qt.NoPen)
-                p.setBrush(red_gradient(pill))
-                p.drawRoundedRect(pill, 6, 6)
-                p.setPen(QColor("#ffffff"))
-                p.setFont(self.f_tag)
-                p.drawText(pill, Qt.AlignCenter, "SEND > " + send)
-                y += 28
-            p.setPen(QColor(TXT))
-            p.setFont(self.f_val)
-            p.drawText(QRectF(r.left(), y, r.width() - 18, 30), Qt.AlignCenter, c.get("value", ""))
-            # vumètre vertical à droite de la case
-            m = QRectF(r.right() - 14, y + 4, 7, r.bottom() - y - 14)
+            self.paint_cell(p, QRectF(cx + 3, 4, cw - 6, self.height() - 8), cells[i], i in touched, send)
+
+    def pill(self, p, r, text, fill, fg="#ffffff"):
+        p.setPen(Qt.NoPen)
+        p.setBrush(fill)
+        p.drawRoundedRect(r, 5, 5)
+        p.setPen(QColor(fg))
+        p.setFont(self.f_tag)
+        p.drawText(r, Qt.AlignCenter, text)
+
+    def paint_cell(self, p, r, c, hot, send):
+        sel = bool(c and c.get("sel"))
+        p.setPen(QPen(QColor("#ffffff") if hot else (QColor(255, 242, 0) if sel else QColor(LINE2)),
+                      2.4 if (hot or sel) else 1.0))
+        p.setBrush(QColor("#1b1d20") if hot else QColor(PANEL))
+        p.drawRoundedRect(r, 10, 10)
+        if not c:
+            return
+        col = QColor(c.get("color") or LINE2)
+        path = QPainterPath()
+        path.addRoundedRect(r, 10, 10)
+        p.save()
+        p.setClipPath(path)
+        p.fillRect(QRectF(r.left(), r.top(), r.width(), 32), col)          # bandeau à la couleur du canal
+        p.restore()
+        dark = 0.299 * col.red() + 0.587 * col.green() + 0.114 * col.blue() > 150   # luminosité perçue
+        p.setPen(QColor(PANEL) if dark else QColor("#ffffff"))
+        p.setFont(self.f_name)
+        p.drawText(QRectF(r.left() + 4, r.top(), r.width() - 8, 32), Qt.AlignCenter, c.get("name", ""))
+        # pastilles d'état
+        y = r.top() + 37
+        tags = []
+        if send:
+            tags.append(("SEND > " + send, red_gradient(QRectF(0, y, 1, 18)), "#ffffff"))
+            if c.get("send_off"):
+                tags.append(("OFF", QColor("#5a5f66"), "#ffffff"))
+        if c.get("mute"):
+            tags.append(("MUTE", QColor(225, 22, 32), "#ffffff"))
+        if c.get("solo"):
+            tags.append(("SOLO", QColor(242, 182, 59), PANEL))
+        if c.get("ph"):
+            tags.append(("48V", QColor(209, 52, 59), "#ffffff"))
+        x = r.left() + 6
+        for text, fill, fg in tags:
+            w = min(r.width() - 12, 9 + 7 * len(text)) if not text.startswith("SEND") else r.width() - 12
+            if x + w > r.right() - 6:
+                x, y = r.left() + 6, y + 21
+                w = min(w, r.width() - 12)
+            self.pill(p, QRectF(x, y, w, 18), text, fill, fg)
+            x += w + 4
+        y += 22
+        # gain X32 et pan
+        info = "  ".join(t for t in (("G " + c["gain"]) if c.get("gain") else "", ("Pan " + c["pan"]) if c.get("pan") else "") if t)
+        if info:
+            p.setPen(QColor(MUT))
+            p.setFont(self.f_tag)
+            p.drawText(QRectF(r.left() + 4, y, r.width() - 8, 16), Qt.AlignCenter, info)
+        y += 18
+        # zone fader + vumètres, valeur en bas
+        bottom = r.bottom() - 34
+        fx = r.left() + r.width() * 0.32
+        top_f, bot_f = y + 6, bottom - 6
+        p.setPen(QColor(MUT))
+        p.setFont(self.f_scale)
+        for mark, lab in ((10, "+10"), (0, "0"), (-10, "-10"), (-20, "-20"), (-40, "-40"), (None, "-inf")):
+            yy = bot_f - (bot_f - top_f) * self.fader_frac(mark)
+            p.drawText(QRectF(r.left() + 2, yy - 7, fx - r.left() - 12, 14), Qt.AlignRight | Qt.AlignVCenter, lab)
+            p.drawLine(int(fx - 8), int(yy), int(fx - 4), int(yy))
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor("#25282c"))
+        p.drawRoundedRect(QRectF(fx - 2, top_f, 4, bot_f - top_f), 2, 2)
+        pos = c.get("pos")
+        if pos is not None:
+            cy = bot_f - (bot_f - top_f) * pos
+            cap = QRectF(fx - 11, cy - 7, 22, 14)
+            g = QLinearGradient(cap.topLeft(), cap.bottomLeft())
+            g.setColorAt(0, QColor("#9aa1aa"))
+            g.setColorAt(1, QColor("#4a4f56"))
+            p.setBrush(g)
+            p.setPen(QPen(QColor("#22252a"), 1))
+            p.drawRoundedRect(cap, 3, 3)
+            p.setPen(QPen(QColor(TXT), 1.4))
+            p.drawLine(int(cap.left() + 3), int(cy), int(cap.right() - 3), int(cy))
+        meters = c.get("meters") or []
+        mw = 11 if len(meters) < 2 else 9
+        mx = r.right() - 8 - mw * len(meters) - 3 * max(0, len(meters) - 1)
+        for k, db in enumerate(meters or [None]):
+            m = QRectF(mx + k * (mw + 3), top_f, mw, bot_f - top_f)
             p.setPen(Qt.NoPen)
             p.setBrush(QColor("#25282c"))
             p.drawRoundedRect(m, 3, 3)
-            fr = meter_frac(c.get("meter"))
+            fr = meter_frac(db)
             if fr > 0:
                 h = m.height() * fr
                 g = QLinearGradient(m.bottomLeft(), m.topLeft())
                 g.setColorAt(0, GREEN)
-                g.setColorAt(meter_frac(-12) , GREEN)
+                g.setColorAt(meter_frac(-12), GREEN)
                 g.setColorAt(meter_frac(-6), AMBER)
                 g.setColorAt(1, WARN)
                 p.setBrush(g)
                 p.drawRoundedRect(QRectF(m.left(), m.bottom() - h, m.width(), h), 3, 3)
-        # Opaque en bas ; du haut jusqu'à 25 % de la hauteur, dégradé vers 40 % d'opacité (demande de Joseph)
-        p.setCompositionMode(QPainter.CompositionMode_DestinationIn)
-        g = QLinearGradient(0, 0, 0, self.height())
-        g.setColorAt(0, QColor(0, 0, 0, round(255 * TOP_ALPHA)))
-        g.setColorAt(SOLID_FROM, QColor(0, 0, 0, 255))
-        g.setColorAt(1, QColor(0, 0, 0, 255))
-        p.fillRect(self.rect(), g)
+        p.setPen(QColor(TXT))
+        p.setFont(self.f_val)
+        p.drawText(QRectF(r.left(), bottom, r.width(), 30), Qt.AlignCenter, c.get("value", ""))
+
+    def fader_frac(self, db):
+        """Position (0..1) d'un repère dB sur le petit fader, avec la courbe du pont (points fournis)."""
+        curve = self.data.get("curve") or []
+        if db is None or not curve:
+            return 0.0 if db is None else max(0.0, min(1.0, (db + 60.0) / 70.0))
+        if db >= curve[0][0]:
+            return curve[0][1]
+        for (d1, p1), (d2, p2) in zip(curve, curve[1:]):
+            if d2 <= db <= d1:
+                return p2 + (p1 - p2) * (db - d2) / (d1 - d2)
+        return 0.0
 
 
 class RecallSetup(QWidget):
@@ -481,7 +547,10 @@ class Overlay:
         target = 1.0 if (self.recall_on and self.rect) else 0.0
         if self.recall_alpha == target == 0.0:
             return
-        self.recall_alpha = max(0.0, min(1.0, self.recall_alpha + (FADE_STEP if target > self.recall_alpha else -FADE_STEP)))
+        if self.recall_alpha < target:              # fondu vers la cible, sans la dépasser (bug du 15/10 : à 100 %
+            self.recall_alpha = min(target, self.recall_alpha + FADE_STEP)   # il oscillait 84 % <-> 100 %)
+        elif self.recall_alpha > target:
+            self.recall_alpha = max(target, self.recall_alpha - FADE_STEP)
         if self.recall_alpha <= 0.0:
             self.recall.hide()
             return
