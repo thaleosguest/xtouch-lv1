@@ -74,6 +74,9 @@ Waves, rétro-ingénierie). **Non documentée par Waves : à revérifier après 
 - **Piège (15/10)** : juste après un redémarrage de la LV1 (port TCP changé, nouveau `CurrentSessionID`), elle peut
   accepter la connexion SANS envoyer son état (/Channels, /Notify/Layers, TrackColor) -> plus de couleurs ni de
   banques. `LV1Link` redemande à 5 s puis se reconnecte à 10 s (test `tests/test_reconnexion.py`).
+  **État INCOMPLET (journal 230733, 15/10)** : après « /Device/LinkSettings/NewSession », canaux + couleurs puis plus
+  rien (ni couches, ni scènes, ni User Keys -> SAVE sans « Store New Scene ») : l'état n'est complet qu'avec /Channels
+  ET /Notify/Layers, sinon même redemande / reconnexion.
 
 Messages vérifiés :
 - `/Channels` : `i:N` puis 19 args par piste (`s` nom, `i` groupe, `i` canal, `d` fader dB (-144 = -inf), `d`, 12 `i`, `h`, `d`).

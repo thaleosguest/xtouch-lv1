@@ -514,7 +514,9 @@ class LV1Link(threading.Thread):
     # Vu le 15/10/2026 (journaux 001220, 001435) : juste après un redémarrage de la LV1, elle accepte la connexion
     # mais n'envoie PAS son état (/Channels, /Notify/Layers, couleurs) -> plus de couleurs ni de banques. Si rien
     # n'arrive : on redemande à STATE_ASK s, puis on se reconnecte à STATE_GIVEUP s (nouvelle poignée de main).
-    STATE_MSGS = ("/Channels", "/Notify/Layers", "/Notify/TrackColor")
+    # État complet = /Channels ET /Notify/Layers (journal 230733 du 15/10 : après un « /Device/LinkSettings/NewSession »
+    # la LV1 a envoyé canaux et couleurs puis PLUS RIEN — ni couches, ni scènes, ni User Keys -> SAVE sans « Store »).
+    STATE_MSGS = ("/Channels", "/Notify/Layers")
     STATE_ASK, STATE_GIVEUP = 5.0, 10.0
 
     def __init__(self, state, host=None, port=None, name="XTouch-Display"):
@@ -574,7 +576,7 @@ class LV1Link(threading.Thread):
                          L.frame("/device_name", [("s", self.name_), ("s", "XTOUCH-LV1-DISPLAY-0001")]))
             asked = False
             t_ack = time.time() + 3
-            got_state, t_conn, reasked = False, None, False
+            got_state, t_conn, reasked, seen = False, None, False, set()
             while not self.stop_flag:
                 try:
                     chunk = sock.recv(65536)
@@ -597,7 +599,8 @@ class LV1Link(threading.Thread):
                             ack.set()
                         else:
                             if address in self.STATE_MSGS:
-                                got_state = True
+                                seen.add(address)
+                                got_state = len(seen) == len(self.STATE_MSGS)
                             handle(self.state, address, args)
                 if ack.is_set() and not asked:
                     asked = True

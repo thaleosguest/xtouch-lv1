@@ -1,4 +1,5 @@
-"""Test : la LV1 accepte la connexion mais n'envoie pas son état (vu le 15/10 après un redémarrage de la LV1).
+"""Test : la LV1 accepte la connexion mais n'envoie pas son état, ou seulement une partie (canaux + couleurs, sans
+couches ni User Keys : journal 230733 du 15/10, après un « NewSession »).
 Le pont doit redemander, puis se reconnecter, et récupérer couches et couleurs à la 2e connexion.
 
     py tests/test_reconnexion.py .
@@ -36,7 +37,9 @@ def serve(n):
                 if a.startswith("/Get"): GETS.append((n, a))
     threading.Thread(target=rx, daemon=True).start()
     send("/handshake", [("i", 1)])
-    if n == 1:                       # LV1 qui charge encore : rien que des ping
+    if n == 1:                       # LV1 qui charge encore : canaux + couleurs puis plus rien (journal 230733),
+        send("/Channels", [("i", 1)] + track("Kick", 0, 0))          # ni couches ni User Keys : état INCOMPLET
+        send("/Notify/TrackColor", [("i", 0), ("i", 0), ("i", 13), ("f", 0.0588), ("f", 0.6353), ("f", 0.6706)])
         for _ in range(40):
             try: send("/ping", [("h", 1), ("i", 1)])
             except OSError: return
