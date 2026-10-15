@@ -144,6 +144,47 @@ class Frame(QWidget):
                    Qt.AlignLeft | Qt.AlignVCenter, self.text)
 
 
+# Pastille A/B posée sur la User Key « FlipAB » de la LV1 (demande de Joseph, 15/10 : voir à tout moment si les
+# entrées sont sur A ou B). Rangée des User Keys, visible sur toutes les pages : touche k = x 145+96k .. 229+96k,
+# y 62..90 (1920x1080, relevé du 15/10). Pastille dans la partie droite de la touche.
+UK_X0, UK_PITCH, UK_W, UK_Y0, UK_H = 145, 96, 84, 62, 28
+A_BLUE = QColor(56, 201, 255)          # bouton A/B actif de la LV1
+
+
+class AbBadge(QWidget):
+    def __init__(self):
+        super().__init__(None, FLAGS)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+        self.ab = "A"
+        self.f = QFont("Segoe UI", 11, QFont.Bold)
+        self.f_lbl = QFont("Segoe UI", 10, QFont.Bold)
+        self.resize(UK_W, UK_H)
+
+    def set(self, ab):
+        self.ab = ab
+        self.update()
+
+    def paintEvent(self, _e):
+        """Recouvre toute la touche FlipAB, à l'allure des boutons LV1 : « FLIP » + pastille A (bleue) / B (rouge)."""
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        r = QRectF(self.rect()).adjusted(1, 1, -1, -1)
+        p.setPen(QPen(QColor(200, 200, 200), 1.6))       # contour clair arrondi, comme les touches de la LV1
+        p.setBrush(QColor(17, 17, 17))
+        p.drawRoundedRect(r, 6, 6)
+        p.setPen(QColor(TXT))
+        p.setFont(self.f_lbl)
+        p.drawText(QRectF(r.left() + 8, r.top(), r.width() / 2, r.height()), Qt.AlignLeft | Qt.AlignVCenter, "FLIP")
+        pill = QRectF(r.right() - 34, r.top() + 4, 30, r.height() - 8)
+        p.setPen(Qt.NoPen)
+        p.setBrush(red_gradient(pill) if self.ab == "B" else A_BLUE)
+        p.drawRoundedRect(pill, 5, 5)
+        p.setPen(QColor("#ffffff") if self.ab == "B" else QColor(PANEL))
+        p.setFont(self.f)
+        p.drawText(pill, Qt.AlignCenter, self.ab)
+
+
 class Bus(QObject):
     msg = Signal(dict)
 
@@ -152,6 +193,7 @@ class Overlay:
     def __init__(self, mixer=1, rect_fn=None):
         self.rect_fn = rect_fn or (lambda: lv1_rect(mixer))
         self.banner, self.frame = Banner(), Frame()
+        self.badge, self.ab, self.ab_key = AbBadge(), None, None
         self.state = None            # (text, sub, color) voulu
         self.since = 0.0
         self.rect, self.rect_t = None, 0.0
@@ -159,9 +201,30 @@ class Overlay:
         self.timer.timeout.connect(self.tick)
         self.timer.start(30)
 
+    def tick_badge(self, now):
+        if not self.ab or self.ab_key is None or not self.rect:
+            if self.badge.isVisible():
+                self.badge.hide()
+            return
+        x, y, w, h = self.rect
+        sx, sy = w / 1920.0, h / 1080.0
+        bx, by = x + round((UK_X0 + UK_PITCH * self.ab_key) * sx), y + round(UK_Y0 * sy)
+        if self.badge.pos().x() != bx or self.badge.pos().y() != by:
+            self.badge.move(bx, by)
+        # B : respiration douce (on ne doit pas oublier qu'on est en virtual soundcheck) ; A : fixe
+        k = 0.7 + 0.3 * (0.5 + 0.5 * math.sin(2 * math.pi * now / BREATH_S)) if self.ab == "B" else 1.0
+        self.badge.setWindowOpacity(k)
+        if not self.badge.isVisible():
+            self.badge.show()
+
     def on_msg(self, m):
         if m.get("quit"):
             QApplication.quit()
+            return
+        if "ab" in m:                                # {"ab": "A" | "B" | null, "key": n° de la User Key 0..15}
+            self.ab, self.ab_key = m.get("ab"), m.get("key")
+            if self.ab:
+                self.badge.set(self.ab)
             return
         new = (m.get("text"), m.get("sub"), m.get("color")) if m.get("text") else None
         if new != self.state:
@@ -175,6 +238,7 @@ class Overlay:
         now = time.time()
         if now - self.rect_t > 1.0:
             self.rect, self.rect_t = self.rect_fn(), now
+        self.tick_badge(now)
         if not self.state or not self.rect:
             for w in (self.banner, self.frame):
                 if w.isVisible():
@@ -215,7 +279,10 @@ def main():
             bus.msg.emit({"text": "SELECT AN AUX", "sub": "", "color": None})
             time.sleep(3.5)
             bus.msg.emit({"text": "FX 1", "sub": "Reverb", "color": "#7f77dd"})
-            time.sleep(6)
+            bus.msg.emit({"ab": "A", "key": 15})
+            time.sleep(3)
+            bus.msg.emit({"ab": "B", "key": 15})
+            time.sleep(3)
             bus.msg.emit({"quit": True})
     else:
         def script():                              # lignes JSON sur stdin ; fin de stdin = le pont est arrêté

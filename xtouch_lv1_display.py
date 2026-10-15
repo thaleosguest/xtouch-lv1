@@ -1959,6 +1959,10 @@ def main():
             surface.push_master_display(assign, timecode)
             if overlay:
                 overlay.set_info(*sends.overlay_info())
+                with state.lock:
+                    fk = [k for k, (_s, func, on) in sorted(state.user_keys.items())
+                          if on and "flip ab" in (func or "").lower()]
+                overlay.set_ab(None if on_b is None else ("B" if on_b else "A"), fk[0] if fk else None)
             surface.set_main_led(NOTE_RUDE_SOLO, any_solo and int(now * 2) % 2 == 0)   # clignote si un solo
             surface.set_main_led(NOTE_SOLO_ALL, any_solo)                                # SOLO : allumé si un solo
             with state.lock:

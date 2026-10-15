@@ -212,6 +212,10 @@ Messages vérifiés :
   renvoie TOUT son état** (comme une connexion : /Channels, couches, couleurs, User Keys…) et Joseph voit un message
   sur la LV1. LED FLIP = entrées sur B, lue dans la base (`lv1_db.input_ab`, param 0, 1 = B) au démarrage et ~1 s
   après chaque /Channels (`state.channels_at`). Test dans `tests/test_fkeys.py`.
+  Le Flip A/B de la LV1 demande une CONFIRMATION à l'écran (Joseph clique lui-même, ok pour lui).
+  **Indicateur A/B à l'écran** (Qt, demande de Joseph) : pastille qui RECOUVRE la User Key « FlipAB » (rangée des User
+  Keys, visible sur toutes les pages ; touche k = x 145+96k..229+96k, y 62..90) : « FLIP » + A bleu (56,201,255) /
+  B rouge 48 V qui respire ; clics traversants (`AbBadge`, message `{"ab", "key"}`).
 - Sens LV1 -> X-Touch de la sélection (vérifié le 14/10, journal 185026) : `LV1SelectionWatcher` (avec --clic-lv1) lit le liseré
   jaune (255,242,0) y 98-102/1080, x 143+96i (`lv1_clic.selected_strip`, sans admin) toutes les 0,15 s ; ne réagit
   qu'aux changements. Test `tests/test_selection_lv1.py`.

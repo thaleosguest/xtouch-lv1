@@ -72,6 +72,9 @@ class LV1Overlay(threading.Thread):
     def stop(self):
         self.stop_flag = True
 
+    def set_ab(self, ab, key):
+        pass                      # pastille A/B : version Qt seulement
+
     def set(self, text):
         """Texte à afficher (None = mode normal). Un changement relance le bandeau."""
         with self.lock:
@@ -176,6 +179,18 @@ class QtOverlay:
         msg = {"text": text, "sub": sub, "color": color} if text else {"text": None}
         try:
             self.proc.stdin.write((json.dumps(msg) + "\n").encode("utf-8"))
+            self.proc.stdin.flush()
+        except OSError:
+            pass
+
+    def set_ab(self, ab, key):
+        """Pastille A/B sur la User Key « FlipAB » (ab = "A", "B" ou None)."""
+        info = (ab, key) if ab and key is not None else None
+        if info == getattr(self, "last_ab", object()):
+            return
+        self.last_ab = info
+        try:
+            self.proc.stdin.write((json.dumps({"ab": ab if info else None, "key": key}) + "\n").encode("utf-8"))
             self.proc.stdin.flush()
         except OSError:
             pass
