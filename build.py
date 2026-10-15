@@ -1,19 +1,14 @@
 #!/usr/bin/env python3
-"""Compilation de XTouch-LV1 (V0.1, « plug and play ») : un seul exe qui contient le pont ET l'overlay Qt.
+"""Compilation de XTouch-LV1 : produit l'installeur « dist/XTouch_LV1_Install.exe » (un double-clic installe tout).
 
     py build.py
 
-Résultat :
-  dist/XTouch-LV1/            dossier à utiliser (double-clic sur XTouch-LV1.exe, demande les droits administrateur)
-      XTouch-LV1.exe, _internal/      le programme (remplacés à chaque compilation)
-      reaper/*.lua                    scripts Reaper (Load ReaScript… depuis ce dossier)
-      xtouch_courbe_fader.json, xtouch_ecran.json, xtouch_couleurs.json
-                                      réglages de Joseph : copiés UNE SEULE FOIS, jamais écrasés ensuite
-      xtouch_journal_*.txt            journaux écrits par l'exe
-  dist/XTouch-LV1-v0.1.zip    version à donner (sans réglages personnels ni journaux)
-
-L'exe sans argument = « --clic-lv1 --attendre » (attend le branchement des X-Touch). Avec des arguments, ce sont les
-mêmes options que xtouch_lv1_display.py. « XTouch-LV1.exe --overlay --reglage » = réglage du rappel de pistes.
+1. PyInstaller compile le pont (xtouch_lv1_display.py, overlay Qt compris : « XTouch-LV1.exe --overlay ») en dossier
+   (onedir, console, droits administrateur demandés au lancement) ;
+2. le dossier est complété (reaper/*.lua, LISEZMOI.md, xtouch_couleurs.exemple.json) dans build/stage/XTouch-LV1 ;
+3. PyInstaller compile installer.py en UN fichier qui embarque ce dossier.
+Ce que fait l'installeur : voir installer.py. Rien de personnel (calibration, réglage d'écran, journaux) n'est
+embarqué ; l'installeur reprend les réglages posés à côté de lui (ou dans dist/XTouch-LV1, ancienne compilation).
 Il faut PyInstaller (py -m pip install pyinstaller) et PySide6.
 """
 import os
@@ -21,15 +16,12 @@ import re
 import shutil
 import subprocess
 import sys
-import zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 NAME = "XTouch-LV1"
 DIST = os.path.join(HERE, "dist")
-APP = os.path.join(DIST, NAME)
 WORK = os.path.join(HERE, "build")
-PERSONAL = ["xtouch_courbe_fader.json", "xtouch_ecran.json", "xtouch_couleurs.json"]   # jamais écrasés
-SHARED = ["LISEZMOI.md", "xtouch_couleurs.exemple.json"]                                 # remplacés
+SHARED = ["LISEZMOI.md", "xtouch_couleurs.exemple.json"]
 
 
 def version():
@@ -37,50 +29,38 @@ def version():
         return re.search(r'^VERSION = "([^"]+)"', f.read(), re.M).group(1)
 
 
+def pyinstaller(args):
+    r = subprocess.run([sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
+                        "--workpath", os.path.join(WORK, "work"), "--specpath", WORK] + args, cwd=HERE)
+    if r.returncode:
+        raise SystemExit("ÉCHEC de PyInstaller (code %d)." % r.returncode)
+
+
 def main():
     ver = version()
-    tmp = os.path.join(WORK, "out")
+    with open(os.path.join(HERE, "installer.py"), encoding="utf-8") as f:
+        if 'VERSION = "%s"' % ver not in f.read():
+            print("installer.py : VERSION différente de xtouch_lv1_display.py (%s)" % ver)
+            return 1
     print("Compilation de %s v%s..." % (NAME, ver))
-    cmd = [sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--console", "--uac-admin",
-           "--name", NAME, "--distpath", tmp, "--workpath", os.path.join(WORK, "work"),
-           "--specpath", WORK, "--hidden-import", "xtouch_overlay_qt",
-           os.path.join(HERE, "xtouch_lv1_display.py")]
-    r = subprocess.run(cmd, cwd=HERE)
-    if r.returncode:
-        print("ÉCHEC de PyInstaller (code %d)." % r.returncode)
-        return r.returncode
-    built = os.path.join(tmp, NAME)
+    out = os.path.join(WORK, "out")
+    pyinstaller(["--console", "--uac-admin", "--name", NAME, "--distpath", out,
+                 "--hidden-import", "xtouch_overlay_qt", os.path.join(HERE, "xtouch_lv1_display.py")])
 
-    # Le dossier final garde les réglages et journaux : on n'y remplace que le programme.
-    os.makedirs(APP, exist_ok=True)
-    shutil.rmtree(os.path.join(APP, "_internal"), ignore_errors=True)
-    shutil.copytree(os.path.join(built, "_internal"), os.path.join(APP, "_internal"))
-    shutil.copy2(os.path.join(built, NAME + ".exe"), os.path.join(APP, NAME + ".exe"))
-    os.makedirs(os.path.join(APP, "reaper"), exist_ok=True)
+    stage = os.path.join(WORK, "stage", NAME)
+    shutil.rmtree(stage, ignore_errors=True)
+    shutil.copytree(os.path.join(out, NAME), stage)
+    os.makedirs(os.path.join(stage, "reaper"))
     for f in os.listdir(os.path.join(HERE, "reaper")):
         if f.endswith(".lua"):
-            shutil.copy2(os.path.join(HERE, "reaper", f), os.path.join(APP, "reaper", f))
+            shutil.copy2(os.path.join(HERE, "reaper", f), os.path.join(stage, "reaper", f))
     for f in SHARED:
-        shutil.copy2(os.path.join(HERE, f), os.path.join(APP, f))
-    for f in PERSONAL:
-        src, dst = os.path.join(HERE, f), os.path.join(APP, f)
-        if os.path.exists(src) and not os.path.exists(dst):
-            shutil.copy2(src, dst)
-            print("  réglage copié : %s" % f)
+        shutil.copy2(os.path.join(HERE, f), os.path.join(stage, f))
 
-    # Zip à donner : programme + scripts + mode d'emploi, sans réglages personnels ni journaux.
-    zpath = os.path.join(DIST, "%s-v%s.zip" % (NAME, ver))
-    with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
-        for root, _dirs, files in os.walk(built):
-            for f in files:
-                p = os.path.join(root, f)
-                z.write(p, os.path.join(NAME, os.path.relpath(p, built)))
-        for f in os.listdir(os.path.join(HERE, "reaper")):
-            if f.endswith(".lua"):
-                z.write(os.path.join(HERE, "reaper", f), os.path.join(NAME, "reaper", f))
-        for f in SHARED:
-            z.write(os.path.join(HERE, f), os.path.join(NAME, f))
-    print("OK : %s\n     %s (%.0f Mo)" % (os.path.join(APP, NAME + ".exe"), zpath, os.path.getsize(zpath) / 1e6))
+    pyinstaller(["--onefile", "--windowed", "--name", "XTouch_LV1_Install", "--distpath", DIST,
+                 "--add-data", "%s%sapp" % (stage, os.pathsep), os.path.join(HERE, "installer.py")])
+    exe = os.path.join(DIST, "XTouch_LV1_Install.exe")
+    print("OK : %s (%.0f Mo)" % (exe, os.path.getsize(exe) / 1e6))
     return 0
 
 
