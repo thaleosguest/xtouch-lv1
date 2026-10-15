@@ -52,4 +52,5 @@ Chaque ligne correspond à un ou plusieurs commits git (`git log` pour le détai
 
 - 64 / 32 / 16 canaux et Mixer 2 : à vérifier.
 - Mon 9-16 dans les sends (correspondance de la base supposée).
-- Contrôle de **Reaper** (transport, jog, zoom, scrub, marqueurs) pour un virtual soundcheck : à l'étude.
+- Contrôle de **Reaper** (transport, jog, zoom, scrub, marqueurs) pour un virtual soundcheck : prévu plus tard,
+  par l'OSC de Reaper ; jog partagé selon la page LV1 (Channel + plugin -> plugin, sinon Reaper).

@@ -150,6 +150,14 @@ Messages vérifiés :
 
 ## Reste à faire / idées
 
+- **Reaper (prototype décidé « plus tard », 15/10)** : couper la surface en deux — faders/tranches/Extender = LV1,
+  bloc transport + navigation = Reaper (virtual soundcheck sur mesure), via l'**OSC de Reaper** (Control/OSC/web,
+  UDP, l'OSC de `lv1_probe` suffit). Proposé : ◄◄ ►► ■ ► ● = transport (LED = état renvoyé par Reaper), jog = position,
+  SCRUB = scrub, ZOOM + flèches, MARKER + flèches = marqueur préc./suiv., MARKER seul = poser, CLICK = métronome.
+  **Jog : choix de Joseph = selon la page LV1** (Channel + fader de plugin en bas -> plugin ; sinon -> Reaper).
+  Reaper sur la même machine que la LV1 (pilote SoundGrid) : plausible (TracksLive-FL / LV1-PORT déjà dans le rack),
+  à essayer.
+
 - **PAN (codé, à tester)** : bouton PAN (0x2A) = encodeurs sur le pan LV1 (exclusif avec TRACK). `/Set/Track/Pan ii d`
   (-1..+1), retour `/Notify/Track/Pan ii d i` envoyé SEULEMENT aux changements (rien à la connexion, rien dans
   /Channels) -> pan de départ lu dans la base : `lv1_db.py`, copie de CurrentLV1.dat(+wal), snapshot -1, param 436
