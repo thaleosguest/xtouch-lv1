@@ -62,9 +62,9 @@ def server():
     lay = [("i", 0), ("i", 0), ("i", 1), ("s", "Ch 1-16"), ("i", 16)]
     for k in range(16): lay += [("i", 0), ("i", k)]
     send("/Notify/Layers", lay); send("/Notify/CurrentLayer", [("i", 0), ("i", 0)])
-    send("/Notify/Track/Pan", [("i", 0), ("i", 0), ("d", -0.5), ("i", 1)])   # In 1 connu ; In 2 inconnu
+    send("/Notify/Track/Pan", [("i", 0), ("i", 0), ("d", -22.5), ("i", 1)])  # In 1 connu (L22.5 : échelle LV1 -45..+45) ; In 2 inconnu
     time.sleep(1.6 - (time.time() - T0))
-    send("/Notify/Track/Pan", [("i", 0), ("i", 0), ("d", -0.5), ("i", 1)])   # retour tardif : ignoré
+    send("/Notify/Track/Pan", [("i", 0), ("i", 0), ("d", -22.5), ("i", 1)])  # retour tardif : ignoré
     time.sleep(6)
 threading.Thread(target=server, daemon=True).start()
 
@@ -92,8 +92,8 @@ sys.argv = ["x", "--dry-run", "--no-journal", "--host", "127.0.0.1", "--port", s
             "--x32", "aucun", "--seconds", "3.2"]
 with contextlib.redirect_stdout(io.StringIO()):
     D.main()
-pans = [(round(v[2] * 45)) for a, v in SETS if a == "/Set/Track/Pan" and v[1] == 0]
-print("/Set/Track/Pan In 1 (échelle 45) :", pans, " autres :", [v for a, v in SETS if a == "/Set/Track/Pan" and v[1] != 0])
+pans = [round(v[2]) for a, v in SETS if a == "/Set/Track/Pan" and v[1] == 0]
+print("/Set/Track/Pan In 1 (-45..+45) :", pans, " autres :", [v for a, v in SETS if a == "/Set/Track/Pan" and v[1] != 0])
 print("Ligne du bas :", LCD.get(1, b"")[-60:], " couronne 1 :", hex(RINGS.get((1, 0), 0)))
 ok = pans == [-14, -11, 0, -6] and not [v for a, v in SETS if a == "/Set/Track/Pan" and v[1] != 0]
 ok = ok and b"L6 " in LCD.get(1, b"") and b"  ?" in LCD.get(1, b"") and RINGS.get((1, 0)) == 5

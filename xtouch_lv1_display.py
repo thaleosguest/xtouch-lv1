@@ -438,13 +438,13 @@ def handle(state, address, args):
         elif address == "/Notify/Aux/Send/Pan" and len(args) >= 4 and args[3][0] in "fd":
             key = (args[0][1], args[1][1], args[2][1])
             if time.time() >= state.pan_hold.get(key, 0):
-                state.send(*key)["pan"] = float(args[3][1])
+                state.send(*key)["pan"] = max(-1.0, min(1.0, float(args[3][1]) / LV1_PAN_SCALE))
         elif address == "/Notify/Track/Pan" and len(args) >= 3 and args[2][0] in "fd":
-            # ,iidi [groupe, canal, pan -1..+1, ?] ; la LV1 ne l'envoie qu'aux changements (pan de départ :
+            # ,iidi [groupe, canal, pan -45..+45, ?] ; la LV1 ne l'envoie qu'aux changements (pan de départ :
             # base de la LV1, lv1_db). Juste après un geste PAN, nos propres retours tardifs sont ignorés.
             key = (args[0][1], args[1][1])
             if time.time() >= state.pan_hold.get(key, 0):
-                state.track(*key)["pan"] = float(args[2][1])
+                state.track(*key)["pan"] = max(-1.0, min(1.0, float(args[2][1]) / LV1_PAN_SCALE))
         elif address == "/Notify/Solo" and len(args) >= 3 and args[2][0] == "i":
             state.track(args[0][1], args[1][1])["solo"] = args[2][1] != 0
         elif address == "/Notify/Track/Out/Gain" and len(args) >= 3 and args[2][0] in "fdi":
@@ -940,6 +940,12 @@ def master_display(selected, gain_db, side, stereo, lr_db):
     return seg_codes(num[-2:], 2), left + right
 
 
+# Pan côté réseau LV1 : -45 (L45) .. +45 (R45), comme l'écran et la base (bug du 15/10 : envoyé en -1..+1, « tout à
+# gauche » donnait L1 sur la LV1 ; ses /Notify/Track/Pan vont bien de -45 à +45). En interne : -1..+1.
+# Pan d'envoi aux : même échelle supposée (non vérifié : seule la valeur 0 a été vue).
+LV1_PAN_SCALE = 45.0
+
+
 def pan_label(p):
     """Pan -1..+1 -> « L45 » / « C » / « R12 » (échelle de la LV1), « ? » si inconnu."""
     if p is None:
@@ -1063,7 +1069,7 @@ class GainControl:
             self.state.track(*e)["pan"] = value
             self.state.pan_hold[e] = time.time() + self.PAN_HOLD
         if self.write and self.lv1:
-            self.lv1.send("/Set/Track/Pan", [("i", e[0]), ("i", e[1]), ("d", value)])
+            self.lv1.send("/Set/Track/Pan", [("i", e[0]), ("i", e[1]), ("d", value * LV1_PAN_SCALE)])
         JOURNAL.mark("XT %s -> pan %s %+.3f" % (why, e, value))
 
     def _warn(self, text):
@@ -1321,7 +1327,8 @@ class SendControl:
             self.state.send(*key)["pan"] = value
             self.state.pan_hold[key] = time.time() + self.PAN_HOLD
         if self.write:
-            self.link.send("/Set/Aux/Send/Pan", [("i", key[0]), ("i", key[1]), ("i", key[2]), ("d", value)])
+            self.link.send("/Set/Aux/Send/Pan", [("i", key[0]), ("i", key[1]), ("i", key[2]),
+                                                  ("d", value * LV1_PAN_SCALE)])
         JOURNAL.mark("XT encodeur -> pan envoi %s %+.3f" % (key, value))
 
     def frame(self, entries, top, bot, cols, fads, overrides):

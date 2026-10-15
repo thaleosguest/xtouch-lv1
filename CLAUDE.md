@@ -198,7 +198,7 @@ Messages vérifiés :
   programmes ; rappel de pistes et sends on fader restent affichés LV1 en arrière-plan, choix de Joseph) : processus de la fenêtre de premier plan = celui de la LV1 (fenêtres détachées et
   boîtes de dialogue comprises) ou l'overlay lui-même (réglage).
 - **PAN (codé, à tester)** : bouton PAN (0x2A) = encodeurs sur le pan LV1 (exclusif avec TRACK). `/Set/Track/Pan ii d`
-  (-1..+1), retour `/Notify/Track/Pan ii d i` envoyé SEULEMENT aux changements (rien à la connexion, rien dans
+  (**-45..+45**, corrigé le 15/10 : envoyé en -1..+1, « tout à gauche » donnait L1 ; interne -1..+1, `LV1_PAN_SCALE`), retour `/Notify/Track/Pan ii d i` (-45..+45) envoyé SEULEMENT aux changements (rien à la connexion, rien dans
   /Channels) -> pan de départ lu dans la base : `lv1_db.py`, copie de CurrentLV1.dat(+wal), snapshot -1, param 436
   PARAM_OUTPUT_BALANCE -45..+45 (absent = centre), chainer_id = object.id (obj_type 0 = entrées). Vérifié le 14/10 :
   In 4 tout à gauche = -45. 1 cran = 3/45 (x2 si crans < 80 ms ; 1/45 jugé pas assez sensible) ; appui encodeur = centre ; pan inconnu (« ? ») = encodeur sans effet ;
