@@ -198,7 +198,8 @@ Messages vérifiés :
   (entrées g=0 : canal, nom, r g b, stéréo = 12e entier de /Channels == 2, vérifié) chaque seconde s'il change ;
   `reaper/lv1_sync_tracks.lua` (à la main, OUI = toutes, NON = renommées seulement) crée / met à jour les pistes,
   marquées P_EXT:lv1_in = canal (jamais d'autres pistes touchées, rien supprimé) ; `lv1_scenes.lua` fait suivre nom et
-  couleur en direct. (b) = seulement les canaux patchés vers le pilote SoundGrid + entrée d'enregistrement : à faire.
+  couleur en direct, et ajoute les pistes manquantes Reaper à l'ARRÊT selon le dernier choix (ProjExtState lv1/sync_mode
+  all|named, demande de Joseph). (b) = seulement les canaux patchés vers le pilote SoundGrid + entrée d'enregistrement : à faire.
 - **Pastille FLIP visible seulement si la LV1 est au premier plan** (Joseph, 15/10 : elle restait devant les autres
   programmes ; rappel de pistes et sends on fader restent affichés LV1 en arrière-plan, choix de Joseph) : processus de la fenêtre de premier plan = celui de la LV1 (fenêtres détachées et
   boîtes de dialogue comprises) ou l'overlay lui-même (réglage).

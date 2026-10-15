@@ -301,7 +301,10 @@ Ne change pas la couleur des marqueurs de scène à la main : c'est elle qui les
 Charger aussi `reaper/lv1_sync_tracks.lua` (Load ReaScript…) et le lancer à chaque synchro : il propose **OUI** =
 toutes les entrées, **NON** = seulement celles renommées (pas « Channel N »), puis crée / met à jour une piste par
 entrée, dans l'ordre de la LV1, avec son nom et sa couleur. Il ne touche jamais à tes autres pistes et ne supprime
-rien. Ensuite, tant que `lv1_scenes.lua` tourne, un nom ou une couleur changés sur la LV1 suivent tout seuls.
+rien. Ensuite, tant que `lv1_scenes.lua` tourne, un nom ou une couleur changés sur la LV1 suivent tout seuls, et
+une nouvelle entrée (ou, en mode NON, une entrée que tu renommes) a sa piste ajoutée toute seule, **Reaper à l'arrêt
+seulement**. Attention : une piste synchronisée que tu supprimes dans Reaper revient à l'arrêt suivant (relance la
+synchro en mode NON et laisse l'entrée en « Channel N » sur la LV1 pour qu'elle ne revienne pas).
 
 ## Affichage à l'écran
 

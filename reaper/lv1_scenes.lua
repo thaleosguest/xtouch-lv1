@@ -85,9 +85,56 @@ local function check_crossing()
   last_pos = pos
 end
 
--- Noms et couleurs des pistes synchronisées (lv1_sync_tracks.lua) suivent la LV1 en direct, comme Tracks Live pour
--- un changement de nom / couleur seul. Rien n'est créé ni supprimé ici (ça, c'est la synchro, à la main).
-local tracks_text, tracks_t = nil, 0
+-- Pistes synchronisées (lv1_sync_tracks.lua) : noms et couleurs suivent la LV1 en direct, comme Tracks Live. Et, une
+-- fois une synchro faite (son choix OUI = toutes / NON = renommées est gardé dans le projet), une NOUVELLE entrée a
+-- sa piste ajoutée toute seule, à sa place (demande de Joseph du 15/10) — seulement Reaper à l'arrêt, jamais en
+-- lecture ni en enregistrement. Rien n'est jamais supprimé.
+local tracks_text, tracks_t, entries = nil, 0, {}
+
+local function is_default_name(e)
+  return e.name == "" or e.name == ("Channel " .. (e.ch + 1))
+end
+
+local function tagged_tracks()
+  local map = {}
+  for i = 0, reaper.CountTracks(0) - 1 do
+    local tr = reaper.GetTrack(0, i)
+    local ok, v = reaper.GetSetMediaTrackInfo_String(tr, "P_EXT:lv1_in", "", false)
+    if ok and v ~= "" then map[tonumber(v)] = tr end
+  end
+  return map
+end
+
+local function add_missing(tagged)
+  local _, mode = reaper.GetProjExtState(0, "lv1", "sync_mode")      -- "all" | "named" | "" (pas encore de synchro)
+  if mode ~= "all" and mode ~= "named" then return end
+  local todo = false
+  for _, e in ipairs(entries) do
+    if not tagged[e.ch] and (mode == "all" or not is_default_name(e)) then todo = true break end
+  end
+  if not todo then return end
+  reaper.Undo_BeginBlock()
+  reaper.PreventUIRefresh(1)
+  local last, added = -1, 0
+  for _, e in ipairs(entries) do
+    local tr = tagged[e.ch]
+    if not tr and (mode == "all" or not is_default_name(e)) then
+      reaper.InsertTrackAtIndex(last + 1, true)
+      tr = reaper.GetTrack(0, last + 1)
+      reaper.GetSetMediaTrackInfo_String(tr, "P_EXT:lv1_in", tostring(e.ch), true)
+      reaper.GetSetMediaTrackInfo_String(tr, "P_EXT:lv1_stereo", e.stereo and "1" or "0", true)
+      reaper.GetSetMediaTrackInfo_String(tr, "P_NAME", e.name, true)
+      reaper.SetMediaTrackInfo_Value(tr, "I_CUSTOMCOLOR", e.color)
+      tagged[e.ch] = tr
+      added = added + 1
+    end
+    if tr then last = math.floor(reaper.GetMediaTrackInfo_Value(tr, "IP_TRACKNUMBER")) - 1 end
+  end
+  reaper.PreventUIRefresh(-1)
+  reaper.TrackList_AdjustWindows(false)
+  reaper.Undo_EndBlock("LV1 : " .. added .. " piste(s) ajoutée(s)", -1)
+end
+
 local function follow_tracks()
   local now = reaper.time_precise()
   if now - tracks_t < 1.0 then return end
@@ -96,28 +143,33 @@ local function follow_tracks()
   if not f then return end
   local text = f:read("a")
   f:close()
-  if text == tracks_text then return end
-  tracks_text = text
-  local by_ch = {}
-  for line in text:gmatch("[^\n]+") do
-    local ch, name, r, g, b = line:match("^(%d+)\t(.-)\t(%-?%d+)\t(%-?%d+)\t(%-?%d+)\t%d$")
-    if ch then
-      r, g, b = tonumber(r), tonumber(g), tonumber(b)
-      by_ch[tonumber(ch)] = {name = name, color = r >= 0 and (reaper.ColorToNative(r, g, b) | 0x1000000) or 0}
-    end
-  end
-  for i = 0, reaper.CountTracks(0) - 1 do
-    local tr = reaper.GetTrack(0, i)
-    local ok, v = reaper.GetSetMediaTrackInfo_String(tr, "P_EXT:lv1_in", "", false)
-    local e = ok and v ~= "" and by_ch[tonumber(v)]
-    if e then
-      local _, cur = reaper.GetSetMediaTrackInfo_String(tr, "P_NAME", "", false)
-      if cur ~= e.name then reaper.GetSetMediaTrackInfo_String(tr, "P_NAME", e.name, true) end
-      if math.floor(reaper.GetMediaTrackInfo_Value(tr, "I_CUSTOMCOLOR")) ~= e.color then
-        reaper.SetMediaTrackInfo_Value(tr, "I_CUSTOMCOLOR", e.color)
+  local changed = text ~= tracks_text
+  if changed then
+    tracks_text = text
+    entries = {}
+    for line in text:gmatch("[^\n]+") do
+      local ch, name, r, g, b, st = line:match("^(%d+)\t(.-)\t(%-?%d+)\t(%-?%d+)\t(%-?%d+)\t(%d)$")
+      if ch then
+        r, g, b = tonumber(r), tonumber(g), tonumber(b)
+        entries[#entries + 1] = {ch = tonumber(ch), name = name, stereo = st == "1",
+                                 color = r >= 0 and (reaper.ColorToNative(r, g, b) | 0x1000000) or 0}
       end
     end
   end
+  local tagged = tagged_tracks()
+  if changed then                                         -- nom / couleur des pistes existantes
+    for _, e in ipairs(entries) do
+      local tr = tagged[e.ch]
+      if tr then
+        local _, cur = reaper.GetSetMediaTrackInfo_String(tr, "P_NAME", "", false)
+        if cur ~= e.name then reaper.GetSetMediaTrackInfo_String(tr, "P_NAME", e.name, true) end
+        if math.floor(reaper.GetMediaTrackInfo_Value(tr, "I_CUSTOMCOLOR")) ~= e.color then
+          reaper.SetMediaTrackInfo_Value(tr, "I_CUSTOMCOLOR", e.color)
+        end
+      end
+    end
+  end
+  if reaper.GetPlayState() == 0 then add_missing(tagged) end   -- à l'arrêt seulement
 end
 
 local function loop()

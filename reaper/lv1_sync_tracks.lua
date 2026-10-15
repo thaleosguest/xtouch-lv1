@@ -58,6 +58,8 @@ local answer = reaper.ShowMessageBox(string.format(
   #list, named, existing), "LV1 : synchroniser les pistes", 3)
 if answer ~= 6 and answer ~= 7 then return end
 local only_named = answer == 7
+-- choix gardé dans le projet : lv1_scenes.lua ajoute ensuite tout seul les nouvelles entrées (Reaper à l'arrêt)
+reaper.SetProjExtState(0, "lv1", "sync_mode", only_named and "named" or "all")
 
 reaper.Undo_BeginBlock()
 reaper.PreventUIRefresh(1)
