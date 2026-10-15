@@ -468,8 +468,10 @@ def handle(state, address, args):
                 if n[0] == "s" and g[0] == "i" and c[0] == "i":
                     t = state.track(g[1], c[1])
                     t["name"] = n[1]
-                    # Hypothèse (non vérifiée) : 1er double = fader en dB (-144 = -inf).
-                    if f[0] == "d" and t["fader"] is None:
+                    # 1er double = fader en dB (-144 = -inf). Pris à CHAQUE /Channels, pas seulement au départ :
+                    # un rappel de scène ne renvoie les nouveaux niveaux QUE là (remarque de Joseph du 15/10 :
+                    # faders immobiles après un rappel). Sauf fader sous le doigt.
+                    if f[0] == "d" and (g[1], c[1]) not in state.held_tracks:
                         t["fader"] = f[1]
                     # Vérifié le 14/10/2026 (journaux 173028 -> 173215) : des 12 entiers,
                     # le 1er = solo, le 2e = mute (0|1). Seul moyen d'avoir l'état à la connexion.
@@ -2087,8 +2089,9 @@ def main():
     # master en lecture seule quand il est sur LR (hors sends on fader : là, il règle le master de l'aux)
     faders.readonly = lambda strip: strip == MASTER and sends.aux_track() is None
 
-    def load_pans():
-        """Pans de départ des entrées (le réseau ne les donne pas) : copie de la base de la LV1."""
+    def load_pans(force=False):
+        """Pans et envois des entrées (le réseau ne les donne pas) : copie de la base de la LV1. force : après un
+        état complet (rappel de scène, Flip A/B), les valeurs de la base remplacent celles qu'on avait."""
         try:
             import lv1_db
             pans = lv1_db.input_pans()
@@ -2096,9 +2099,10 @@ def main():
             JOURNAL.mark("pans de départ illisibles : %r" % e)
             return
         with state.lock:
+            now_ = time.time()
             for key, v in pans.items():
                 t = state.track(*key)
-                if t["pan"] is None:
+                if t["pan"] is None or (force and now_ >= state.pan_hold.get(key, 0)):
                     t["pan"] = v
         JOURNAL.mark("pans de départ lus dans la base LV1 : %d entrées" % len(pans))
         try:
@@ -2109,9 +2113,9 @@ def main():
         with state.lock:
             for key, (g_db, on) in snd.items():
                 s = state.send(*key)
-                if s["fader"] is None:
+                if s["fader"] is None or (force and key not in state.held_tracks):
                     s["fader"] = g_db
-                if s["on"] is None:
+                if s["on"] is None or force:
                     s["on"] = on
         JOURNAL.mark("envois de départ lus dans la base LV1 : %d" % len(snd))
     ab_seen = [0.0]
@@ -2247,7 +2251,10 @@ def main():
             surface.set_main_led(NOTE_FLIP, bool(on_b))                                  # FLIP : entrées sur B
             if ch_at != ab_seen[0] and now - ch_at > 1.0 and not a.dry_run:              # état renvoyé (Flip A/B…)
                 ab_seen[0] = ch_at
-                threading.Thread(target=load_ab, daemon=True).start()
+                def reload_all():
+                    load_ab()
+                    load_pans(force=True)      # rappel de scène : pans et envois rechargés (non vérifié)
+                threading.Thread(target=reload_all, daemon=True).start()
             # Attente : réveil DÈS qu'un message X-Touch arrive (plus de sommeil fixe de 50 ms). L'écho d'un fader
             # bougé part ainsi en ~1 ms : moins de résistance du moteur quand le toucher n'est pas détecté (ongle)
             # ou en retard (geste très rapide) — remarque de Joseph du 15/10.

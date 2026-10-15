@@ -79,6 +79,9 @@ Messages vérifiés :
 - `/Channels` : `i:N` puis 19 args par piste (`s` nom, `i` groupe, `i` canal, `d` fader dB (-144 = -inf), `d`, 12 `i`, `h`, `d`).
   Des 12 entiers : **1er = solo, 2e = mute** (0|1, vérifié le 14/10 : seule différence entre deux
   connexions avant/après mute In 6 + solo In 7). Le 12e vaut 1/2 (mono/stéréo ?), `h` = champ de bits inconnu.
+  **Rappel de scène (15/10, journal 155042)** : la LV1 renvoie un état complet ; les nouveaux niveaux de fader n'y
+  sont QUE dans /Channels -> fader repris à CHAQUE /Channels (sauf sous le doigt) ; pans / envois relus dans la base
+  ~1 s après (non vérifié que la base est déjà à jour).
   C'est la **seule** source de l'état initial : à la connexion, ni `/Notify/Solo` ni mute par piste.
 - `/Notify/TrackColor ii i f f f` : groupe, canal, **index palette** (= celui de `CurrentLV1.dat`, ex. 13 = #0FA2AB), RVB 0..1.
 - `/Notify/Track/Name ii s T`.

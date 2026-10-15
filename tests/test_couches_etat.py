@@ -29,5 +29,17 @@ D.handle(st, "/Notify/CurrentLayer", [("i", 0), ("i", 0)])
 after_click = st.layer_entries(0)[0]
 print("après l'état complet :", after_dump, "| après un clic Custom :", after_click)
 ok = after_dump == "Ch 1-16" and after_click == "Page-1"
+
+# Rappel de scène : les nouveaux niveaux n'arrivent QUE dans /Channels (journal 155042 : In 2 -inf -> -9.7 dB).
+def chan(fader):
+    return [("i", 1), ("s", "Channel 2"), ("i", 0), ("i", 1), ("d", fader), ("d", 0.0)] + [("i", 0)] * 12 + [("h", 0), ("d", 0.0)]
+D.handle(st, "/Channels", chan(-144.0))
+D.handle(st, "/Channels", chan(-9.7))
+moved = st.tracks[(0, 1)]["fader"]
+st.held_tracks = {(0, 1)}                                  # fader sous le doigt : on ne l'écrase pas
+D.handle(st, "/Channels", chan(-30.0))
+held = st.tracks[(0, 1)]["fader"]
+print("fader après rappel :", moved, "| sous le doigt :", held)
+ok = ok and moved == -9.7 and held == -9.7
 print("OK" if ok else "ÉCHEC")
 sys.exit(0 if ok else 1)
