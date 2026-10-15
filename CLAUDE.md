@@ -195,6 +195,7 @@ Messages vérifiés :
   -> `LV1Clicker.jog` (crans regroupés) -> `lv1_clic.jog_bottom_fader` : admin, onglet Channel lu, piste présente,
   puis WM_MOUSEWHEEL à la fenêtre (souris immobile) ou `--jog-methode souris` (pointeur déplacé un instant).
   Outil d'essai : `py lv1_clic.py molette 5` / `-5` (`--methode souris`).
+  Vérifié le 15/10 : `py lv1_clic.py molette 5` (message WM_MOUSEWHEEL, souris immobile) fait bouger le réglage.
 - FLIP (0x32) sans fonction.
 - Sens LV1 -> X-Touch de la sélection (vérifié le 14/10, journal 185026) : `LV1SelectionWatcher` (avec --clic-lv1) lit le liseré
   jaune (255,242,0) y 98-102/1080, x 143+96i (`lv1_clic.selected_strip`, sans admin) toutes les 0,15 s ; ne réagit
