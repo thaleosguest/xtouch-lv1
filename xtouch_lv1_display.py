@@ -976,6 +976,7 @@ class GainControl:
         self.rec_down = {}                # tranche -> instant d'appui sur Rec
         self.side = {}                    # piste stéréo -> 0 (L, défaut) / 1 (R) : appui encodeur ; jamais les deux
         self.warned = set()
+        self.send_aux = lambda: None      # aux en sends on fader (branché sur SendControl) : PAN = pan de l'envoi
 
     def on_midi(self, unit, status, d1, d2, t, entries, surface):
         kind = status & 0xF0
@@ -1081,8 +1082,13 @@ class GainControl:
         """Ligne du bas (gain en mode gain), couronnes, LED Rec (48 V) pour les tranches affichées."""
         rings, recs = [], []
         if self.pan_mode:
+            aux = self.send_aux()        # sends on fader : on montre le pan de l'ENVOI (c'est lui que règlent les encodeurs)
             with self.state.lock:
-                pans = [self.state.tracks.get(e, {}).get("pan") if e is not None else None for e in entries]
+                if aux is not None:
+                    pans = [self.state.sends.get((e[0], e[1], aux), {}).get("pan") if e is not None else None
+                            for e in entries]
+                else:
+                    pans = [self.state.tracks.get(e, {}).get("pan") if e is not None else None for e in entries]
         for i, e in enumerate(entries):
             if self.pan_mode:
                 p = pans[i]
@@ -1300,7 +1306,9 @@ class SendControl:
                                                         ("T" if new else "F", new)])
                 JOURNAL.mark("XT Mute tranche %d -> envoi %s %s" % (strip + 1, key, "ON" if new else "OFF"))
             return True
-        busy = self.gain is not None and (self.gain.mode or self.gain.pan_mode)
+        # En sends on fader, les encodeurs règlent le pan de l'ENVOI, PAN allumé ou non (journal 184559 : PAN allumé,
+        # ils réglaient le pan du canal). Seul TRACK (gain X32) les garde.
+        busy = self.gain is not None and self.gain.mode
         if not busy and kind == 0x90 and NOTE_VPOT_PUSH <= d1 < NOTE_VPOT_PUSH + 8:
             strip = 8 * unit + (d1 - NOTE_VPOT_PUSH)
             e = entries[strip] if strip < len(entries) else None
@@ -2093,6 +2101,7 @@ def main():
         import xtouch_overlay
         overlay = xtouch_overlay.make_overlay(a.mixer)    # Qt (style Gain Recall v3) si PySide6, sinon tkinter
     faders.key_of = sends.key_of
+    gain.send_aux = lambda: sends.aux
     # master en lecture seule quand il est sur LR (hors sends on fader : là, il règle le master de l'aux)
     faders.readonly = lambda strip: strip == MASTER and sends.aux_track() is None
 

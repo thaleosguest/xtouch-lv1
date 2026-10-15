@@ -69,6 +69,7 @@ def server():
     send("/Aux/Tracks", aux)
     send("/Notify/Aux/Send/Gain", [("i", 0), ("i", 0), ("i", 2), ("d", -10.0), ("T", True)])
     send("/Notify/Aux/Send/On", [("i", 0), ("i", 0), ("i", 2), ("T", True), ("T", True)])
+    send("/Notify/Aux/Send/Pan", [("i", 0), ("i", 1), ("i", 2), ("d", 9.0), ("T", True)])  # Gtr -> Fx 3 : R9 (-45..+45)
     time.sleep(6)
 threading.Thread(target=server, daemon=True).start()
 
@@ -92,6 +93,9 @@ def inject():
     put(1.9, 0, 0x90, 0x10, 127); put(1.95, 0, 0x90, 0x10, 0)    # Mute bloqué pendant le choix
     put(2.1, 0, 0x90, 0x1A, 127); put(2.15, 0, 0x90, 0x1A, 0)    # Select tranche 3 -> aux 2 (Fx 3)
     put(2.6, 0, 0x90, 0x68, 127); put(2.65, 0, 0xE0, 0x00, 0x40); put(3.0, 0, 0x90, 0x68, 0)  # envoi In1 -> Fx3
+    put(3.15, 1, 0x90, 0x2A, 127); put(3.17, 1, 0x90, 0x2A, 0)  # PAN allumé en sends on fader
+    put(3.2, 0, 0xB0, 0x11, 0x01)                                 # encodeur 2 +1 -> pan de l'ENVOI Gtr -> Fx 3
+    put(3.25, 1, 0x90, 0x2A, 127); put(3.27, 1, 0x90, 0x2A, 0)  # PAN éteint
     put(3.3, 0, 0x90, 0x10, 127); put(3.35, 0, 0x90, 0x10, 0)    # Mute tranche 1 -> envoi OFF
     put(3.4, 1, 0x90, 0x70, 127); put(3.45, 1, 0xE8, 0x00, 0x48); put(3.5, 1, 0x90, 0x70, 0)  # master = master Fx 3
     put(3.6, 1, 0x90, 0x29, 127); put(3.65, 1, 0x90, 0x29, 0)    # SEND -> retour
@@ -116,10 +120,13 @@ ok = ok and kinds[-1][0] == "/Set/Track/Out/Gain" and kinds[-1][1][:2] == [0, 1]
 ok = ok and not any(a == "/Set/Track/Out/Mute" for a, v in kinds)
 ok = ok and ("/Set/Track/Out/Gain", [2, 2]) in [(x, v[:2]) for x, v in kinds]          # master = master de l'aux
 ok = ok and not any(x == "/Set/Track/Out/Gain" and v[:2] == [3, 0] for x, v in kinds)  # master LR en lecture seule
+span = [v for x, v in SETS if x == "/Set/Aux/Send/Pan"]
+print("Pan d'envoi :", span, "| pans de canal :", [v for x, v in SETS if x == "/Set/Track/Pan"])
+ok = ok and span == [[0, 1, 2, 12.0]] and not any(x == "/Set/Track/Pan" for x, v in SETS)
 ok = ok and bool(picks)
 bottom = [v for t, d in sorted(LCD.items()) if 2.1 <= t < 3.6 for v in d if v[5:7] == b"8"]
 print("Ligne du bas en mode envois :", bottom[-1][7:30] if bottom else None)
-ok = ok and bool(bottom) and bottom[-1][7:14].startswith(b"F3 -")
+ok = ok and any(b[7:14].startswith(b"F3 -") for b in bottom[-2:])   # 2 unités : l'une des deux dernières
 # Overlay (rappel à l'écran) pendant le choix de l'aux : les aux de la page, pas la dernière couche (Joseph, 15/10)
 class _Pick:
     picking, page, aux = True, 0, None
