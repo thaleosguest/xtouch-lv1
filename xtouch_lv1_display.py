@@ -55,6 +55,7 @@ XT = {"vide": 0, "rouge": 1, "vert": 2, "jaune": 3, "bleu": 4, "violet": 5, "cya
 # Choix provisoire : à ajuster à l'œil sur la X-Touch.
 METER_STEPS = [-60.0, -50.0, -42.0, -36.0, -30.0, -24.0, -18.0, -12.0, -9.0, -6.0, -3.0, 0.0]
 
+METER_STALE = 1.0       # s : voie de vumètre qui n'arrive plus = disparue (stéréo -> mono)
 TICK = 0.05             # 20 rafraîchissements par seconde
 METER_REFRESH = 0.25    # renvoi d'un niveau inchangé (le vumètre retombe tout seul sinon)
 
@@ -213,6 +214,7 @@ class LV1State:
         self.connected = False
         self.tracks = {}          # (g, ch) -> {"name", "rgb", "pal", "fader"}
         self.meters = {}          # (g, ch, sub) -> dB
+        self.meters_t = {}        # (g, ch, sub) -> instant de la dernière valeur reçue
         # Couches reçues, par (vue, custom) : vue 0 = Mixer 1, 1 = Mixer 2 ; custom 0 = usine, 1 = perso.
         # Hypothèse tirée du journal du 14/10 : le 1er nombre de /Notify/Layers est la vue.
         self.last_set = {}        # vue -> dernier jeu de couches reçu [(nom, [(g, ch) | None, ...]), ...]
@@ -236,6 +238,14 @@ class LV1State:
 
     def send(self, g, ch, aux):
         return self.sends.setdefault((g, ch, aux), {"fader": None, "on": None, "pan": None})
+
+    def meter(self, g, ch, sub):
+        """Dernier niveau reçu, ou None s'il n'arrive plus (piste stéréo remise en mono : sa voie droite n'est plus
+        envoyée, remarque de Joseph du 15/10 — l'overlay gardait 2 vumètres). À appeler sous le verrou."""
+        t = self.meters_t.get((g, ch, sub))
+        if t is not None and time.time() - t > METER_STALE:
+            return None
+        return self.meters.get((g, ch, sub))
 
     def fader_of(self, key):
         """Fader d'une piste (g, ch) ou d'un envoi (g, ch, aux)."""
@@ -352,11 +362,13 @@ JOURNAL = Journal(None)
 def handle(state, address, args):
     JOURNAL.write(address, args)
     if address == "/Notify/Meters":
+        now = time.time()
         with state.lock:
             for i in range(1, len(args) - 3, 4):
                 g, c, s, d = args[i], args[i + 1], args[i + 2], args[i + 3]
                 if g[0] == "i" and c[0] == "i" and s[0] == "i" and d[0] == "f":
                     state.meters[(g[1], c[1], s[1])] = d[1]
+                    state.meters_t[(g[1], c[1], s[1])] = now
         return
     with state.lock:
         if address == "/Notify/TrackColor" and len(args) >= 6:
@@ -1741,8 +1753,8 @@ def build_frame(state, mixer_page, n_strips, overrides):
             pal = t.get("pal")
             cols.append(overrides.get(pal, rgb_to_xtouch(t.get("rgb"))) if pal is not None
                         else rgb_to_xtouch(t.get("rgb")))
-            left = state.meters.get((g, c, 0))
-            right = state.meters.get((g, c, 1))
+            left = state.meter(g, c, 0)
+            right = state.meter(g, c, 1)
             vals = [v for v in (left, right) if v is not None]
             lvls.append(db_to_level(max(vals)) if vals else 0)
         state.last_leds = (mutes, solos, [e is not None and e == state.selected for e in entries])
@@ -1776,7 +1788,7 @@ def recall_payload(state, entries, sends, touched, xlink=None, gain=None):
                 val, send_off = s.get("fader"), s.get("on") is False
             else:
                 val = t.get("fader")
-            meters = [state.meters.get((e[0], e[1], k)) for k in (0, 1)]
+            meters = [state.meter(e[0], e[1], k) for k in (0, 1)]
             meters = [m for m in meters if m is not None] or [None]
             name = (t.get("name") or default_label(*e)).strip()
             cells.append({"name": name[:12], "color": "#%02x%02x%02x" % tuple(int(round(v * 255)) for v in rgb)

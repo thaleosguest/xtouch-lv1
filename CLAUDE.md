@@ -128,6 +128,10 @@ Messages vérifiés :
    50 ms) -> l'écho d'un fader part en ~1 ms. Résistance du moteur sentie par Joseph (15/10) à l'ongle et en geste très
    rapide : sans toucher détecté, le moteur de la X-Touch reste actif et vise la dernière position envoyée (pas de
    commande Mackie pour couper les moteurs) ; on ne peut que le faire suivre plus vite.
+0. **Vumètres périmés** : `state.meter(g, ch, voie)` rend None si la voie n'est plus reçue depuis 1 s (`METER_STALE`) ;
+   piste stéréo remise en mono -> 1 seul vumètre dans l'overlay (remarque de Joseph du 15/10). Suppose que
+   /Notify/Meters envoie toutes les voies à chaque trame (134 valeurs constantes) : à revoir si l'overlay montre en
+   mono une piste stéréo silencieuse.
 0. **Master sur LR = lecture seule** (Joseph, 15/10 : fader critique, monitoring) : `FaderControl.readonly`, rien
    n'est envoyé, `sent_fader` oublié au relâchement -> le moteur reprend la position LV1. En sends on fader (SEND ou
    F-keys), master = master de l'aux, ÉCRITURE (test_sends). Libellé aux (`aux_short`) tiré du groupe/canal, pas du
