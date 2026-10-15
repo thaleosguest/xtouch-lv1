@@ -232,6 +232,14 @@ class AbBadge(QWidget):
 # chacun [x début, x fin] en pixels de référence 1920 ; y0 / y1 = haut / bas du bandeau (référence 1080).
 RECALL_DEFAULT = {"ext": [0.0, 941.0], "xt": [941.0, 1811.0], "master": [1811.0, 1920.0], "y0": 745.0, "y1": 1076.0,
                   "taille": "grand", "petit": [1017.0, 1076.0], "grand": [745.0, 1076.0]}
+# Options d'affichage de la grande case (demande de Joseph du 15/10 : chacune activable dans le réglage, ADJUST)
+RECALL_OPTIONS = [
+    ("sel_button", "SELECT button", True),         # sélection = petit bouton vert « SELECT »
+    ("sel_frame", "Selection frame", False),       # sélection = fond gris clair + contour jaune (comme la LV1)
+    ("cap_alpha", "See-through fader", True),      # capuchon du fader un peu transparent (vumètre visible dessous)
+    ("touch_marker", "Touch arrows", True),        # fader touché : flèches de part et d'autre du capuchon
+    ("touch_outline", "Touch outline", True),      # fader touché : contour blanc de la case
+]
 # Deux hauteurs mémorisées (demande de Joseph, 15/10) : « petit » (nom, couleur, valeur, diode) et « grand »
 # (présentation complète) ; `taille` = celle en cours, y0 / y1 = ses valeurs. Bascule : --taille petit|grand.
 MINI_H = 140                 # bandeau moins haut que ça (px) : présentation « petit »
@@ -240,6 +248,7 @@ GREEN, AMBER, WARN = QColor("#3ddc84"), QColor("#f2b63b"), QColor("#ff5b4d")
 # Couleurs de la tranche LV1 (relevées sur les captures de Joseph du 15/10)
 LV1_BG, LV1_LINE, LV1_SEL, LV1_TXT = "#111111", "#a0a0a0", "#787878", "#e7e7e7"
 LV1_KNOB, LV1_VAL_BG, LV1_BLUE, LV1_GREEN = "#525353", "#363636", "#38c9ff", "#8cff00"
+LV1_SEL_GREEN, LV1_TOUCH = "#2fa84f", "#ffffff"
 COMPACT_W = 70               # case plus étroite que ça (px) : présentation compacte (vumètres + fader par-dessus)
 FADE_STEP = 0.16             # fondu du rappel : ~0,2 s à 30 ms par tour
 # Bandeau ENTIÈREMENT OPAQUE (Joseph, 15/10 : le dégradé de transparence vers le haut a été essayé puis refusé)
@@ -247,6 +256,7 @@ FADE_STEP = 0.16             # fondu du rappel : ~0,2 s à 30 ms par tour
 
 def load_recall_cfg():
     cfg = json.loads(json.dumps(RECALL_DEFAULT))
+    cfg["options"] = {k: d for k, _label, d in RECALL_OPTIONS}
     try:
         with open(CFG_FILE, encoding="utf-8-sig") as f:
             raw = json.load(f)
@@ -273,6 +283,10 @@ def load_recall_cfg():
         if "petit" not in raw or "grand" not in raw:
             cfg[cfg["taille"]] = [cfg["y0"], cfg["y1"]]
         cfg["y0"], cfg["y1"] = cfg[cfg["taille"]]
+        opts = raw.get("options") or {}
+        for k, _label, _d in RECALL_OPTIONS:
+            if k in opts:
+                cfg["options"][k] = bool(opts[k])
     except (TypeError, ValueError, IndexError, KeyError):
         pass
     return cfg
@@ -280,7 +294,7 @@ def load_recall_cfg():
 
 def save_recall_cfg(cfg):
     cfg[cfg["taille"]] = [cfg["y0"], cfg["y1"]]          # la hauteur réglée va dans le profil en cours
-    data = {k: cfg[k] for k in ("ext", "xt", "master", "y0", "y1", "taille", "petit", "grand")}
+    data = {k: cfg[k] for k in ("ext", "xt", "master", "y0", "y1", "taille", "petit", "grand", "options")}
     data["_aide"] = ("Rappel de pistes : blocs [x début, x fin] sur 1920 (Extender 8 cases, X-Touch 8, master 1), "
                      "y0 / y1 = haut / bas du bandeau sur 1080 (profil en cours). Deux hauteurs mémorisées : "
                      "petit / grand ; bascule : py xtouch_overlay_qt.py --taille petit|grand ; "
@@ -359,64 +373,64 @@ class StripRecall(QWidget):
         p.setFont(self.f_tag)
         p.drawText(r, Qt.AlignCenter, text)
 
-    def paint_meters(self, p, m, meters):
-        """1 ou 2 vumètres (stéréo) côte à côte dans le rectangle m."""
-        meters = meters or [None]
-        gap = 2 if len(meters) > 1 else 0
-        mw = (m.width() - gap * (len(meters) - 1)) / len(meters)
-        for k, db in enumerate(meters):
-            b = QRectF(m.left() + k * (mw + gap), m.top(), mw, m.height())
-            p.setPen(Qt.NoPen)
-            p.setBrush(QColor("#25282c"))
-            p.drawRoundedRect(b, 3, 3)
-            fr = meter_frac(db)
-            if fr > 0:
-                h = b.height() * fr
-                g = QLinearGradient(b.bottomLeft(), b.topLeft())
-                g.setColorAt(0, GREEN)
-                g.setColorAt(meter_frac(-12), GREEN)
-                g.setColorAt(meter_frac(-6), AMBER)
-                g.setColorAt(1, WARN)
-                p.setBrush(g)
-                p.drawRoundedRect(QRectF(b.left(), b.bottom() - h, b.width(), h), 3, 3)
-
-    def paint_cap(self, p, cx, cy, w):
-        cap = QRectF(cx - w / 2, cy - 7, w, 14)
-        g = QLinearGradient(cap.topLeft(), cap.bottomLeft())
-        g.setColorAt(0, QColor("#9aa1aa"))
-        g.setColorAt(1, QColor("#4a4f56"))
-        p.setBrush(g)
-        p.setPen(QPen(QColor("#22252a"), 1))
-        p.drawRoundedRect(cap, 3, 3)
-        p.setPen(QPen(QColor(TXT), 1.4))
-        p.drawLine(int(cap.left() + 3), int(cy), int(cap.right() - 3), int(cy))
-
-    def paint_compact(self, p, r, c):
-        """Case étroite (< COMPACT_W, ex. master réglé à 36 px) : couleur + nom court, vumètres sur toute la largeur
-        avec le capuchon du fader par-dessus, valeur en petit (demande de Joseph, 15/10)."""
-        col = QColor(c.get("color") or LINE2)
-        path = QPainterPath()
-        path.addRoundedRect(r, 6, 6)
-        p.save()
-        p.setClipPath(path)
-        p.fillRect(QRectF(r.left(), r.top(), r.width(), 22), col)
-        p.restore()
-        dark = 0.299 * col.red() + 0.587 * col.green() + 0.114 * col.blue() > 150
-        p.setPen(QColor(PANEL) if dark else QColor("#ffffff"))
-        p.setFont(self.f_tag)
-        p.drawText(QRectF(r.left(), r.top(), r.width(), 22), Qt.AlignCenter, (c.get("name") or "")[:3])
-        y = r.top() + 26
+    def paint_compact(self, p, r, c, hot=False):
+        """Case étroite (< COMPACT_W, ex. master réglé à 36 px) au style LV1 (Joseph, 15/10 : « le fader master doit
+        avoir le même style ») : bandeau couleur + nom court, vumètre(s) LV1 sur toute la hauteur, capuchon par-dessus,
+        valeur en petit en bas."""
+        opt = self.cfg.get("options", {})
+        p.setPen(QPen(QColor("#ffffff") if (hot and opt.get("touch_outline", True)) else QColor(LV1_LINE),
+                      2.0 if hot else 1.0))
+        p.setBrush(QColor(LV1_BG))
+        p.drawRoundedRect(r, 4, 4)
+        col = QColor(c.get("color") or LV1_LINE)
+        bar = QRectF(r.left() + 1, r.top() + 1, r.width() - 2, 20)
+        p.setPen(Qt.NoPen)
+        p.setBrush(col)
+        p.drawRect(bar)
+        dark = 0.299 * col.red() + 0.587 * col.green() + 0.114 * col.blue() > 110
+        p.setPen(QColor(LV1_BG) if dark else QColor("#ffffff"))
+        p.setFont(self.lv1_font(11))
+        p.drawText(bar, Qt.AlignCenter, (c.get("name") or "")[:3])
+        y = bar.bottom() + 4
         if c.get("mute"):
-            self.pill(p, QRectF(r.left() + 3, y, r.width() - 6, 15), "M", QColor(225, 22, 32))
-            y += 18
-        bottom = r.bottom() - 20
-        m = QRectF(r.left() + 4, y + 2, r.width() - 8, bottom - y - 4)
-        self.paint_meters(p, m, c.get("meters"))
+            mb = QRectF(r.left() + 3, y, r.width() - 6, 14)
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor(225, 22, 32))
+            p.drawRoundedRect(mb, 3, 3)
+            p.setPen(QColor("#ffffff"))
+            p.setFont(self.lv1_font(10))
+            p.drawText(mb, Qt.AlignCenter, "M")
+            y += 17
+        bottom = r.bottom() - 18
+        top_f, bot_f = y + 8, bottom - 8
+        meters = c.get("meters") or [None]
+        gap = 2.0
+        bw = (r.width() - 12 - gap * (len(meters) - 1)) / len(meters)
+        for k, db in enumerate(meters):
+            m = QRectF(r.left() + 6 + k * (bw + gap), top_f, bw, bot_f - top_f)
+            self.lv1_meter(p, m, db)
         if c.get("pos") is not None:
-            self.paint_cap(p, m.center().x(), m.bottom() - m.height() * c["pos"], r.width() - 4)
-        p.setPen(QColor(TXT))
-        p.setFont(self.f_tag)
-        p.drawText(QRectF(r.left() - 2, bottom, r.width() + 4, 18), Qt.AlignCenter, c.get("value", ""))
+            self.lv1_cap(p, r.center().x(), bot_f - (bot_f - top_f) * c["pos"], r.width() - 6, 14, hot)
+        p.setPen(QColor(LV1_TXT))
+        p.setFont(self.lv1_font(10))
+        p.drawText(QRectF(r.left() - 2, bottom, r.width() + 4, 16), Qt.AlignCenter, c.get("value", ""))
+
+    def lv1_meter(self, p, m, db):
+        """Une barre de vumètre LV1 (fond #363636, vert #8cff00, jaune puis rouge en haut), échelle du fader."""
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(LV1_VAL_BG))
+        p.drawRect(m)
+        fr = self.fader_frac(db) if db is not None and db > -100 else 0.0
+        if fr > 0:
+            h = m.height() * fr
+            g = QLinearGradient(m.bottomLeft(), m.topLeft())
+            g.setColorAt(0, QColor(LV1_GREEN))
+            g.setColorAt(max(0.0, self.fader_frac(-9) - 0.001), QColor(LV1_GREEN))
+            g.setColorAt(self.fader_frac(-9), QColor(255, 210, 0))
+            g.setColorAt(max(self.fader_frac(-9), self.fader_frac(0)), QColor(255, 60, 40))
+            g.setColorAt(1, QColor(255, 60, 40))
+            p.setBrush(g)
+            p.drawRect(QRectF(m.left(), m.bottom() - h, m.width(), h))
 
     def paint_mini(self, p, r, c, hot, send):
         """Bandeau « petit » : couleur + nom en haut, valeur + diode(s) de vumètre en bas (2 en stéréo)."""
@@ -462,10 +476,7 @@ class StripRecall(QWidget):
             self.paint_mini(p, r, c, hot, send)
             return
         if c and r.width() < COMPACT_W:
-            p.setPen(QPen(QColor("#ffffff") if hot else QColor(LINE2), 2.0 if hot else 1.0))
-            p.setBrush(QColor("#1b1d20") if hot else QColor(PANEL))
-            p.drawRoundedRect(r, 6, 6)
-            self.paint_compact(p, r, c)
+            self.paint_compact(p, r, c, hot)
             return
         self.paint_lv1(p, r, c, hot, send)
 
@@ -475,11 +486,14 @@ class StripRecall(QWidget):
         bouton de pan #525353 (arc bleu #38c9ff), MUTE, valeur #38c9ff sur #363636, niveau du vumètre, fader sur le
         vumètre vert #8cff00 avec l'échelle LV1 à droite, bandeau couleur + nom, bouton casque (solo).
         Sélection : fond #787878 + contour jaune ; fader touché : contour blanc."""
+        opt = self.cfg.get("options", {})
         sel = bool(c and c.get("sel"))
+        frame_sel = sel and opt.get("sel_frame")
+        hot_line = hot and opt.get("touch_outline", True)
         H, W = r.height(), r.width()
-        p.setPen(QPen(QColor("#ffffff") if hot else (QColor(255, 242, 0) if sel else QColor(LV1_LINE)),
-                      2.0 if (hot or sel) else 1.0))
-        p.setBrush(QColor(LV1_SEL) if sel else QColor(LV1_BG))
+        p.setPen(QPen(QColor("#ffffff") if hot_line else (QColor(255, 242, 0) if frame_sel else QColor(LV1_LINE)),
+                      2.0 if (hot_line or frame_sel) else 1.0))
+        p.setBrush(QColor(LV1_SEL) if frame_sel else QColor(LV1_BG))
         p.drawRoundedRect(r, 4, 4)
         if not c:
             return
@@ -527,27 +541,21 @@ class StripRecall(QWidget):
                    "-Inf" if mv is None or mv <= -100 else "%.1f" % mv)
         # zone fader : vumètre(s) sous le fader, échelle LV1 à droite
         top_f, bot_f = y0 + H * 0.385, y0 + H * 0.775
+        if sel and opt.get("sel_button", True):           # sélection : petit bouton vert « SELECT » (Joseph, 15/10)
+            sb = QRectF(x0 + W * 0.04, y0 + H * 0.324, W * 0.36, H * 0.052)
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor(LV1_SEL_GREEN))
+            p.drawRoundedRect(sb, 3, 3)
+            p.setPen(QColor("#ffffff"))
+            p.setFont(self.lv1_font(min(H * 0.04, W * 0.095)))
+            p.drawText(sb, Qt.AlignCenter, "SELECT")
         fx = x0 + W * 0.46
         meters = c.get("meters") or [None]
         bw = max(4.0, W * 0.075)
         gap = 3.0
         tot = bw * len(meters) + gap * (len(meters) - 1)
         for k, db in enumerate(meters):
-            m = QRectF(fx - tot / 2 + k * (bw + gap), top_f, bw, bot_f - top_f)
-            p.setPen(Qt.NoPen)
-            p.setBrush(QColor(LV1_VAL_BG))
-            p.drawRect(m)
-            fr = self.fader_frac(db) if db is not None and db > -100 else 0.0
-            if fr > 0:
-                h = m.height() * fr
-                g = QLinearGradient(m.bottomLeft(), m.topLeft())
-                g.setColorAt(0, QColor(LV1_GREEN))
-                g.setColorAt(max(0.0, self.fader_frac(-9) - 0.001), QColor(LV1_GREEN))
-                g.setColorAt(self.fader_frac(-9), QColor(255, 210, 0))
-                g.setColorAt(max(self.fader_frac(-9), self.fader_frac(0)), QColor(255, 60, 40))
-                g.setColorAt(1, QColor(255, 60, 40))
-                p.setBrush(g)
-                p.drawRect(QRectF(m.left(), m.bottom() - h, m.width(), h))
+            self.lv1_meter(p, QRectF(fx - tot / 2 + k * (bw + gap), top_f, bw, bot_f - top_f), db)
         p.setFont(self.lv1_font(H * 0.034))
         sx = x0 + W * 0.66
         for mark, lab in ((10, "10"), (0, "0"), (-10, "10"), (-20, "20"), (-30, "30"), (-50, "50"), (None, "\u221e")):
@@ -565,18 +573,7 @@ class StripRecall(QWidget):
             p.restore()
         pos = c.get("pos")
         if pos is not None:
-            cw, ch_ = max(18.0, W * 0.34), max(16.0, H * 0.075)
-            cy = bot_f - (bot_f - top_f) * pos
-            cap = QRectF(fx - cw / 2, cy - ch_ / 2, cw, ch_)
-            g = QLinearGradient(cap.topLeft(), cap.bottomLeft())
-            g.setColorAt(0, QColor("#d2d2d2"))
-            g.setColorAt(0.45, QColor("#9b9b9b"))
-            g.setColorAt(1, QColor("#6e6e6e"))
-            p.setPen(QPen(QColor("#3a3a3a"), 1.0))
-            p.setBrush(g)
-            p.drawRoundedRect(cap, 3, 3)
-            p.setPen(QPen(QColor("#2b2b2b"), 1.4))
-            p.drawLine(QPointF(cap.left() + 3, cy), QPointF(cap.right() - 3, cy))
+            self.lv1_cap(p, fx, bot_f - (bot_f - top_f) * pos, max(18.0, W * 0.34), max(16.0, H * 0.075), hot)
         # bandeau à la couleur du canal : nom (le numéro LV1 à droite)
         col = QColor(c.get("color") or LV1_LINE)
         bar = QRectF(x0 + 1, y0 + H * 0.815, W - 2, H * 0.075)
@@ -599,6 +596,38 @@ class StripRecall(QWidget):
         p.setBrush(QColor(255, 242, 0) if solo else Qt.NoBrush)
         p.drawRoundedRect(cb, 4, 4)
         self.paint_headphones(p, cb.center(), cb.height() * 0.62, QColor(LV1_BG) if solo else QColor(LV1_TXT))
+
+    def lv1_cap(self, p, cx, cy, cw, ch_, hot):
+        """Capuchon du fader LV1 ; un peu transparent (option) pour voir le vumètre dessous ; flèches si touché."""
+        opt = self.cfg.get("options", {})
+        cap = QRectF(cx - cw / 2, cy - ch_ / 2, cw, ch_)
+        p.save()
+        if opt.get("cap_alpha", True):
+            p.setOpacity(0.62)
+        g = QLinearGradient(cap.topLeft(), cap.bottomLeft())
+        g.setColorAt(0, QColor("#d2d2d2"))
+        g.setColorAt(0.45, QColor("#9b9b9b"))
+        g.setColorAt(1, QColor("#6e6e6e"))
+        p.setPen(QPen(QColor("#3a3a3a"), 1.0))
+        p.setBrush(g)
+        p.drawRoundedRect(cap, 3, 3)
+        p.setOpacity(1.0)
+        p.setPen(QPen(QColor("#1e1e1e"), 1.6))
+        p.drawLine(QPointF(cap.left() + 3, cy), QPointF(cap.right() - 3, cy))
+        p.restore()
+        if hot and opt.get("touch_marker", True):        # fader touché : flèches de part et d'autre (Joseph, 15/10)
+            a = max(5.0, ch_ * 0.42)
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor(LV1_TOUCH))
+            for side in (-1, 1):
+                tip = cap.left() - 2 if side < 0 else cap.right() + 2
+                base = tip - side * a * 1.1
+                path = QPainterPath()
+                path.moveTo(tip, cy)
+                path.lineTo(base, cy - a)
+                path.lineTo(base, cy + a)
+                path.closeSubpath()
+                p.drawPath(path)
 
     def paint_headphones(self, p, ctr, size, color):
         p.setPen(QPen(color, max(1.5, size * 0.12), Qt.SolidLine, Qt.RoundCap))
@@ -654,6 +683,12 @@ class RecallSetup(QWidget):
         cx = self.width() / 2
         return {"save": QRectF(cx - 210, 40, 200, 46), "cancel": QRectF(cx + 10, 40, 200, 46)}
 
+    def toggles(self):
+        """Interrupteurs des options d'affichage (RECALL_OPTIONS), en ligne sous la consigne."""
+        w, gap = 190, 10
+        x = self.width() / 2 - (len(RECALL_OPTIONS) * (w + gap) - gap) / 2
+        return {k: QRectF(x + i * (w + gap), 140, w, 36) for i, (k, _l, _d) in enumerate(RECALL_OPTIONS)}
+
     def block_rect(self, key):
         x0, x1 = self.cfg[key]
         return QRectF(x0 * self.k, self.cfg["y0"] * self.ky, (x1 - x0) * self.k, (self.cfg["y1"] - self.cfg["y0"]) * self.ky)
@@ -687,11 +722,23 @@ class RecallSetup(QWidget):
         p.setFont(self.f)
         p.drawText(QRectF(0, 96, self.width(), 30), Qt.AlignCenter,
                    "Glisse les bords pour étirer, l'intérieur pour déplacer, le haut / bas pour la hauteur")
+        opts = self.cfg.get("options", {})
+        for k, label, _d in RECALL_OPTIONS:
+            r = self.toggles()[k]
+            on = opts.get(k, False)
+            p.setPen(QPen(QColor(LV1_LINE), 1.0))
+            p.setBrush(QColor(LV1_BLUE) if on else QColor(PANEL))
+            p.drawRoundedRect(r, 8, 8)
+            p.setPen(QColor(PANEL) if on else QColor(TXT))
+            p.drawText(r, Qt.AlignCenter, ("✓ " if on else "") + label)
 
     def hit(self, pos):
         for name, r in self.buttons().items():
             if r.contains(pos):
                 return ("button", name)
+        for k, r in self.toggles().items():
+            if r.contains(pos):
+                return ("toggle", k)
         y0, y1 = self.cfg["y0"] * self.ky, self.cfg["y1"] * self.ky
         for key, _l, _n, _c in self.BLOCKS:
             r = self.block_rect(key)
@@ -710,6 +757,10 @@ class RecallSetup(QWidget):
     def mousePressEvent(self, e):
         pos = e.position()
         h = self.hit(pos)
+        if h and h[0] == "toggle":                      # option d'affichage : bascule (enregistrée avec ENREGISTRER)
+            self.cfg.setdefault("options", {})[h[1]] = not self.cfg.get("options", {}).get(h[1], False)
+            self.update()
+            return
         if h and h[0] == "button":
             if h[1] == "save":
                 save_recall_cfg(self.cfg)

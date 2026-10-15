@@ -261,6 +261,9 @@ Messages vérifiés :
   (pan de l'envoi en sends), MUTE (rouge), valeur #38c9ff sur #363636, niveau du vumètre, fader posé SUR le vumètre
   (#8cff00), échelle LV1 à droite, bandeau couleur + nom + n°, bouton casque = solo (jaune), « Send Level » vertical
   en sends ; couleurs relevées sur ses captures (LV1_*). Gain X32 / 48V / pastilles retirés de la grande case.
+  Options d'affichage (`RECALL_OPTIONS`, interrupteurs dans le réglage ADJUST, `options` de xtouch_ecran.json) :
+  bouton vert SELECT (défaut) / cadre jaune + fond gris de la LV1, capuchon transparent, flèches de toucher, contour
+  blanc. Master étroit au même style (`paint_compact`, `lv1_meter`, `lv1_cap`).
   **Deux hauteurs mémorisées** (demande de Joseph, futur bouton « agrandir / rapetisser » de l'appli) : `taille`
   petit | grand dans `xtouch_ecran.json`, chacune avec son [y0, y1] ; `--taille petit|grand` bascule (à chaud),
   `--reglage` règle le profil en cours. Pendant le CHOIX de l'aux (SEND), l'overlay montre les aux de la page (comme les écrans X-Touch). **Boutons à l'écran** (`RecallButtons`, demande de Joseph) : ▲ LARGE / ▼ SMALL + ⚙ ADJUST,
