@@ -237,7 +237,7 @@ RECALL_OPTIONS = [
     ("sel_button", "SELECT button", True),         # sélection = petit bouton vert « SELECT »
     ("sel_frame", "Selection frame", False),       # sélection = fond gris clair + contour jaune (comme la LV1)
     ("cap_alpha", "See-through fader", True),      # capuchon du fader un peu transparent (vumètre visible dessous)
-    ("touch_marker", "Touch arrows", True),        # fader touché : flèches de part et d'autre du capuchon
+    ("touch_dot", "Touch dot", True),              # fader touché : point bleu AU-DESSUS de la tranche (Joseph, 15/10)
     ("touch_outline", "Touch outline", True),      # fader touché : contour blanc de la case
 ]
 # Deux hauteurs mémorisées (demande de Joseph, 15/10) : « petit » (nom, couleur, valeur, diode) et « grand »
@@ -248,7 +248,8 @@ GREEN, AMBER, WARN = QColor("#3ddc84"), QColor("#f2b63b"), QColor("#ff5b4d")
 # Couleurs de la tranche LV1 (relevées sur les captures de Joseph du 15/10)
 LV1_BG, LV1_LINE, LV1_SEL, LV1_TXT = "#111111", "#a0a0a0", "#787878", "#e7e7e7"
 LV1_KNOB, LV1_VAL_BG, LV1_BLUE, LV1_GREEN = "#525353", "#363636", "#38c9ff", "#8cff00"
-LV1_SEL_GREEN, LV1_TOUCH = "#2fa84f", "#ffffff"
+LV1_SEL_GREEN, LV1_TOUCH = "#2fa84f", "#2b78e4"
+DOT_PAD = 18                 # px transparents au-dessus du bandeau, pour le point de toucher
 COMPACT_W = 70               # case plus étroite que ça (px) : présentation compacte (vumètres + fader par-dessus)
 FADE_STEP = 0.16             # fondu du rappel : ~0,2 s à 30 ms par tour
 # Bandeau ENTIÈREMENT OPAQUE (Joseph, 15/10 : le dégradé de transparence vers le haut a été essayé puis refusé)
@@ -358,12 +359,20 @@ class StripRecall(QWidget):
         cells = self.data.get("cells") or []
         touched = set(self.data.get("touched") or [])
         send = self.data.get("send")
-        p.fillRect(self.rect(), QColor(LV1_BG))             # fond plein, comme la LV1
+        pad = DOT_PAD                                       # bande transparente du haut : points de toucher
+        p.fillRect(QRectF(0, pad, self.width(), self.height() - pad), QColor(LV1_BG))   # fond plein, comme la LV1
+        h = self.height() - pad
+        dot = self.cfg.get("options", {}).get("touch_dot", True)
         for i, (cx, cw) in enumerate(recall_cells(self.width(), self.cfg)):
             if i >= len(cells):
                 break
-            mg = 2 if self.height() < MINI_H else 4
-            self.paint_cell(p, QRectF(cx + 2, mg, cw - 4, self.height() - 2 * mg), cells[i], i in touched, send)
+            mg = 2 if h < MINI_H else 4
+            self.paint_cell(p, QRectF(cx + 2, pad + mg, cw - 4, h - 2 * mg), cells[i], i in touched, send)
+            if dot and i in touched and cells[i]:            # point bleu au-dessus de la tranche touchée
+                rd = min(8.0, pad / 2 - 1, cw / 4)
+                p.setPen(QPen(QColor("#0b2f66"), 1.0))
+                p.setBrush(QColor(LV1_TOUCH))
+                p.drawEllipse(QPointF(cx + cw / 2, pad - rd - 1), rd, rd)
 
     def pill(self, p, r, text, fill, fg="#ffffff"):
         p.setPen(Qt.NoPen)
@@ -472,7 +481,7 @@ class StripRecall(QWidget):
                    ("> " if send else "") + c.get("value", ""))
 
     def paint_cell(self, p, r, c, hot, send):
-        if c and self.height() < MINI_H:
+        if c and self.height() - DOT_PAD < MINI_H:
             self.paint_mini(p, r, c, hot, send)
             return
         if c and r.width() < COMPACT_W:
@@ -615,19 +624,6 @@ class StripRecall(QWidget):
         p.setPen(QPen(QColor("#1e1e1e"), 1.6))
         p.drawLine(QPointF(cap.left() + 3, cy), QPointF(cap.right() - 3, cy))
         p.restore()
-        if hot and opt.get("touch_marker", True):        # fader touché : flèches de part et d'autre (Joseph, 15/10)
-            a = max(5.0, ch_ * 0.42)
-            p.setPen(Qt.NoPen)
-            p.setBrush(QColor(LV1_TOUCH))
-            for side in (-1, 1):
-                tip = cap.left() - 2 if side < 0 else cap.right() + 2
-                base = tip - side * a * 1.1
-                path = QPainterPath()
-                path.moveTo(tip, cy)
-                path.lineTo(base, cy - a)
-                path.lineTo(base, cy + a)
-                path.closeSubpath()
-                p.drawPath(path)
 
     def paint_headphones(self, p, ctr, size, color):
         p.setPen(QPen(color, max(1.5, size * 0.12), Qt.SolidLine, Qt.RoundCap))
@@ -967,7 +963,7 @@ class Overlay:
             return
         x, y, w, h = self.rect
         cfg = self.recall.cfg
-        geo = (x, y + round(cfg["y0"] * h / 1080.0), w, round((cfg["y1"] - cfg["y0"]) * h / 1080.0))
+        geo = (x, y + round(cfg["y0"] * h / 1080.0) - DOT_PAD, w, round((cfg["y1"] - cfg["y0"]) * h / 1080.0) + DOT_PAD)
         if self.recall.geometry().getRect() != geo:
             self.recall.setGeometry(*geo)
         self.recall.setWindowOpacity(self.recall_alpha)     # fondu d'apparition / disparition
