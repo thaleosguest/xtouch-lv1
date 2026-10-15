@@ -2,11 +2,12 @@
 -- 16/10/2026 : Reaper réduit aux pistes + vumètres, comme Tracks Live 2.
 --   * une colonne par piste : n° (canal LV1 si la piste est synchronisée, sinon n° de piste), couleur, nom court,
 --     vumètre (2 barres si stéréo), maintien de crête 1,5 s, voyant rouge d'écrêtage (clic = effacer), « R » si armée ;
---   * losange à droite : largeur fixe (molette = défilement) <-> toutes les colonnes tiennent dans la fenêtre ;
+--   * ÉCRAN TACTILE (Joseph, 16/10) : gros boutons, pas de clic droit nécessaire (bouton MENU), colonnes larges,
+--     glisser le doigt sur les vumètres = défiler ; FIT = toutes les colonnes tiennent dans la fenêtre ;
 --   * à gauche : ARM ALL (tout armer / tout désarmer) et MON (monitoring d'entrée de toutes les pistes, OFF -> ON ->
---     AUTO) ; « R » en bas d'une colonne = armer cette piste (demande de Joseph du 16/10) ;
+--     AUTO) ; W - / W + = hauteur des formes d'onde (zoom d'amplitude, affichage seulement) ; « R » en bas d'une colonne = armer cette piste (demande de Joseph du 16/10) ;
 --   * clic sur une colonne = sélectionne la piste et la fait défiler dans la vue ;
---   * clic droit : afficher/cacher la table de mixage et la piste master (vue « pistes seulement »), hauteur de toutes
+--   * MENU (ou clic droit) : afficher/cacher la table de mixage et la piste master (vue « pistes seulement »), hauteur de toutes
 --     les pistes (comme le sélecteur « Micro » de Tracks Live), pistes LV1 seulement, ancrer / détacher.
 -- Les vumètres sont ceux de Reaper (Track_GetPeakInfo) : piste armée = niveau d'ENTRÉE si l'option de Reaper
 -- « afficher l'entrée des pistes armées » est active (à vérifier chez Joseph).
@@ -19,9 +20,11 @@
 local EXT = "lv1_meter_bridge"
 local DB_MIN, DB_MAX = -60, 0           -- échelle : barre pleine = 0 dBFS (comme Tracks Live)
 local HOLD, FALL = 1.5, 30              -- maintien de crête (s), retombée du vumètre (dB/s)
-local COL_W, COL_MIN = 34, 10           -- largeur fixe d'une colonne / minimum en mode « tout voir »
-local PANEL_W = 56                      -- boutons globaux à gauche (ARM ALL, MON), puis l'échelle
-local HEAD_H, FOOT_H, SIDE_W = 34, 16, PANEL_W + 22
+local COL_W, COL_MIN = 44, 10           -- largeur fixe d'une colonne / minimum en mode « tout voir »
+local BTN_W, BTN_H = 70, 40             -- boutons tactiles (2 colonnes x 3 rangées) à gauche, puis l'échelle
+local PANEL_W = 3 * 4 + 2 * BTN_W
+local HEAD_H, FOOT_H, SIDE_W = 34, 28, PANEL_W + 22
+local DRAG_MIN = 10                     -- px : au-delà, un doigt posé sur les vumètres fait défiler (pas de clic)
 local MON_MODES = {{0, "OFF"}, {1, "ON"}, {2, "AUTO"}}  -- I_RECMON : 0 off, 1 entrée, 2 auto (« tape auto style »)
 local HEIGHTS = {{"Micro", 24}, {"Small", 40}, {"Medium", 64}, {"Large", 100}, {"Extreme", 160}}
 local TICKS = {0, -6, -12, -18, -30, -42, -60}
@@ -38,7 +41,7 @@ local meters = {}                       -- GUID -> {lvl = {dB, dB}, peak = {dB, 
 local cols = {}                         -- colonnes dessinées : {x, w, tr}
 local last_t = reaper.time_precise()
 local mouse_was = 0
-local tip_tr = nil                      -- piste dont le nom est en info-bulle
+local press = nil                       -- doigt posé sur les colonnes : {x, y, scroll, drag}
 
 local function db_of(v)
   if v <= 0 then return -150 end
@@ -141,10 +144,13 @@ local function draw_column(t, m, x, w, top, bottom)
   else
     draw_bar(x + 2, top, inner, h, m.lvl[1], m.peak[1])
   end
-  do                                                       -- R : rouge si armée, gris sinon (clic = armer)
-    if reaper.GetMediaTrackInfo_Value(tr, "I_RECARM") == 1 then gfx.set(0.95, 0.2, 0.18, 1) else set(DIM, 0.6) end
+  do                                                       -- R : case rouge si armée, grise sinon (toucher = armer)
+    local armed = reaper.GetMediaTrackInfo_Value(tr, "I_RECARM") == 1
+    if armed then gfx.set(0.95, 0.2, 0.18, 1) else set({0.22, 0.24, 0.27}) end
+    gfx.rect(x + 2, bottom + 3, w - 5, FOOT_H - 5, 1)
+    if armed then gfx.set(0.05, 0.05, 0.05, 1) else set(DIM) end
     gfx.setfont(1)
-    gfx.x, gfx.y = x + math.floor((w - 1 - gfx.measurestr("R")) / 2), bottom + 2
+    gfx.x, gfx.y = x + math.floor((w - 1 - gfx.measurestr("R")) / 2), bottom + 3 + math.floor((FOOT_H - 5 - gfx.texth) / 2)
     gfx.drawstr("R")
   end
 end
@@ -162,6 +168,24 @@ local function draw_scale(top, bottom)
   end
 end
 
+-- Hauteur des formes d'onde (comme le zoom d'amplitude de Tracks Live) : actions « View: Increase / Decrease peaks
+-- view gain », cherchées par leur NOM dans la liste d'actions (n° non vérifiés de mémoire).
+local function find_action(words)
+  if not reaper.kbd_enumerateActions then return nil end
+  local i = 0
+  while true do
+    local id, name = reaper.kbd_enumerateActions(0, i)
+    if not id or id == 0 then return nil end
+    local low = name:lower()
+    local all = true
+    for _, w in ipairs(words) do if not low:find(w, 1, true) then all = false end end
+    if all then return id end
+    i = i + 1
+  end
+end
+local WAVE_UP = find_action({"increase", "peaks view gain"})
+local WAVE_DOWN = find_action({"decrease", "peaks view gain"})
+
 local buttons = {}                      -- boutons globaux dessinés : {x, y, w, h, act}
 
 -- État commun des pistes affichées : true / false si toutes pareilles, nil si mélangé
@@ -178,7 +202,7 @@ local function button(x, y, w, h, label, on, act, color)
   set(on and (color or {0.95, 0.2, 0.18}) or {0.22, 0.24, 0.27})
   gfx.rect(x, y, w, h, 1)
   set(on and {0.05, 0.05, 0.05} or TEXT)
-  gfx.setfont(2)
+  gfx.setfont(1)
   gfx.x, gfx.y = x + math.floor((w - gfx.measurestr(label)) / 2), y + math.floor((h - gfx.texth) / 2)
   gfx.drawstr(label)
   buttons[#buttons + 1] = {x = x, y = y, w = w, h = h, act = act}
@@ -186,24 +210,20 @@ end
 
 local function draw_panel(list)
   buttons = {}
+  local bh = math.max(24, math.min(BTN_H, math.floor((gfx.h - 6) / 3) - 4))   -- fenêtre basse : boutons réduits
+  local x1, x2 = 4, 8 + BTN_W
+  local row = function(k) return 6 + k * (bh + 4) end
   local arm = common(list, "I_RECARM")
-  button(4, 6, PANEL_W - 8, 22, arm == 1 and "ARMED" or "ARM ALL", arm == 1, "arm")
+  button(x1, row(0), BTN_W, bh, arm == 1 and "ARMED" or "ARM ALL", arm == 1, "arm")
   local mon = common(list, "I_RECMON")
   local label = "MON ?"
   for _, m in ipairs(MON_MODES) do if mon == m[1] then label = "MON " .. m[2] end end
   if #list == 0 then label = "MON" end
-  button(4, 34, PANEL_W - 8, 22, label, mon == 1 or mon == 2, "mon", {0.95, 0.75, 0.2})
-end
-
-local function draw_diamond(cx, cy, filled)
-  set(TEXT)
-  local r = 5
-  if filled then
-    gfx.triangle(cx, cy - r, cx + r, cy, cx, cy + r, cx - r, cy)
-  else
-    gfx.line(cx, cy - r, cx + r, cy); gfx.line(cx + r, cy, cx, cy + r)
-    gfx.line(cx, cy + r, cx - r, cy); gfx.line(cx - r, cy, cx, cy - r)
-  end
+  button(x2, row(0), BTN_W, bh, label, mon == 1 or mon == 2, "mon", {0.95, 0.75, 0.2})
+  button(x1, row(1), BTN_W, bh, WAVE_DOWN and "WAVE -" or "?", false, "wave_down")
+  button(x2, row(1), BTN_W, bh, WAVE_UP and "WAVE +" or "?", false, "wave_up")
+  button(x1, row(2), BTN_W, bh, "FIT", fit, "fit", {0.22, 0.79, 1.0})
+  button(x2, row(2), BTN_W, bh, "MENU", false, "menu")
 end
 
 local function draw()
@@ -214,7 +234,7 @@ local function draw()
   gfx.rect(0, 0, gfx.w, gfx.h, 1)
   local list = tracks()
   local top, bottom = HEAD_H + 6, gfx.h - FOOT_H
-  local area = gfx.w - SIDE_W - 18                         -- 18 px à droite pour le losange
+  local area = gfx.w - SIDE_W
   local w = COL_W
   if fit and #list > 0 then w = math.max(COL_MIN, math.floor(area / #list)) end
   local max_scroll = math.max(0, #list * w - area)
@@ -234,9 +254,6 @@ local function draw()
   end
   draw_scale(top, bottom)
   draw_panel(list)
-  set(BG)
-  gfx.rect(gfx.w - 18, 0, 18, gfx.h, 1)
-  draw_diamond(gfx.w - 9, 12, fit)
   if #list == 0 then
     set(DIM); gfx.setfont(1)
     gfx.x, gfx.y = SIDE_W + 8, top
@@ -282,11 +299,19 @@ local function set_all(list, key, v, what)
   reaper.Undo_EndBlock("LV1 bridge: " .. what, -1)
 end
 
-local function click(x, y)
+local function click(x, y)                                 -- boutons : dès l'appui
   for _, b in ipairs(buttons) do
     if x >= b.x and x < b.x + b.w and y >= b.y and y < b.y + b.h then
       local list = tracks()
-      if b.act == "arm" then                               -- tout armé -> tout désarmer, sinon tout armer
+      if b.act == "menu" then menu()
+      elseif b.act == "fit" then
+        fit = not fit
+        reaper.SetExtState(EXT, "fit", fit and "1" or "0", true)
+      elseif b.act == "wave_up" or b.act == "wave_down" then  -- hauteur des formes d'onde
+        local id = b.act == "wave_up" and WAVE_UP or WAVE_DOWN
+        if id then reaper.Main_OnCommand(id, 0)
+        else reaper.ShowConsoleMsg("LV1 Meter Bridge: action 'peaks view gain' not found\n") end
+      elseif b.act == "arm" then                               -- tout armé -> tout désarmer, sinon tout armer
         local on = common(list, "I_RECARM") == 1
         set_all(list, "I_RECARM", on and 0 or 1, on and "disarm all" or "arm all")
       else                                                 -- OFF -> ON -> AUTO -> OFF (mélangé -> OFF)
@@ -297,12 +322,9 @@ local function click(x, y)
       return
     end
   end
-  if x < SIDE_W then return end
-  if x >= gfx.w - 18 then
-    fit = not fit
-    reaper.SetExtState(EXT, "fit", fit and "1" or "0", true)
-    return
-  end
+end
+
+local function tap(x, y)                                   -- doigt levé sans glisser sur une colonne
   for _, c in ipairs(cols) do
     if x >= c.x and x < c.x + c.w then
       if c.m.clip and y < HEAD_H + 6 then c.m.clip = false return end
@@ -321,26 +343,21 @@ end
 local function loop()
   local max_scroll = draw()
   local cap = gfx.mouse_cap
-  if cap & 1 == 1 and mouse_was & 1 == 0 then click(gfx.mouse_x, gfx.mouse_y) end
+  local mx, my = gfx.mouse_x, gfx.mouse_y
+  if cap & 1 == 1 and mouse_was & 1 == 0 then
+    if mx < SIDE_W then click(mx, my) else press = {x = mx, y = my, scroll = scroll, drag = false} end
+  elseif cap & 1 == 1 and press then                       -- glisser = défiler (largeur fixe)
+    if math.abs(mx - press.x) > DRAG_MIN then press.drag = true end
+    if press.drag then scroll = math.max(0, math.min(max_scroll, press.scroll - (mx - press.x))) end
+  elseif cap & 1 == 0 and press then
+    if not press.drag then tap(press.x, press.y) end
+    press = nil
+  end
   if cap & 2 == 2 and mouse_was & 2 == 0 then menu() end
   mouse_was = cap
   if gfx.mouse_wheel ~= 0 then
     scroll = math.max(0, math.min(max_scroll, scroll - gfx.mouse_wheel / 120 * COL_W))
     gfx.mouse_wheel = 0
-  end
-  local hover = nil                                        -- nom complet en info-bulle
-  for _, c in ipairs(cols) do
-    if gfx.mouse_x >= c.x and gfx.mouse_x < c.x + c.w and gfx.mouse_y >= 0 and gfx.mouse_y < gfx.h then hover = c.tr end
-  end
-  if hover ~= tip_tr then
-    tip_tr = hover
-    if hover then
-      local _, name = reaper.GetTrackName(hover)
-      local sx, sy = gfx.clienttoscreen(gfx.mouse_x, gfx.mouse_y)
-      reaper.TrackCtl_SetToolTip(name, sx + 12, sy + 12, true)
-    else
-      reaper.TrackCtl_SetToolTip("", 0, 0, true)
-    end
   end
   gfx.update()
   if gfx.getchar() >= 0 then reaper.defer(loop) end

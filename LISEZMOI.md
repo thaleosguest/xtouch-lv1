@@ -321,23 +321,22 @@ synchro en mode NON et laisse l'entrée en « Channel N » sur la LV1 pour qu'el
 
 Charger `reaper/lv1_meter_bridge.lua` (Actions > New action > Load ReaScript…) et le lancer. La fenêtre
 « LV1 Meter Bridge » s'ancre dans le docker. Pour la mettre en haut comme dans Tracks Live : clic droit sur l'onglet du
-docker > Attach docker to: Top.
+docker > Attach docker to: Top. Tout se fait au doigt (écran tactile) ; le clic droit marche aussi mais n'est pas nécessaire.
 
-- Une colonne par piste : n° du canal LV1, couleur, nom court (nom complet au survol), vumètre (2 barres si stéréo)
-  avec maintien de crête et voyant rouge d'écrêtage (clic dessus = effacer), « R » rouge si la piste est armée.
-- Clic sur une colonne = sélectionne la piste et la montre dans la vue.
-- À gauche :
-  - **ARM ALL** : arme toutes les pistes affichées ; le bouton devient rouge « ARMED », un 2e clic désarme tout ;
-  - **MON** : monitoring d'entrée de toutes les pistes d'un coup, OFF -> ON -> AUTO -> OFF (« MON ? » = réglages
-    mélangés, le clic les remet à OFF).
-- **R** en bas d'une colonne : arme ou désarme cette piste seule.
+- Une colonne par piste : n° du canal LV1, couleur, nom court, vumètre (2 barres si stéréo) avec maintien de crête et
+  voyant rouge d'écrêtage (toucher le haut de la colonne = effacer).
+- Toucher une colonne = sélectionne la piste et la montre dans la vue ; glisser le doigt = faire défiler les colonnes.
+- Case **R** en bas de chaque colonne : arme ou désarme cette piste (rouge = armée).
+- Boutons à gauche :
+  - **ARM ALL** : arme toutes les pistes affichées (rouge « ARMED ») ; 2e appui = tout désarmer ;
+  - **MON** : monitoring d'entrée de toutes les pistes, OFF -> ON -> AUTO -> OFF (« MON ? » = réglages mélangés,
+    l'appui les remet à OFF) ;
+  - **WAVE - / WAVE +** : hauteur des formes d'onde (affichage seulement, le son ne change pas) ; « ? » = action
+    introuvable dans ce Reaper ;
+  - **FIT** : toutes les colonnes tiennent dans la fenêtre (bleu) ou largeur fixe ;
+  - **MENU** : Show mixer / Show master track (les décocher = vue « pistes seulement »), hauteur de toutes les pistes
+    (Micro … Extreme), pistes LV1 seulement, effacer les écrêtages, ancrer / détacher.
 - Les pistes créées par la synchro sont désarmées, monitoring OFF.
-- Losange à droite = toutes les colonnes tiennent dans la fenêtre, ou largeur fixe (défilement à la molette).
-- Clic droit :
-  - **Show mixer** et **Show master track** (les décocher toutes les deux = vue « pistes seulement ») ;
-  - hauteur de toutes les pistes (Micro … Extreme) ;
-  - pistes LV1 seulement ;
-  - ancrer / détacher.
 - Relancer l'action = fermer la fenêtre.
 
 À vérifier : sur une piste armée, le vumètre montre-t-il bien le signal d'ENTRÉE (avant de lancer l'enregistrement) ?
