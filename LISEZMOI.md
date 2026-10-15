@@ -201,7 +201,7 @@ Le réglage (`--reglage`) modifie la taille en cours.
 
 **Boutons à l'écran** : avec le bandeau apparaissent deux boutons en bas à gauche de la LV1 (sous Output L/R ;
 remontés au-dessus du bandeau en taille grand) : ▲ LARGE / ▼ SMALL bascule la taille, ⚙ ADJUST ouvre le réglage.
-Ils restent 3 s après la disparition du bandeau ; pointeur dessus = le bandeau reste affiché.
+Ils font partie du bandeau (même apparition, même disparition) : on tient un fader et on appuie sur le bouton.
 
 ## Sends on fader (SEND)
 
