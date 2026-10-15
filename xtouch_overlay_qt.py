@@ -194,7 +194,8 @@ class AbBadge(QWidget):
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
         self.ab = "A"
-        self.f = QFont("Segoe UI", 11, QFont.Bold)
+        self.alert = False               # diagonale B cassée : contour rouge + « ! » (Joseph, 16/10 : la barre du haut
+        self.f = QFont("Segoe UI", 11, QFont.Bold)   # est déjà occupée chez lui, l'alerte va dans la touche FLIP)
         self.f_lbl = QFont("Segoe UI", 10, QFont.Bold)
         self.resize(KEY_W + 2 * PAD, KEY_H + 2 * PAD)
 
@@ -208,12 +209,13 @@ class AbBadge(QWidget):
         p.setRenderHint(QPainter.Antialiasing)
         p.fillRect(self.rect(), ROW_BG)                   # fond de la rangée : cache la touche d'origine en entier
         r = QRectF(PAD + 0.75, PAD + 0.75, KEY_W - 1.5, KEY_H - 1.5)
-        p.setPen(QPen(KEY_LINE, 1.5))                     # même contour que les touches de la LV1
+        p.setPen(QPen(QColor(255, 60, 40), 2.5) if self.alert else QPen(KEY_LINE, 1.5))   # contour LV1 (rouge : alerte)
         p.setBrush(KEY_BG)
         p.drawRoundedRect(r, KEY_R, KEY_R)
         p.setPen(QColor(TXT))
         p.setFont(self.f_lbl)
-        p.drawText(QRectF(r.left() + 8, r.top(), r.width() / 2, r.height()), Qt.AlignLeft | Qt.AlignVCenter, "FLIP")
+        p.drawText(QRectF(r.left() + 8, r.top(), r.width() / 2, r.height()), Qt.AlignLeft | Qt.AlignVCenter,
+                   "FLIP !" if self.alert else "FLIP")
         pill = QRectF(r.right() - 34, r.top() + 4, 30, r.height() - 8)
         p.setPen(Qt.NoPen)
         p.setBrush(red_gradient(pill) if self.ab == "B" else A_BLUE)
@@ -221,40 +223,6 @@ class AbBadge(QWidget):
         p.setPen(QColor("#ffffff") if self.ab == "B" else QColor(PANEL))
         p.setFont(self.f)
         p.drawText(pill, Qt.AlignCenter, self.ab)
-
-
-# Alerte dans la barre du haut de la LV1, entre l'onglet Setup et le cadenas (zone vide, relevé du 16/10) :
-# « B PATCH » quand la diagonale B est cassée (un canal passé mono <-> stéréo) ; ENTER sur la page Patch > Input B la
-# refait. Visible seulement LV1 au premier plan, comme la pastille FLIP.
-WARN_RECT = (1290, 8, 78, 40)
-
-
-class WarnBadge(QWidget):
-    def __init__(self):
-        super().__init__(None, FLAGS)
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setAttribute(Qt.WA_ShowWithoutActivating)
-        self.text = ""
-        self.f = QFont("Segoe UI", 9, QFont.Bold)
-        self.f_small = QFont("Segoe UI", 7, QFont.Bold)
-
-    def set(self, text):
-        self.text = text or ""
-        self.update()
-
-    def paintEvent(self, _e):
-        p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing)
-        r = QRectF(self.rect()).adjusted(1, 1, -1, -1)
-        p.setPen(Qt.NoPen)
-        p.setBrush(red_gradient(r))
-        p.drawRoundedRect(r, 6, 6)
-        title, _, sub = self.text.partition("\n")
-        p.setPen(QColor("#ffffff"))
-        p.setFont(self.f)
-        p.drawText(QRectF(r.left(), r.top() + 3, r.width(), r.height() / 2), Qt.AlignCenter, title)
-        p.setFont(self.f_small)
-        p.drawText(QRectF(r.left(), r.center().y(), r.width(), r.height() / 2 - 3), Qt.AlignCenter, sub)
 
 
 # ─── Rappel de pistes (demande de Joseph, 15/10) ─────────────────────────────────────────────────────────────────
@@ -916,7 +884,7 @@ class Overlay:
         self.rect_fn = rect_fn or (lambda: lv1_rect(mixer))
         self.banner, self.frame = Banner(), Frame()
         self.badge, self.ab, self.ab_key = AbBadge(), None, None
-        self.warn, self.warn_text = WarnBadge(), None
+        self.warn_text = None
         self.recall, self.recall_on = StripRecall(), False
         self.recall_alpha, self.cfg_mtime, self.cfg_t = 0.0, None, 0.0
         self.buttons = RecallButtons(self.set_taille, self.open_setup)
@@ -1007,20 +975,6 @@ class Overlay:
             self.recall.show()
             self.recall.raise_()
 
-    def tick_warn(self):
-        if not self.warn_text or not self.rect or not self.front:
-            if self.warn.isVisible():
-                self.warn.hide()
-            return
-        x, y, w, h = self.rect
-        sx, sy = w / 1920.0, h / 1080.0
-        geo = (x + round(WARN_RECT[0] * sx), y + round(WARN_RECT[1] * sy), round(WARN_RECT[2] * sx),
-               round(WARN_RECT[3] * sy))
-        if self.warn.geometry().getRect() != geo:
-            self.warn.setGeometry(*geo)
-        if not self.warn.isVisible():
-            self.warn.show()
-
     def tick_badge(self, now):
         if not self.ab or self.ab_key is None or not self.rect or not self.front:
             if self.badge.isVisible():
@@ -1047,10 +1001,10 @@ class Overlay:
             if self.recall_on:
                 self.recall.set(m["recall"])
             return
-        if "warn" in m:                              # {"warn": "B PATCH / 3 OFF" | null} (2 lignes)
+        if "warn" in m:                              # {"warn": "B PATCH / 3 OFF" | null} : diagonale B cassée
             self.warn_text = m["warn"]
-            if self.warn_text:
-                self.warn.set(self.warn_text)
+            self.badge.alert = bool(self.warn_text)  # -> contour rouge + « FLIP ! » sur la touche FLIP
+            self.badge.update()
             return
         if "ab" in m:                                # {"ab": "A" | "B" | null, "key": n° de la User Key 0..15}
             self.ab, self.ab_key = m.get("ab"), m.get("key")
@@ -1073,7 +1027,6 @@ class Overlay:
         self.front = self.pid is None or foreground_pid() in (self.pid, os.getpid())
         self.rect = self.lv1_rect
         self.tick_badge(now)
-        self.tick_warn()
         self.tick_recall()
         self.tick_buttons(now)
         if not self.state or not self.rect:

@@ -218,7 +218,9 @@ Messages vérifiés :
   d'ascenseurs (1891,230) et (131,1055) = (231,231,231)) ; DÉZOOME d'abord (loupe « − » (148,244)) ; un clic REMPLACE
   la source de la ligne (vérifié par Joseph) -> on clique seulement les cases voulues ; `fix_diagonal()`. Vérifié le
   16/10 (diagonale refaite). Pont : alerte « B PATCH / n OFF » (`diagonal_problems` : lignes = voies, stéréo du
-  /Channels, jusqu'à `lv1_db.driver_size`) dans la barre du haut (WarnBadge, LV1 devant) ; **ENTER (0x53, non
+  /Channels, jusqu'à `lv1_db.driver_size`) = touche FLIP de l'overlay avec contour rouge + « FLIP ! » (la barre du
+  haut est occupée chez Joseph) ; Joseph refait la diagonale À LA MAIN (un glisser de la 1re case en bas à droite, plus
+  rapide) ; **ENTER (0x53, non
   vérifié) = refait la diagonale** (page Patch > Input B ouverte).
 - **DISPLAY = bascule LV1 <-> Reaper au premier plan, SAVE selon la fenêtre active (codé le 15/10, test
   `tests/test_apps.py`, notes Mackie 0x34 / 0x50 non vérifiées)** — choix du bouton : DISPLAY (NAME/VALUE), FLIP étant

@@ -320,7 +320,8 @@ synchro en mode NON et laisse l'entrée en « Channel N » sur la LV1 pour qu'el
 ## Diagonale B (virtual soundcheck)
 
 Entrée B de la n-ième ligne (voie) de la grille = canal n du pilote SoundGrid de Reaper. Quand un canal passe de mono
-à stéréo, les lignes se décalent : une pastille rouge **B PATCH / n OFF** apparaît dans la barre du haut de la LV1.
+à stéréo, les lignes se décalent : la touche **FLIP** de l'écran prend un contour rouge et devient **« FLIP ! »**. Le plus rapide : refaire la
+diagonale à la main (un glisser de la première case jusqu'en bas à droite).
 Ouvre **Patch › Input › Input B** (vignette du pilote sélectionnée, grille en haut à gauche) et appuie sur **ENTER**
 de la X-Touch : la grille est dézoomée et la diagonale refaite. En ligne de commande (PowerShell administrateur) :
 `py lv1_patch.py lire`, `py lv1_patch.py diagonale` (voir), `py lv1_patch.py diagonale --go` (faire).
