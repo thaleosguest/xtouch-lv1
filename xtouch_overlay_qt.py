@@ -190,6 +190,114 @@ class AbBadge(QWidget):
         p.drawText(pill, Qt.AlignCenter, self.ab)
 
 
+# ─── Rappel de pistes (demande de Joseph, 15/10) ─────────────────────────────────────────────────────────────────
+# La X-Touch + Extender sont plus larges que l'écran : leurs tranches ne tombent pas sous celles de la LV1. Quand on
+# touche un fader, un bandeau occupe la zone des faders de la LV1 (bas de l'écran) avec 17 cases ALIGNÉES SUR LA
+# SURFACE : 8 cases (Extender) à gauche jusqu'à la séparation, 8 + 1 (X-Touch + master) à droite. Réglages dans
+# xtouch_ecran.json (fractions / pixels de référence 1920x1080), valeurs par défaut tirées de la photo de Joseph.
+RECALL_DEFAULT = {"split": 0.49, "y0": 745, "y1": 1076, "master": 1.0}
+GREEN, AMBER, WARN = QColor("#3ddc84"), QColor("#f2b63b"), QColor("#ff5b4d")
+
+
+def load_recall_cfg():
+    cfg = dict(RECALL_DEFAULT)
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "xtouch_ecran.json"), encoding="utf-8-sig") as f:
+            cfg.update({k: float(v) for k, v in json.load(f).items() if k in RECALL_DEFAULT})
+    except (OSError, ValueError, TypeError, AttributeError):
+        pass
+    return cfg
+
+
+def recall_cells(w, cfg):
+    """[(x, largeur)] des 17 cases en pixels du bandeau : 8 à gauche de la séparation, 8 + master à droite."""
+    split = w * cfg["split"]
+    left = [(split * i / 8.0, split / 8.0) for i in range(8)]
+    unit = (w - split) / (8 + cfg["master"])
+    right = [(split + unit * i, unit) for i in range(8)] + [(split + unit * 8, unit * cfg["master"])]
+    return left + right
+
+
+def meter_frac(db):
+    if db is None:
+        return 0.0
+    return max(0.0, min(1.0, (db + 60.0) / 70.0))      # -60 .. +10 dB
+
+
+class StripRecall(QWidget):
+    def __init__(self):
+        super().__init__(None, FLAGS)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+        self.data = {}
+        self.cfg = load_recall_cfg()
+        self.f_name = QFont("Segoe UI", 12, QFont.Bold)
+        self.f_val = QFont("Consolas", 15, QFont.Bold)
+        self.f_tag = QFont("Segoe UI", 9, QFont.Bold)
+
+    def set(self, data):
+        self.data = data or {}
+        self.update()
+
+    def paintEvent(self, _e):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        cells = self.data.get("cells") or []
+        touched = set(self.data.get("touched") or [])
+        send = self.data.get("send")
+        p.fillRect(self.rect(), QColor(8, 9, 10, 235))
+        for i, (cx, cw) in enumerate(recall_cells(self.width(), self.cfg)):
+            if i >= len(cells):
+                break
+            c = cells[i]
+            r = QRectF(cx + 3, 4, cw - 6, self.height() - 8)
+            hot = i in touched
+            p.setPen(QPen(QColor("#ffffff") if hot else QColor(LINE2), 2.4 if hot else 1.0))
+            p.setBrush(QColor("#1b1d20") if hot else QColor(PANEL))
+            p.drawRoundedRect(r, 10, 10)
+            if not c:
+                continue
+            col = QColor(c.get("color") or LINE2)
+            path = QPainterPath()
+            path.addRoundedRect(r, 10, 10)
+            p.save()
+            p.setClipPath(path)
+            p.fillRect(QRectF(r.left(), r.top(), r.width(), 34), col)       # bandeau à la couleur du canal
+            p.restore()
+            dark = 0.299 * col.red() + 0.587 * col.green() + 0.114 * col.blue() > 150   # luminosité perçue
+            p.setPen(QColor(PANEL) if dark else QColor("#ffffff"))
+            p.setFont(self.f_name)
+            p.drawText(QRectF(r.left() + 4, r.top(), r.width() - 8, 34), Qt.AlignCenter, c.get("name", ""))
+            y = r.top() + 42
+            if send:                                                          # mode sends : pastille rouge
+                pill = QRectF(r.left() + 8, y, r.width() - 16, 22)
+                p.setPen(Qt.NoPen)
+                p.setBrush(red_gradient(pill))
+                p.drawRoundedRect(pill, 6, 6)
+                p.setPen(QColor("#ffffff"))
+                p.setFont(self.f_tag)
+                p.drawText(pill, Qt.AlignCenter, "SEND > " + send)
+                y += 28
+            p.setPen(QColor(TXT))
+            p.setFont(self.f_val)
+            p.drawText(QRectF(r.left(), y, r.width() - 18, 30), Qt.AlignCenter, c.get("value", ""))
+            # vumètre vertical à droite de la case
+            m = QRectF(r.right() - 14, y + 4, 7, r.bottom() - y - 14)
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor("#25282c"))
+            p.drawRoundedRect(m, 3, 3)
+            fr = meter_frac(c.get("meter"))
+            if fr > 0:
+                h = m.height() * fr
+                g = QLinearGradient(m.bottomLeft(), m.topLeft())
+                g.setColorAt(0, GREEN)
+                g.setColorAt(meter_frac(-12) , GREEN)
+                g.setColorAt(meter_frac(-6), AMBER)
+                g.setColorAt(1, WARN)
+                p.setBrush(g)
+                p.drawRoundedRect(QRectF(m.left(), m.bottom() - h, m.width(), h), 3, 3)
+
+
 class Bus(QObject):
     msg = Signal(dict)
 
@@ -199,12 +307,27 @@ class Overlay:
         self.rect_fn = rect_fn or (lambda: lv1_rect(mixer))
         self.banner, self.frame = Banner(), Frame()
         self.badge, self.ab, self.ab_key = AbBadge(), None, None
+        self.recall, self.recall_on = StripRecall(), False
         self.state = None            # (text, sub, color) voulu
         self.since = 0.0
         self.rect, self.rect_t = None, 0.0
         self.timer = QTimer()
         self.timer.timeout.connect(self.tick)
         self.timer.start(30)
+
+    def tick_recall(self):
+        if not self.recall_on or not self.rect:
+            if self.recall.isVisible():
+                self.recall.hide()
+            return
+        x, y, w, h = self.rect
+        cfg = self.recall.cfg
+        geo = (x, y + round(cfg["y0"] * h / 1080.0), w, round((cfg["y1"] - cfg["y0"]) * h / 1080.0))
+        if self.recall.geometry().getRect() != geo:
+            self.recall.setGeometry(*geo)
+        if not self.recall.isVisible():
+            self.recall.show()
+            self.recall.raise_()
 
     def tick_badge(self, now):
         if not self.ab or self.ab_key is None or not self.rect:
@@ -227,6 +350,11 @@ class Overlay:
         if m.get("quit"):
             QApplication.quit()
             return
+        if "recall" in m:                            # rappel de pistes : {"cells": [...], "touched": [...], "send"} | null
+            self.recall_on = bool(m["recall"])
+            if self.recall_on:
+                self.recall.set(m["recall"])
+            return
         if "ab" in m:                                # {"ab": "A" | "B" | null, "key": n° de la User Key 0..15}
             self.ab, self.ab_key = m.get("ab"), m.get("key")
             if self.ab:
@@ -245,6 +373,7 @@ class Overlay:
         if now - self.rect_t > 1.0:
             self.rect, self.rect_t = self.rect_fn(), now
         self.tick_badge(now)
+        self.tick_recall()
         if not self.state or not self.rect:
             for w in (self.banner, self.frame):
                 if w.isVisible():

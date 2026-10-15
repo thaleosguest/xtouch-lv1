@@ -102,6 +102,7 @@ CALLS = []
 class FakeOverlay:                  # la boucle principale doit appeler l'affichage d'écran sans erreur
     def set_info(self, *a): CALLS.append(("info",) + a)
     def set_ab(self, *a): CALLS.append(("ab",) + a)
+    def set_recall(self, d): CALLS.append(("recall", d))
     def stop(self): CALLS.append(("stop",))
 D.OVERLAY_FACTORY = lambda mixer: FakeOverlay()
 
@@ -121,6 +122,12 @@ ok = ok and any(a == "/Set/Aux/Send/Gain" for a, v in gains[1:-1]) and not any(a
 on = [v for t, d, v in LEDS if d == 0x36]
 ok = ok and 127 in on and on[-1] == 0
 ok = ok and ("stop",) in CALLS and any(c[0] == "info" and c[1] for c in CALLS) and any(c[0] == "ab" for c in CALLS)
+recalls = [d for c, d in [x for x in CALLS if x[0] == "recall"]]
+shown = [d for d in recalls if d]
+print("Rappel de pistes :", len(shown), "envois ; ex. case 1 :", shown[0]["cells"][0] if shown else None,
+      "; touchés :", shown[0]["touched"] if shown else None, "; send :", sorted({d["send"] for d in shown}, key=str))
+ok = ok and shown and recalls[-1] is None and len(shown[0]["cells"]) == 17 and 0 in shown[0]["touched"]
+ok = ok and "FX 2" in {d["send"] for d in shown}
 print("Affichage d'écran :", sorted({c[0] for c in CALLS}), [c for c in CALLS if c[0] == "info" and c[1]][:1])
 print("OK" if ok else "ÉCHEC")
 sys.exit(0 if ok else 1)

@@ -1,0 +1,7 @@
+{
+  "_aide": "Rappel de pistes : split = fraction de la largeur de l écran où se trouve la séparation Extender / X-Touch ; y0, y1 = haut et bas du bandeau (pixels sur 1080) ; master = largeur de la case master (1 = comme une tranche).",
+  "split": 0.49,
+  "y0": 745,
+  "y1": 1076,
+  "master": 1.0
+}

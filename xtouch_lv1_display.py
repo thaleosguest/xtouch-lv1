@@ -1730,6 +1730,34 @@ def build_frame(state, mixer_page, n_strips, overrides):
         return top, bot, cols, lvls, fads, layer_name, entries
 
 
+RECALL_HOLD = 0.5        # s : le rappel de pistes reste affiché après le relâchement du dernier fader
+RECALL_EVERY = 0.05      # s : rafraîchissement du rappel (vumètres) pendant qu'il est affiché
+
+
+def recall_payload(state, entries, sends, touched):
+    """Contenu du rappel de pistes : 16 tranches + master, nom, couleur, valeur (fader ou envoi), vumètre."""
+    cells = []
+    with state.lock:
+        aux = sends.aux
+        for e in list(entries[:MASTER]) + [entries[MASTER] if len(entries) > MASTER else None]:
+            if e is None:
+                cells.append(None)
+                continue
+            t = state.tracks.get(e, {})
+            rgb = t.get("rgb")
+            if aux is not None and e is not entries[MASTER]:
+                val = state.sends.get((e[0], e[1], aux), {}).get("fader")
+            else:
+                val = t.get("fader")
+            mt = [v for v in (state.meters.get((e[0], e[1], 0)), state.meters.get((e[0], e[1], 1))) if v is not None]
+            name = (t.get("name") or default_label(*e)).strip()
+            cells.append({"name": name[:12], "color": "#%02x%02x%02x" % tuple(int(round(v * 255)) for v in rgb)
+                          if rgb else None, "value": fader_text(val).strip() if val is not None else "?",
+                          "meter": max(mt) if mt else None})
+    info = sends.overlay_info() if aux is not None else (None,)
+    return {"cells": cells, "touched": touched, "send": info[0]}      # nom de l'aux : « FX 1 », « REVERB HALL »
+
+
 OVERLAY_FACTORY = None   # tests : fabrique d'un faux affichage d'écran (sinon Qt / tkinter hors --dry-run)
 
 
@@ -1906,6 +1934,7 @@ def main():
     if master_target and surface.master_unit is not None:
         print("  Fader master -> %s" % default_label(*master_target))
     last_layer = object()
+    recall_until, recall_sent = [0.0], [0.0]
     t_end = time.time() + a.seconds if a.seconds else None
     try:
         while not (t_end and time.time() > t_end):
@@ -1961,6 +1990,16 @@ def main():
                 timecode = seg_codes(sends.label() or "--", 5) + timecode[5:]
             surface.push_master_display(assign, timecode)
             if overlay:
+                touched = [s for s, v in faders.touched.items() if v]
+                if touched:
+                    recall_until[0] = now + RECALL_HOLD
+                if now < recall_until[0]:
+                    if now - recall_sent[0] >= RECALL_EVERY:
+                        recall_sent[0] = now
+                        overlay.set_recall(recall_payload(state, entries, sends, touched))
+                elif recall_sent[0]:
+                    recall_sent[0] = 0.0
+                    overlay.set_recall(None)
                 overlay.set_info(*sends.overlay_info())
                 with state.lock:
                     fk = [k for k, (_s, func, on) in sorted(state.user_keys.items())

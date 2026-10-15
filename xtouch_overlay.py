@@ -75,6 +75,9 @@ class LV1Overlay(threading.Thread):
     def set_ab(self, ab, key):
         pass                      # pastille A/B : version Qt seulement
 
+    def set_recall(self, data):
+        pass                      # rappel de pistes : version Qt seulement
+
     def set(self, text):
         """Texte à afficher (None = mode normal). Un changement relance le bandeau."""
         with self.lock:
@@ -191,6 +194,14 @@ class QtOverlay:
         self.last_ab = info
         try:
             self.proc.stdin.write((json.dumps({"ab": ab if info else None, "key": key}) + "\n").encode("utf-8"))
+            self.proc.stdin.flush()
+        except OSError:
+            pass
+
+    def set_recall(self, data):
+        """Rappel de pistes (bandeau aligné sur la surface) : dict, ou None pour le cacher."""
+        try:
+            self.proc.stdin.write((json.dumps({"recall": data}) + "\n").encode("utf-8"))
             self.proc.stdin.flush()
         except OSError:
             pass

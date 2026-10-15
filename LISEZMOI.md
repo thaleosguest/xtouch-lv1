@@ -176,6 +176,14 @@ Elle servira à l'étape 4 (gain X32, EQ…).
 **appui sur l'encodeur = centre**. Écran : « L45 », « C », « R12 ». Le pan de départ des entrées est lu dans la
 base de la LV1 ; s'il est inconnu (« ? », ex. bus), l'encodeur ne fait rien tant que le pan n'a pas bougé une fois.
 
+## Rappel de pistes à l'écran
+
+Les X-Touch sont plus larges que l'écran : quand tu **touches un fader**, un bandeau apparaît en bas de l'écran
+(zone des faders de la LV1) avec **17 cases alignées sur la surface** (8 Extender, 8 X-Touch + master) : couleur et
+nom du canal, valeur, vumètre ; le fader touché est entouré de blanc. En sends : « SEND > FX 1 ». Il disparaît
+0,5 s après avoir lâché. Pour ajuster l'alignement : copie `xtouch_ecran.exemple.json` en `xtouch_ecran.json` et
+change `split` (position de la séparation Extender / X-Touch, en fraction de la largeur de l'écran).
+
 ## Sends on fader (SEND)
 
 1. **SEND** : les écrans affichent les aux (Fx 1-8 sur l'Extender, Mon 1-8 sur la X-Touch ; BANK = Mon 9-16).

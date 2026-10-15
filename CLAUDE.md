@@ -207,6 +207,12 @@ Messages vérifiés :
 - **Bouton SOLO** (0x5A, Mackie, non vérifié) : LED allumée si un solo est actif ; appui = `/ClearAllSolo` (sans argument,
   commande du module Companion). Test dans `tests/test_buttons.py`.
 - `HISTORIQUE.md` : journal lisible du développement (à tenir à jour à chaque étape).
+- **Rappel de pistes à l'écran (codé, à tester)** — demande de Joseph (photo du 15/10 : X-Touch + Extender plus larges que
+  l'écran, tranches non alignées). Toucher un fader -> bandeau Qt sur la zone des faders LV1 (y 745..1076/1080),
+  17 cases ALIGNÉES SUR LA SURFACE : 8 (Extender) de 0 à `split` (0,49 de la largeur, mesuré sur la photo), 8 + master
+  à droite. Case : bandeau couleur + nom, valeur (fader ou envoi), vumètre vertical, contour blanc = fader touché ;
+  mode sends : pastille « SEND > FX 1 ». Reste 0,5 s après le relâchement (`RECALL_HOLD`), 20 rafraîchissements/s.
+  Réglages : `xtouch_ecran.json` (modèle `xtouch_ecran.exemple.json`). `recall_payload`, `StripRecall`.
 - **FLIP (0x32) = Flip A/B (codé, à tester)** : appui sur la User Key dont la fonction contient « Flip AB » (Joseph :
   User Key 16 = « FlipAB » / « Flip AB Input channel »). Pas de commande réseau A/B connue. **À chaque Flip A/B, la LV1
   renvoie TOUT son état** (comme une connexion : /Channels, couches, couleurs, User Keys…) et Joseph voit un message

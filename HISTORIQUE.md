@@ -41,7 +41,8 @@ Chaque ligne correspond à un ou plusieurs commits git (`git log` pour le détai
 | **Jog wheel** = potard de plugin sélectionné (page Channel), par crans de molette | vérifié |
 | Bouton **SOLO** : allumé si un solo est actif ; appui = efface tous les solos | vérifié |
 | Bouton **FLIP** = Flip A/B (via la User Key « Flip AB »), LED = entrées sur B | codé |
-| Indicateur **FLIP A / FLIP B** posé sur la touche FlipAB de la LV1 (Qt) | codé |
+| Indicateur **FLIP A / FLIP B** posé sur la touche FlipAB de la LV1 (Qt, opaque) | codé |
+| **Rappel de pistes** à l'écran, aligné sur la X-Touch + Extender, au toucher d'un fader | codé |
 
 ## Décisions de Joseph
 
