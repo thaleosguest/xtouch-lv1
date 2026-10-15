@@ -181,8 +181,14 @@ base de la LV1 ; s'il est inconnu (« ? », ex. bus), l'encodeur ne fait rien ta
 Les X-Touch sont plus larges que l'écran : quand tu **touches un fader**, un bandeau apparaît en bas de l'écran
 (zone des faders de la LV1) avec **17 cases alignées sur la surface** (8 Extender, 8 X-Touch + master) : couleur et
 nom du canal, valeur, vumètre ; le fader touché est entouré de blanc. En sends : « SEND > FX 1 ». Il disparaît
-0,5 s après avoir lâché. Pour ajuster l'alignement : copie `xtouch_ecran.exemple.json` en `xtouch_ecran.json` et
-change `split` (position de la séparation Extender / X-Touch, en fraction de la largeur de l'écran).
+0,5 s après avoir lâché, en fondu (opaque en bas, plus transparent vers le haut).
+
+**Régler l'alignement** (même pendant que le pont tourne) :
+
+    py xtouch_overlay_qt.py --reglage
+
+Trois blocs à l'écran : EXTENDER (8), X-TOUCH (8), MASTER (1). Glisse un bord pour l'étirer, l'intérieur pour le
+déplacer, la ligne du haut ou du bas pour la hauteur ; ENREGISTRER (ou Entrée) / ANNULER (ou Échap).
 
 ## Sends on fader (SEND)
 

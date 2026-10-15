@@ -12,6 +12,7 @@ Style repris de x32_qt_float (v3) : fond #111213, contour #3a3e43, texte #e9edf0
 rectangles arrondis, rouge 48 V en dégradé (255,120,105) -> (225,22,32), fondu 260 ms.
 
     py xtouch_overlay_qt.py --demo      # démo 10 s
+    py xtouch_overlay_qt.py --reglage   # réglage à la main des blocs du rappel de pistes (Extender, X-Touch, master)
 """
 import json
 import math
@@ -195,27 +196,55 @@ class AbBadge(QWidget):
 # touche un fader, un bandeau occupe la zone des faders de la LV1 (bas de l'écran) avec 17 cases ALIGNÉES SUR LA
 # SURFACE : 8 cases (Extender) à gauche jusqu'à la séparation, 8 + 1 (X-Touch + master) à droite. Réglages dans
 # xtouch_ecran.json (fractions / pixels de référence 1920x1080), valeurs par défaut tirées de la photo de Joseph.
-RECALL_DEFAULT = {"split": 0.49, "y0": 745, "y1": 1076, "master": 1.0}
+# Blocs réglables à la main (`py xtouch_overlay_qt.py --reglage`) : Extender (8 cases), X-Touch (8), master (1),
+# chacun [x début, x fin] en pixels de référence 1920 ; y0 / y1 = haut / bas du bandeau (référence 1080).
+RECALL_DEFAULT = {"ext": [0.0, 941.0], "xt": [941.0, 1811.0], "master": [1811.0, 1920.0], "y0": 745.0, "y1": 1076.0}
+CFG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "xtouch_ecran.json")
 GREEN, AMBER, WARN = QColor("#3ddc84"), QColor("#f2b63b"), QColor("#ff5b4d")
+FADE_STEP = 0.16             # fondu du rappel : ~0,2 s à 30 ms par tour
+TOP_ALPHA, SOLID_FROM = 0.40, 0.25   # haut du bandeau à 40 % d'opacité, opaque à partir de 25 % de la hauteur
 
 
 def load_recall_cfg():
-    cfg = dict(RECALL_DEFAULT)
+    cfg = json.loads(json.dumps(RECALL_DEFAULT))
     try:
-        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "xtouch_ecran.json"), encoding="utf-8-sig") as f:
-            cfg.update({k: float(v) for k, v in json.load(f).items() if k in RECALL_DEFAULT})
-    except (OSError, ValueError, TypeError, AttributeError):
+        with open(CFG_FILE, encoding="utf-8-sig") as f:
+            raw = json.load(f)
+    except (OSError, ValueError):
+        return cfg
+    try:
+        if "split" in raw and "ext" not in raw:      # ancien format (fraction de la largeur)
+            sp = float(raw["split"]) * 1920.0
+            unit = (1920.0 - sp) / 9.0
+            cfg.update(ext=[0.0, sp], xt=[sp, sp + 8 * unit], master=[sp + 8 * unit, 1920.0])
+        for k in ("ext", "xt", "master"):
+            if k in raw:
+                cfg[k] = [float(raw[k][0]), float(raw[k][1])]
+        for k in ("y0", "y1"):
+            if k in raw:
+                cfg[k] = float(raw[k])
+    except (TypeError, ValueError, IndexError, KeyError):
         pass
     return cfg
 
 
+def save_recall_cfg(cfg):
+    data = {k: cfg[k] for k in ("ext", "xt", "master", "y0", "y1")}
+    data["_aide"] = ("Rappel de pistes : blocs [x début, x fin] sur 1920 (Extender 8 cases, X-Touch 8, master 1), "
+                     "y0 / y1 = haut / bas du bandeau sur 1080. Réglage : py xtouch_overlay_qt.py --reglage")
+    with open(CFG_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=1)
+
+
 def recall_cells(w, cfg):
-    """[(x, largeur)] des 17 cases en pixels du bandeau : 8 à gauche de la séparation, 8 + master à droite."""
-    split = w * cfg["split"]
-    left = [(split * i / 8.0, split / 8.0) for i in range(8)]
-    unit = (w - split) / (8 + cfg["master"])
-    right = [(split + unit * i, unit) for i in range(8)] + [(split + unit * 8, unit * cfg["master"])]
-    return left + right
+    """[(x, largeur)] des 17 cases en pixels du bandeau (largeur w) : 8 Extender, 8 X-Touch, 1 master."""
+    k = w / 1920.0
+    out = []
+    for key, n in (("ext", 8), ("xt", 8), ("master", 1)):
+        x0, x1 = cfg[key]
+        step = (x1 - x0) / n
+        out += [((x0 + step * i) * k, step * k) for i in range(n)]
+    return out
 
 
 def meter_frac(db):
@@ -296,6 +325,127 @@ class StripRecall(QWidget):
                 g.setColorAt(1, WARN)
                 p.setBrush(g)
                 p.drawRoundedRect(QRectF(m.left(), m.bottom() - h, m.width(), h), 3, 3)
+        # Opaque en bas ; du haut jusqu'à 25 % de la hauteur, dégradé vers 40 % d'opacité (demande de Joseph)
+        p.setCompositionMode(QPainter.CompositionMode_DestinationIn)
+        g = QLinearGradient(0, 0, 0, self.height())
+        g.setColorAt(0, QColor(0, 0, 0, round(255 * TOP_ALPHA)))
+        g.setColorAt(SOLID_FROM, QColor(0, 0, 0, 255))
+        g.setColorAt(1, QColor(0, 0, 0, 255))
+        p.fillRect(self.rect(), g)
+
+
+class RecallSetup(QWidget):
+    """Réglage à la main des 3 blocs (Extender 8, X-Touch 8, master 1) et du haut / bas du bandeau.
+    Glisser un BORD de bloc pour l'étirer, l'INTÉRIEUR pour le déplacer, la ligne du haut ou du bas pour la hauteur.
+    Entrée ou bouton ENREGISTRER : sauve dans xtouch_ecran.json ; Échap ou ANNULER : quitte sans rien changer."""
+    BLOCKS = (("ext", "EXTENDER", 8, QColor("#13a9af")), ("xt", "X-TOUCH", 8, QColor("#7f77dd")),
+              ("master", "MASTER", 1, QColor("#f2b63b")))
+    GRAB = 18
+
+    def __init__(self, rect):
+        super().__init__(None, Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.cfg = load_recall_cfg()
+        self.drag = None
+        x, y, w, h = rect
+        self.setGeometry(x, y, w, h)
+        self.k, self.ky = w / 1920.0, h / 1080.0
+        self.f = QFont("Segoe UI", 12, QFont.Bold)
+        self.f_big = QFont("Segoe UI", 14, QFont.Bold)
+
+    def buttons(self):
+        cx = self.width() / 2
+        return {"save": QRectF(cx - 210, 40, 200, 46), "cancel": QRectF(cx + 10, 40, 200, 46)}
+
+    def block_rect(self, key):
+        x0, x1 = self.cfg[key]
+        return QRectF(x0 * self.k, self.cfg["y0"] * self.ky, (x1 - x0) * self.k, (self.cfg["y1"] - self.cfg["y0"]) * self.ky)
+
+    def paintEvent(self, _e):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.fillRect(self.rect(), QColor(0, 0, 0, 120))
+        for key, label, n, col in self.BLOCKS:
+            r = self.block_rect(key)
+            fill = QColor(col)
+            fill.setAlpha(70)
+            p.setPen(QPen(col, 3))
+            p.setBrush(fill)
+            p.drawRoundedRect(r, 8, 8)
+            p.setPen(QPen(QColor(col.red(), col.green(), col.blue(), 160), 1, Qt.DashLine))
+            for i in range(1, n):
+                xx = r.left() + r.width() * i / n
+                p.drawLine(int(xx), int(r.top() + 8), int(xx), int(r.bottom() - 8))
+            p.setPen(QColor("#ffffff"))
+            p.setFont(self.f)
+            p.drawText(r, Qt.AlignCenter, "%s (%d)\n%d - %d" % (label, n, round(self.cfg[key][0]), round(self.cfg[key][1])))
+        p.setFont(self.f_big)
+        for name, r in self.buttons().items():
+            p.setPen(Qt.NoPen)
+            p.setBrush(red_gradient(r) if name == "save" else QColor(PANEL))
+            p.drawRoundedRect(r, 10, 10)
+            p.setPen(QColor("#ffffff"))
+            p.drawText(r, Qt.AlignCenter, "ENREGISTRER" if name == "save" else "ANNULER")
+        p.setPen(QColor(TXT))
+        p.setFont(self.f)
+        p.drawText(QRectF(0, 96, self.width(), 30), Qt.AlignCenter,
+                   "Glisse les bords pour étirer, l'intérieur pour déplacer, le haut / bas pour la hauteur")
+
+    def hit(self, pos):
+        for name, r in self.buttons().items():
+            if r.contains(pos):
+                return ("button", name)
+        y0, y1 = self.cfg["y0"] * self.ky, self.cfg["y1"] * self.ky
+        for key, _l, _n, _c in self.BLOCKS:
+            r = self.block_rect(key)
+            if r.adjusted(-self.GRAB, -self.GRAB, self.GRAB, self.GRAB).contains(pos):
+                if abs(pos.x() - r.left()) < self.GRAB:
+                    return ("edge", key, 0)
+                if abs(pos.x() - r.right()) < self.GRAB:
+                    return ("edge", key, 1)
+                if abs(pos.y() - y0) < self.GRAB:
+                    return ("y", "y0")
+                if abs(pos.y() - y1) < self.GRAB:
+                    return ("y", "y1")
+                return ("move", key)
+        return None
+
+    def mousePressEvent(self, e):
+        pos = e.position()
+        h = self.hit(pos)
+        if h and h[0] == "button":
+            if h[1] == "save":
+                save_recall_cfg(self.cfg)
+            QApplication.quit()
+            return
+        self.drag = (h, pos, json.loads(json.dumps(self.cfg))) if h else None
+
+    def mouseMoveEvent(self, e):
+        if not self.drag:
+            return
+        h, start, orig = self.drag
+        dx = (e.position().x() - start.x()) / self.k
+        dy = (e.position().y() - start.y()) / self.ky
+        if h[0] == "edge":
+            v = orig[h[1]][h[2]] + dx
+            self.cfg[h[1]][h[2]] = max(0.0, min(1920.0, v))
+        elif h[0] == "move":
+            w = orig[h[1]][1] - orig[h[1]][0]
+            x0 = max(0.0, min(1920.0 - w, orig[h[1]][0] + dx))
+            self.cfg[h[1]] = [x0, x0 + w]
+        elif h[0] == "y":
+            self.cfg[h[1]] = max(0.0, min(1080.0, orig[h[1]] + dy))
+        self.update()
+
+    def mouseReleaseEvent(self, _e):
+        self.drag = None
+
+    def keyPressEvent(self, e):
+        if e.key() in (Qt.Key_Return, Qt.Key_Enter):
+            save_recall_cfg(self.cfg)
+            QApplication.quit()
+        elif e.key() == Qt.Key_Escape:
+            QApplication.quit()
 
 
 class Bus(QObject):
@@ -308,6 +458,7 @@ class Overlay:
         self.banner, self.frame = Banner(), Frame()
         self.badge, self.ab, self.ab_key = AbBadge(), None, None
         self.recall, self.recall_on = StripRecall(), False
+        self.recall_alpha, self.cfg_mtime, self.cfg_t = 0.0, None, 0.0
         self.state = None            # (text, sub, color) voulu
         self.since = 0.0
         self.rect, self.rect_t = None, 0.0
@@ -316,15 +467,30 @@ class Overlay:
         self.timer.start(30)
 
     def tick_recall(self):
-        if not self.recall_on or not self.rect:
-            if self.recall.isVisible():
-                self.recall.hide()
+        now = time.time()
+        if now - self.cfg_t > 1.0:                   # réglage modifié (--reglage) : pris en compte à chaud
+            self.cfg_t = now
+            try:
+                mt = os.path.getmtime(CFG_FILE)
+            except OSError:
+                mt = None
+            if mt != self.cfg_mtime:
+                self.cfg_mtime = mt
+                self.recall.cfg = load_recall_cfg()
+                self.recall.update()
+        target = 1.0 if (self.recall_on and self.rect) else 0.0
+        if self.recall_alpha == target == 0.0:
+            return
+        self.recall_alpha = max(0.0, min(1.0, self.recall_alpha + (FADE_STEP if target > self.recall_alpha else -FADE_STEP)))
+        if self.recall_alpha <= 0.0:
+            self.recall.hide()
             return
         x, y, w, h = self.rect
         cfg = self.recall.cfg
         geo = (x, y + round(cfg["y0"] * h / 1080.0), w, round((cfg["y1"] - cfg["y0"]) * h / 1080.0))
         if self.recall.geometry().getRect() != geo:
             self.recall.setGeometry(*geo)
+        self.recall.setWindowOpacity(self.recall_alpha)     # fondu d'apparition / disparition
         if not self.recall.isVisible():
             self.recall.show()
             self.recall.raise_()
@@ -405,6 +571,12 @@ def main():
     app.setQuitOnLastWindowClosed(False)
     demo = "--demo" in sys.argv
     mixer = 2 if "--mixer=2" in sys.argv else 1
+    if "--reglage" in sys.argv:                      # réglage à la main des blocs du rappel de pistes
+        setup = RecallSetup(lv1_rect(mixer) or (0, 0, 1920, 1080))
+        setup.show()
+        setup.raise_()
+        setup.activateWindow()
+        return app.exec()
     ov = Overlay(mixer, (lambda: lv1_rect(mixer) or (0, 0, 1280, 720)) if demo else None)
     bus = Bus()
     bus.msg.connect(ov.on_msg)
