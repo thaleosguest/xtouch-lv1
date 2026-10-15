@@ -199,7 +199,12 @@ Messages vérifiés :
   `reaper/lv1_sync_tracks.lua` (à la main, OUI = toutes, NON = renommées seulement) crée / met à jour les pistes,
   marquées P_EXT:lv1_in = canal (jamais d'autres pistes touchées, rien supprimé) ; `lv1_scenes.lua` fait suivre nom et
   couleur en direct, et ajoute les pistes manquantes Reaper à l'ARRÊT selon le dernier choix (ProjExtState lv1/sync_mode
-  all|named, demande de Joseph). (b) = seulement les canaux patchés vers le pilote SoundGrid + entrée d'enregistrement : à faire.
+  all|named, demande de Joseph). ROUTAGE (b, codé le 15/10, Lua non essayé) : `lv1_db.routing()` lit la table `routes` (clusters 0 = canal,
+  section 0 A / 1 B ; 10 = Inputs, 11 = Outputs d'un appareil, index = device.assign ; pilote de ce PC =
+  device_daw.is_local -> device.assign, ex. LV1-PORT assign 1) -> rec = canaux du pilote recevant la source de l'entrée
+  A, play = lecture du pilote sur l'entrée B ; relu toutes les 5 s (copie 10 ms), ajouté à lv1_tracks.txt ;
+  `reaper/lv1_common.lua` (module commun) règle I_RECINPUT (1024+n = paire) et une sortie matérielle marquée
+  P_EXT:lv1 (I_DSTCHAN, 1024 = mono), à l'ARRÊT seulement. Test `tests/test_routage.py`.
 - **Pastille FLIP visible seulement si la LV1 est au premier plan** (Joseph, 15/10 : elle restait devant les autres
   programmes ; rappel de pistes et sends on fader restent affichés LV1 en arrière-plan, choix de Joseph) : processus de la fenêtre de premier plan = celui de la LV1 (fenêtres détachées et
   boîtes de dialogue comprises) ou l'overlay lui-même (réglage).

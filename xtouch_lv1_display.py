@@ -230,6 +230,7 @@ class LV1State:
         self.on_b = None          # entrées sur B ? (base LV1, relue après chaque Flip A/B) ; None = inconnu
         self.scenes = {}          # index -> nom (/Notify/SceneList, /Notify/Scene/Name)
         self.cur_scene = None     # index de la scène courante (/Notify/CurSceneIndex), -1 = aucune
+        self.routing = {}         # canal -> {"rec": [...], "play": [...]} (pilote SoundGrid de ce PC, base LV1)
         self.scene_last = (None, 0.0)   # (index, instant) du dernier rappel retenu
         self.scene_events = []    # [(index, instant)] scènes rappelées sur la LV1, à transmettre à Reaper
         self.channels_at = 0.0    # instant du dernier /Channels (état complet renvoyé : connexion, Flip A/B…)
@@ -1905,15 +1906,19 @@ def build_frame(state, mixer_page, n_strips, overrides):
 
 
 def input_list(state):
-    """Entrées de la LV1 dans l'ordre : [(canal, nom, (r, g, b) 0..255 ou None, stéréo)] (synchro des pistes Reaper)."""
+    """Entrées de la LV1 dans l'ordre : [(canal, nom, (r, g, b) 0..255 ou None, stéréo, rec, play)] (synchro des
+    pistes Reaper). rec / play : canaux du pilote SoundGrid de ce PC (0-based) à enregistrer / en lecture sur
+    l'entrée B, lus dans la base LV1 (state.routing, relu toutes les 5 s)."""
     out = []
     with state.lock:
+        routing = state.routing
         for (g, ch), t in sorted(state.tracks.items()):
             if g != 0 or not t.get("name"):
                 continue
             rgb = t.get("rgb")
+            rt = routing.get(ch, {})
             out.append((ch, t["name"].strip(), tuple(int(round(v * 255)) for v in rgb) if rgb else None,
-                        bool(t.get("stereo"))))
+                        bool(t.get("stereo")), rt.get("rec", []), rt.get("play", [])))
     return out
 
 
@@ -2112,6 +2117,22 @@ def main():
     if reaper:                       # scènes LV1 <-> marqueurs Reaper (script reaper/lv1_scenes.lua dans Reaper)
         import reaper_scenes
         scene_bridge = reaper_scenes.SceneBridge(journal=lambda m: JOURNAL.mark(m))
+        if not a.dry_run:
+            def watch_routing():          # patch vers le pilote SoundGrid : la LV1 ne l'annonce pas, on relit la base
+                last = None
+                while True:
+                    try:
+                        import lv1_db
+                        drv, rt = lv1_db.routing()
+                        if rt != last:
+                            last = rt
+                            JOURNAL.mark("routage pilote %s : %s" % (drv, rt))
+                        with state.lock:
+                            state.routing = rt
+                    except Exception as e:
+                        JOURNAL.mark("routage illisible : %r" % e)
+                    time.sleep(5.0)
+            threading.Thread(target=watch_routing, daemon=True).start()
         print("  Scènes LV1 <-> marqueurs Reaper : charger reaper/lv1_scenes.lua dans Reaper (Actions > Load ReaScript).")
     buttons.transport = transport
     overlay = OVERLAY_FACTORY(a.mixer) if OVERLAY_FACTORY else None     # tests : faux affichage d'écran

@@ -6,7 +6,7 @@ La LV1 écrit ses réglages en continu dans C:\\Users\\Public\\Waves Audio\\eMot
 verrous) : copie du fichier + -wal dans un dossier temporaire, lecture de la copie.
 
 Pan (vérifié le 14/10/2026, LV1 V17) : snapshot_chainer_params, snapshot -1, param 436 PARAM_OUTPUT_BALANCE,
--45 (gauche) .. +45 (droite) ; absent = centre. Réseau (/Notify/Track/Pan, /Set/Track/Pan) : -1 .. +1.
+-45 (gauche) .. +45 (droite) ; absent = centre. Réseau (/Notify/Track/Pan, /Set/Track/Pan) : -45 .. +45 aussi.
 chainer_id = object.id ; object.obj_type 0 = entrées, obj_index = canal 0-based.
 
     py lv1_db.py          # affiche les pans des entrées
@@ -99,6 +99,56 @@ def input_ab(path=DB_PATH):
     finally:
         shutil.rmtree(os.path.dirname(dst), ignore_errors=True)
     return {(0, idx): float(vals.get(oid, 0.0)) >= 0.5 for oid, idx in objs}
+
+
+# Routage (relevé le 15/10/2026 sur la session de Joseph) : table `routes`, une ligne par liaison du patch.
+#   source  (src_cluster_type, src_cluster_type_index, src_channel_index)
+#   dest.   (dst_cluster_type, dst_cluster_type_index, dst_section_index, dst_channel_index)
+# Clusters : 0 = canal d'entrée (index = canal 0-based ; section 0 = entrée A, 1 = entrée B ; channel = L/R),
+# 10 = Inputs = entrées d'un appareil, 11 = Outputs = sorties d'un appareil (index = « assign », la place de
+# l'appareil dans l'inventaire : table device ; channel = n° de canal de l'appareil, 0-based).
+# Pilote SoundGrid de CE PC : device_daw.is_local = 1 -> device.id -> device.assign (ex. LV1-PORT, assign 1).
+# Ex. Joseph : Inputs[0] 0-1 (X32) -> canal 0 A ; Inputs[1] 0-1 (LV1-PORT) -> canal 0 B ; Inputs[0] 0-1 -> Outputs[1] 0-1.
+CL_CHANNEL, CL_INPUTS, CL_OUTPUTS = 0, 10, 11
+
+
+def routing(path=DB_PATH):
+    """Pour le pilote SoundGrid de ce PC : {canal 0-based: {"rec": [n° de canal du pilote, 0-based, L puis R],
+    "play": [...]}}. rec = canaux du pilote qui reçoivent la source de l'entrée A du canal (à ENREGISTRER) ;
+    play = canaux de lecture du pilote branchés sur l'entrée B (virtual soundcheck). Rend aussi le nom du pilote."""
+    dst = copy_db(path)
+    try:
+        db = sqlite3.connect(dst)
+        try:
+            local = db.execute("select d.assign, d.mac from device d join device_daw w on w.id = d.id "
+                               "where w.is_local = 1").fetchone()
+            if not local:
+                return None, {}
+            assign, mac = local
+            name = db.execute("select name from device_name where mac = ? and gender = 1", (mac,)).fetchone()
+            rows = db.execute("select src_cluster_type, src_cluster_type_index, src_channel_index, dst_cluster_type, "
+                              "dst_cluster_type_index, dst_section_index, dst_channel_index from routes").fetchall()
+        finally:
+            db.close()
+    finally:
+        shutil.rmtree(os.path.dirname(dst), ignore_errors=True)
+    to_driver = {}                   # source (cluster, index, canal) -> canaux du pilote qui la reçoivent
+    for sc, si, sch, dc, di, _ds, dch in rows:
+        if dc == CL_OUTPUTS and di == assign:
+            to_driver.setdefault((sc, si, sch), []).append(dch)
+    out = {}
+    for sc, si, sch, dc, di, ds, dch in sorted(rows, key=lambda r: (r[4], r[5], r[6])):
+        if dc != CL_CHANNEL:
+            continue
+        e = out.setdefault(di, {"rec": [], "play": []})
+        if ds == 0:                  # entrée A : sa source part-elle vers le pilote ?
+            e["rec"] += sorted(to_driver.get((sc, si, sch), []))[:1]
+        elif ds == 1 and sc == CL_INPUTS and si == assign:
+            e["play"].append(sch)    # entrée B = lecture du pilote
+    for (sc, si, sch), chans in to_driver.items():       # sortie directe d'un canal vers le pilote
+        if sc == CL_CHANNEL:
+            out.setdefault(si, {"rec": [], "play": []})["rec"] += sorted(chans)[:1]
+    return (name[0] if name else None), {k: v for k, v in out.items() if v["rec"] or v["play"]}
 
 
 def main():

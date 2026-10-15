@@ -13,7 +13,7 @@
 
 local dir = ({reaper.get_action_context()})[2]:match("^(.*[\\/])")
 local IN_FILE, OUT_FILE = dir .. "lv1_to_reaper.txt", dir .. "reaper_to_lv1.txt"
-local TRACKS_FILE = dir .. "lv1_tracks.txt"      -- entrées LV1 (nom, couleur) : pistes synchronisées mises à jour
+local TRACKS_FILE = dir .. "lv1_tracks.txt"      -- entrées LV1 (nom, couleur, routage) : pistes synchronisées
 local SCENE_COLOR = reaper.ColorToNative(40, 200, 90) | 0x1000000
 local MAX_STEP = 0.5            -- s : avance de lecture au-delà de laquelle c'est un saut (rien n'est rappelé)
 
@@ -85,32 +85,19 @@ local function check_crossing()
   last_pos = pos
 end
 
--- Pistes synchronisées (lv1_sync_tracks.lua) : noms et couleurs suivent la LV1 en direct, comme Tracks Live. Et, une
--- fois une synchro faite (son choix OUI = toutes / NON = renommées est gardé dans le projet), une NOUVELLE entrée a
--- sa piste ajoutée toute seule, à sa place (demande de Joseph du 15/10) — seulement Reaper à l'arrêt, jamais en
--- lecture ni en enregistrement. Rien n'est jamais supprimé.
-local tracks_text, tracks_t, entries = nil, 0, {}
-
-local function is_default_name(e)
-  return e.name == "" or e.name == ("Channel " .. (e.ch + 1))
-end
-
-local function tagged_tracks()
-  local map = {}
-  for i = 0, reaper.CountTracks(0) - 1 do
-    local tr = reaper.GetTrack(0, i)
-    local ok, v = reaper.GetSetMediaTrackInfo_String(tr, "P_EXT:lv1_in", "", false)
-    if ok and v ~= "" then map[tonumber(v)] = tr end
-  end
-  return map
-end
+-- Pistes synchronisées (lv1_sync_tracks.lua) : noms et couleurs suivent la LV1 en direct, comme Tracks Live. Reaper
+-- à l'ARRÊT seulement (jamais en lecture ni en enregistrement) : le routage suit aussi (entrée d'enregistrement,
+-- sortie vers l'entrée B), et, une fois une synchro faite (son choix OUI = toutes / NON = renommées est gardé dans
+-- le projet), une NOUVELLE entrée a sa piste ajoutée toute seule, à sa place. Rien n'est jamais supprimé.
+local C = dofile(dir .. "lv1_common.lua")
+local tracks_text, tracks_t, entries, routed_text = nil, 0, {}, nil
 
 local function add_missing(tagged)
   local _, mode = reaper.GetProjExtState(0, "lv1", "sync_mode")      -- "all" | "named" | "" (pas encore de synchro)
   if mode ~= "all" and mode ~= "named" then return end
   local todo = false
   for _, e in ipairs(entries) do
-    if not tagged[e.ch] and (mode == "all" or not is_default_name(e)) then todo = true break end
+    if not tagged[e.ch] and (mode == "all" or not C.is_default_name(e)) then todo = true break end
   end
   if not todo then return end
   reaper.Undo_BeginBlock()
@@ -118,13 +105,10 @@ local function add_missing(tagged)
   local last, added = -1, 0
   for _, e in ipairs(entries) do
     local tr = tagged[e.ch]
-    if not tr and (mode == "all" or not is_default_name(e)) then
-      reaper.InsertTrackAtIndex(last + 1, true)
-      tr = reaper.GetTrack(0, last + 1)
-      reaper.GetSetMediaTrackInfo_String(tr, "P_EXT:lv1_in", tostring(e.ch), true)
-      reaper.GetSetMediaTrackInfo_String(tr, "P_EXT:lv1_stereo", e.stereo and "1" or "0", true)
-      reaper.GetSetMediaTrackInfo_String(tr, "P_NAME", e.name, true)
-      reaper.SetMediaTrackInfo_Value(tr, "I_CUSTOMCOLOR", e.color)
+    if not tr and (mode == "all" or not C.is_default_name(e)) then
+      tr = C.new_track(last + 1, e)
+      C.apply_look(tr, e)
+      C.apply_routing(tr, e)
       tagged[e.ch] = tr
       added = added + 1
     end
@@ -139,37 +123,31 @@ local function follow_tracks()
   local now = reaper.time_precise()
   if now - tracks_t < 1.0 then return end
   tracks_t = now
-  local f = io.open(TRACKS_FILE, "r")
-  if not f then return end
-  local text = f:read("a")
-  f:close()
+  local text = C.read(TRACKS_FILE)
+  if not text then return end
   local changed = text ~= tracks_text
   if changed then
     tracks_text = text
-    entries = {}
-    for line in text:gmatch("[^\n]+") do
-      local ch, name, r, g, b, st = line:match("^(%d+)\t(.-)\t(%-?%d+)\t(%-?%d+)\t(%-?%d+)\t(%d)$")
-      if ch then
-        r, g, b = tonumber(r), tonumber(g), tonumber(b)
-        entries[#entries + 1] = {ch = tonumber(ch), name = name, stereo = st == "1",
-                                 color = r >= 0 and (reaper.ColorToNative(r, g, b) | 0x1000000) or 0}
-      end
-    end
+    entries = C.parse(text)
   end
-  local tagged = tagged_tracks()
+  local tagged = C.tagged_tracks()
   if changed then                                         -- nom / couleur des pistes existantes
     for _, e in ipairs(entries) do
-      local tr = tagged[e.ch]
-      if tr then
-        local _, cur = reaper.GetSetMediaTrackInfo_String(tr, "P_NAME", "", false)
-        if cur ~= e.name then reaper.GetSetMediaTrackInfo_String(tr, "P_NAME", e.name, true) end
-        if math.floor(reaper.GetMediaTrackInfo_Value(tr, "I_CUSTOMCOLOR")) ~= e.color then
-          reaper.SetMediaTrackInfo_Value(tr, "I_CUSTOMCOLOR", e.color)
+      if tagged[e.ch] then C.apply_look(tagged[e.ch], e) end
+    end
+  end
+  if reaper.GetPlayState() == 0 then                      -- à l'arrêt seulement
+    if routed_text ~= tracks_text then                    -- routage changé (ou pas encore appliqué)
+      routed_text = tracks_text
+      local _, mode = reaper.GetProjExtState(0, "lv1", "sync_mode")
+      if mode == "all" or mode == "named" then
+        for _, e in ipairs(entries) do
+          if tagged[e.ch] then C.apply_routing(tagged[e.ch], e) end
         end
       end
     end
+    add_missing(tagged)
   end
-  if reaper.GetPlayState() == 0 then add_missing(tagged) end   -- à l'arrêt seulement
 end
 
 local function loop()

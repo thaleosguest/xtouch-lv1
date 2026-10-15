@@ -48,13 +48,16 @@ class SceneBridge:
 
     def write_tracks(self, entries):
         """Entrées LV1 [(canal 0-based, nom, (r, g, b) ou None, stéréo)] -> lv1_tracks.txt (synchro des pistes),
-        réécrit seulement s'il change. Une ligne par entrée : canal TAB nom TAB r TAB g TAB b TAB stéréo (r = -1 :
-        pas de couleur)."""
+        réécrit seulement s'il change. Une ligne par entrée : canal TAB nom TAB r TAB g TAB b TAB stéréo TAB rec TAB
+        play (r = -1 : pas de couleur ; rec / play = canaux du pilote, 0-based, séparés par des virgules)."""
         lines = []
-        for ch, name, rgb, stereo in entries:
+        for ent in entries:
+            ch, name, rgb, stereo = ent[:4]
+            rec, play = (ent[4], ent[5]) if len(ent) > 5 else ([], [])
             r, g, b = rgb if rgb else (-1, -1, -1)
             name = name.replace("\t", " ").replace("\n", " ")
-            lines.append("%d\t%s\t%d\t%d\t%d\t%d\n" % (ch, name, r, g, b, 1 if stereo else 0))
+            lines.append("%d\t%s\t%d\t%d\t%d\t%d\t%s\t%s\n" % (ch, name, r, g, b, 1 if stereo else 0,
+                                                       ",".join(map(str, rec)), ",".join(map(str, play))))
         text = "".join(lines)
         if not entries or text == self._tracks_last:
             return False
