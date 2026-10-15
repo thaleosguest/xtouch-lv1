@@ -326,6 +326,12 @@ docker > Attach docker to: Top.
 - Une colonne par piste : n° du canal LV1, couleur, nom court (nom complet au survol), vumètre (2 barres si stéréo)
   avec maintien de crête et voyant rouge d'écrêtage (clic dessus = effacer), « R » rouge si la piste est armée.
 - Clic sur une colonne = sélectionne la piste et la montre dans la vue.
+- À gauche :
+  - **ARM ALL** : arme toutes les pistes affichées ; le bouton devient rouge « ARMED », un 2e clic désarme tout ;
+  - **MON** : monitoring d'entrée de toutes les pistes d'un coup, OFF -> ON -> AUTO -> OFF (« MON ? » = réglages
+    mélangés, le clic les remet à OFF).
+- **R** en bas d'une colonne : arme ou désarme cette piste seule.
+- Les pistes créées par la synchro sont désarmées, monitoring OFF.
 - Losange à droite = toutes les colonnes tiennent dans la fenêtre, ou largeur fixe (défilement à la molette).
 - Clic droit :
   - **Show mixer** et **Show master track** (les décocher toutes les deux = vue « pistes seulement ») ;

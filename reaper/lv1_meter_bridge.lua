@@ -3,6 +3,8 @@
 --   * une colonne par piste : n° (canal LV1 si la piste est synchronisée, sinon n° de piste), couleur, nom court,
 --     vumètre (2 barres si stéréo), maintien de crête 1,5 s, voyant rouge d'écrêtage (clic = effacer), « R » si armée ;
 --   * losange à droite : largeur fixe (molette = défilement) <-> toutes les colonnes tiennent dans la fenêtre ;
+--   * à gauche : ARM ALL (tout armer / tout désarmer) et MON (monitoring d'entrée de toutes les pistes, OFF -> ON ->
+--     AUTO) ; « R » en bas d'une colonne = armer cette piste (demande de Joseph du 16/10) ;
 --   * clic sur une colonne = sélectionne la piste et la fait défiler dans la vue ;
 --   * clic droit : afficher/cacher la table de mixage et la piste master (vue « pistes seulement »), hauteur de toutes
 --     les pistes (comme le sélecteur « Micro » de Tracks Live), pistes LV1 seulement, ancrer / détacher.
@@ -18,7 +20,9 @@ local EXT = "lv1_meter_bridge"
 local DB_MIN, DB_MAX = -60, 0           -- échelle : barre pleine = 0 dBFS (comme Tracks Live)
 local HOLD, FALL = 1.5, 30              -- maintien de crête (s), retombée du vumètre (dB/s)
 local COL_W, COL_MIN = 34, 10           -- largeur fixe d'une colonne / minimum en mode « tout voir »
-local HEAD_H, FOOT_H, SIDE_W = 34, 16, 22
+local PANEL_W = 56                      -- boutons globaux à gauche (ARM ALL, MON), puis l'échelle
+local HEAD_H, FOOT_H, SIDE_W = 34, 16, PANEL_W + 22
+local MON_MODES = {{0, "OFF"}, {1, "ON"}, {2, "AUTO"}}  -- I_RECMON : 0 off, 1 entrée, 2 auto (« tape auto style »)
 local HEIGHTS = {{"Micro", 24}, {"Small", 40}, {"Medium", 64}, {"Large", 100}, {"Extreme", 160}}
 local TICKS = {0, -6, -12, -18, -30, -42, -60}
 
@@ -137,8 +141,8 @@ local function draw_column(t, m, x, w, top, bottom)
   else
     draw_bar(x + 2, top, inner, h, m.lvl[1], m.peak[1])
   end
-  if reaper.GetMediaTrackInfo_Value(tr, "I_RECARM") == 1 then
-    gfx.set(0.95, 0.2, 0.18, 1)
+  do                                                       -- R : rouge si armée, gris sinon (clic = armer)
+    if reaper.GetMediaTrackInfo_Value(tr, "I_RECARM") == 1 then gfx.set(0.95, 0.2, 0.18, 1) else set(DIM, 0.6) end
     gfx.setfont(1)
     gfx.x, gfx.y = x + math.floor((w - 1 - gfx.measurestr("R")) / 2), bottom + 2
     gfx.drawstr("R")
@@ -156,6 +160,39 @@ local function draw_scale(top, bottom)
     gfx.x, gfx.y = SIDE_W - 3 - gfx.measurestr(s), y - 5
     gfx.drawstr(s)
   end
+end
+
+local buttons = {}                      -- boutons globaux dessinés : {x, y, w, h, act}
+
+-- État commun des pistes affichées : true / false si toutes pareilles, nil si mélangé
+local function common(list, key)
+  local v = nil
+  for i, t in ipairs(list) do
+    local x = math.floor(reaper.GetMediaTrackInfo_Value(t.tr, key))
+    if i == 1 then v = x elseif v ~= x then return nil end
+  end
+  return v
+end
+
+local function button(x, y, w, h, label, on, act, color)
+  set(on and (color or {0.95, 0.2, 0.18}) or {0.22, 0.24, 0.27})
+  gfx.rect(x, y, w, h, 1)
+  set(on and {0.05, 0.05, 0.05} or TEXT)
+  gfx.setfont(2)
+  gfx.x, gfx.y = x + math.floor((w - gfx.measurestr(label)) / 2), y + math.floor((h - gfx.texth) / 2)
+  gfx.drawstr(label)
+  buttons[#buttons + 1] = {x = x, y = y, w = w, h = h, act = act}
+end
+
+local function draw_panel(list)
+  buttons = {}
+  local arm = common(list, "I_RECARM")
+  button(4, 6, PANEL_W - 8, 22, arm == 1 and "ARMED" or "ARM ALL", arm == 1, "arm")
+  local mon = common(list, "I_RECMON")
+  local label = "MON ?"
+  for _, m in ipairs(MON_MODES) do if mon == m[1] then label = "MON " .. m[2] end end
+  if #list == 0 then label = "MON" end
+  button(4, 34, PANEL_W - 8, 22, label, mon == 1 or mon == 2, "mon", {0.95, 0.75, 0.2})
 end
 
 local function draw_diamond(cx, cy, filled)
@@ -196,6 +233,7 @@ local function draw()
     gfx.line(SIDE_W, bottom - math.floor(frac(db) * (bottom - top)), SIDE_W + area, bottom - math.floor(frac(db) * (bottom - top)))
   end
   draw_scale(top, bottom)
+  draw_panel(list)
   set(BG)
   gfx.rect(gfx.w - 18, 0, 18, gfx.h, 1)
   draw_diamond(gfx.w - 9, 12, fit)
@@ -238,7 +276,28 @@ local function menu()
   end
 end
 
-local function click(x)
+local function set_all(list, key, v, what)
+  reaper.Undo_BeginBlock()
+  for _, t in ipairs(list) do reaper.SetMediaTrackInfo_Value(t.tr, key, v) end
+  reaper.Undo_EndBlock("LV1 bridge: " .. what, -1)
+end
+
+local function click(x, y)
+  for _, b in ipairs(buttons) do
+    if x >= b.x and x < b.x + b.w and y >= b.y and y < b.y + b.h then
+      local list = tracks()
+      if b.act == "arm" then                               -- tout armé -> tout désarmer, sinon tout armer
+        local on = common(list, "I_RECARM") == 1
+        set_all(list, "I_RECARM", on and 0 or 1, on and "disarm all" or "arm all")
+      else                                                 -- OFF -> ON -> AUTO -> OFF (mélangé -> OFF)
+        local mon, nxt = common(list, "I_RECMON"), 0
+        if mon == 0 then nxt = 1 elseif mon == 1 then nxt = 2 end
+        set_all(list, "I_RECMON", nxt, "monitoring " .. MON_MODES[nxt + 1][2])
+      end
+      return
+    end
+  end
+  if x < SIDE_W then return end
   if x >= gfx.w - 18 then
     fit = not fit
     reaper.SetExtState(EXT, "fit", fit and "1" or "0", true)
@@ -246,7 +305,12 @@ local function click(x)
   end
   for _, c in ipairs(cols) do
     if x >= c.x and x < c.x + c.w then
-      if c.m.clip then c.m.clip = false return end
+      if c.m.clip and y < HEAD_H + 6 then c.m.clip = false return end
+      if y >= gfx.h - FOOT_H then                          -- R de la colonne = armer / désarmer cette piste
+        local arm = reaper.GetMediaTrackInfo_Value(c.tr, "I_RECARM") == 1 and 0 or 1
+        reaper.SetMediaTrackInfo_Value(c.tr, "I_RECARM", arm)
+        return
+      end
       reaper.SetOnlyTrackSelected(c.tr)
       reaper.Main_OnCommand(40913, 0)                       -- Track: Vertical scroll selected tracks into view
       return
@@ -257,7 +321,7 @@ end
 local function loop()
   local max_scroll = draw()
   local cap = gfx.mouse_cap
-  if cap & 1 == 1 and mouse_was & 1 == 0 then click(gfx.mouse_x) end
+  if cap & 1 == 1 and mouse_was & 1 == 0 then click(gfx.mouse_x, gfx.mouse_y) end
   if cap & 2 == 2 and mouse_was & 2 == 0 then menu() end
   mouse_was = cap
   if gfx.mouse_wheel ~= 0 then

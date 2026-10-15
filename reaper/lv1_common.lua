@@ -115,6 +115,8 @@ function M.new_track(index, e)
   reaper.InsertTrackAtIndex(index, true)
   local tr = reaper.GetTrack(0, index)
   reaper.GetSetMediaTrackInfo_String(tr, "P_EXT:lv1_in", tostring(e.ch), true)
+  reaper.SetMediaTrackInfo_Value(tr, "I_RECARM", 0)        -- nouvelle piste : désarmée, monitoring OFF (Joseph, 16/10)
+  reaper.SetMediaTrackInfo_Value(tr, "I_RECMON", 0)
   return tr
 end
 

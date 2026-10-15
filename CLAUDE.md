@@ -228,6 +228,8 @@ Messages vérifiés :
   - crête 1,5 s, écrêtage mémorisé, R armée ;
   - clic = sélection + 40913 ; losange = tout voir / largeur fixe (molette) ;
   - clic droit : mixer (40078), master (SetMasterTrackVisibility), hauteur des pistes (I_HEIGHTOVERRIDE), LV1 seulement, dock.
+  ARM ALL (I_RECARM de toutes les pistes affichées) et MON OFF/ON/AUTO (I_RECMON 0/1/2) à gauche, R de colonne =
+  armer une piste (Joseph, 16/10) ; nouvelles pistes de la synchro : désarmées, monitoring OFF (lv1_common.new_track).
   Réglages en ExtState lv1_meter_bridge. Pas de Lua sur le PC : syntaxe non vérifiée hors Reaper.
 - **DISPLAY = bascule LV1 <-> Reaper au premier plan, SAVE selon la fenêtre active (codé le 15/10, test
   `tests/test_apps.py`, notes Mackie 0x34 / 0x50 non vérifiées)** — choix du bouton : DISPLAY (NAME/VALUE), FLIP étant
