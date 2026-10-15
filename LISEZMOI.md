@@ -91,9 +91,14 @@ Bouger un fader de la X-Touch règle maintenant le fader du canal dans la LV1.
 Envoie-moi le journal `xtouch_journal_*.txt` et tes relevés de courbe.
 
 ### Fader master (9e fader de la X-Touch)
-Il pilote le **LR** de la LV1 par défaut, et suit sa position.
+Il **suit** le **LR** de la LV1 par défaut, en **lecture seule** : le toucher ou le bouger n'envoie rien, le moteur
+reprend la position de la LV1 au relâchement (fader critique, il sert au monitoring).
+En **sends on fader** (SEND ou F1-F8), il passe sur le **master de l'aux** choisi, et là il le **règle**.
 `py xtouch_lv1_display.py --master 5:0` pour une autre piste (groupe:canal ; 3 = LR, 4 = C, 5 = M, 1 = groupes…),
 `--master aucun` pour le désactiver.
+
+Un fader monté **sans toucher détecté** (ongle, gant…) règle quand même la LV1, et fait apparaître le rappel à
+l'écran (sauf si son moteur vient de bouger : c'est alors le moteur, pas la main).
 
 ## Calibration des faders
 

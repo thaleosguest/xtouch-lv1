@@ -802,6 +802,8 @@ class WinMidiIn:
 EVENTS = queue.Queue()  # messages MIDI reçus (global : les tests peuvent en injecter)
 FADER_TOL = 48          # écart (sur 16383) en dessous duquel on ne bouge pas le moteur
 HOLD_AFTER = 0.3        # s pendant lesquelles un fader lâché reste « tenu » (retours LV1 ignorés)
+MOTOR_BUSY = 1.5        # s après une commande moteur : un fader bougé sans toucher est le moteur, pas la main
+UNTOUCHED_MIN = 80      # écart (sur 16383) qu'un fader non touché doit faire pour démarrer un geste (ongle)
 STALE_FOR = 2.0         # s après le relâchement pendant lesquelles un retour « périmé » est ignoré
 SEND_EVERY = 0.02       # envoi max d'une valeur par fader toutes les 20 ms
 TOUCH_NOTES = range(0x68, 0x71)   # notes de toucher : 0x68-0x6F faders 1-8, 0x70 master (norme Mackie)
@@ -1080,10 +1082,12 @@ def send_label(short, db):
     return ("%s %s" % (short, lvl))[:7]
 
 
-def aux_short(name, aux):
-    """Libellé court d'un aux pour l'afficheur : « F3 », « M12 »."""
-    n = "".join(ch for ch in (name or "") if ch.isdigit()) or str(aux + 1)
-    return ("F" if (name or "").lower().startswith("fx") else "M") + n
+def aux_short(track, aux):
+    """Libellé court d'un aux pour l'afficheur : « F3 », « M12 ». track = (groupe, canal, nom) de /Aux/Tracks ;
+    tiré du groupe et du canal, PAS du nom (journal du 15/10 : Fx 1 renommé « Reverb Hall » s'affichait « M1 »)."""
+    if not track:
+        return "A%d" % (aux + 1)
+    return ("F" if track[0] == 2 else "M") + str(track[1] + 1)
 
 
 class SendControl:
@@ -1147,8 +1151,8 @@ class SendControl:
     def label(self):
         with self.state.lock:
             aux = self.state.aux_tracks
-            name = aux[self.aux][2] if self.aux is not None and self.aux < len(aux) else None
-        return aux_short(name, self.aux) if self.aux is not None else None
+            track = aux[self.aux] if self.aux is not None and self.aux < len(aux) else None
+        return aux_short(track, self.aux) if self.aux is not None else None
 
     def press_user_key(self, k):
         """Appui momentané sur la User Key k de la LV1 (T puis F, comme MyFOH / module Companion)."""
@@ -1291,7 +1295,7 @@ class SendControl:
                     mutes[i] = solos[i] = selects[i] = False
             elif self.aux is not None:
                 aux = self.state.aux_tracks
-                short = aux_short(aux[self.aux][2] if self.aux < len(aux) else None, self.aux)
+                short = aux_short(aux[self.aux] if self.aux < len(aux) else None, self.aux)
                 for i, e in enumerate(entries[:n]):
                     if e is None:
                         continue
@@ -1604,6 +1608,9 @@ class FaderControl:
         self.gesture = {}      # clé -> valeurs du geste en cours (ancienne valeur + valeurs envoyées)
         # tranche, piste (ou None) -> clé réglée : (g, ch) = fader de piste, (g, ch, aux) = envoi, None = rien
         self.key_of = lambda strip, e: e
+        # tranche -> True si le fader est en lecture seule (master sur LR, demande de Joseph : fader critique, sert au
+        # monitoring ; toucher = rien n'est envoyé, le moteur garde la position LV1)
+        self.readonly = lambda strip: False
 
     def held(self, now):
         return {s for s in set(self.touched) | set(self.hold_until)
@@ -1615,13 +1622,23 @@ class FaderControl:
         if kind == 0xE0 and surface.strip_of(unit, chan) is not None:   # fader bougé (pitch bend)
             strip = surface.strip_of(unit, chan)
             value = d1 | (d2 << 7)
-            # Garde-fou 1 : si la X-Touch envoie le toucher, un fader non touché ne compte pas
-            # (c'est le moteur qui bouge, pas la main).
-            if self.seen_touch and not self.touched.get(strip):
-                JOURNAL.mark("XT fader %s = %d ignoré (pas touché)" % (label_of(strip), value))
+            if self.readonly(strip):
+                self.hold_until[strip] = t + HOLD_AFTER          # pour le rappel à l'écran
+                JOURNAL.mark("XT fader %s = %d ignoré (lecture seule)" % (label_of(strip), value))
                 return True
-            # Garde-fou 2 : valeur proche d'une commande moteur récente (venue de la LV1) = écho du moteur.
+            # Garde-fou 1 : si la X-Touch envoie le toucher, un fader non touché ne compte pas tant que son moteur
+            # vient de recevoir une commande (c'est le moteur qui bouge, pas la main). Moteur au repos : c'est un
+            # geste sans toucher détecté (ongle, gant…, remarque de Joseph du 15/10) -> il compte, s'il s'écarte
+            # vraiment de la dernière position connue.
             mv = surface.motor.get(strip)
+            if self.seen_touch and not self.touched.get(strip):
+                moving = strip in self.hold_until and t < self.hold_until[strip]
+                last = surface.sent_fader.get(surface.addr(strip))
+                if (mv and t - mv[1] < MOTOR_BUSY) or (not moving and last is not None
+                                                       and abs(last - value) <= UNTOUCHED_MIN):
+                    JOURNAL.mark("XT fader %s = %d ignoré (pas touché)" % (label_of(strip), value))
+                    return True
+            # Garde-fou 2 : valeur proche d'une commande moteur récente (venue de la LV1) = écho du moteur.
             if not self.touched.get(strip) and mv and abs(mv[0] - value) <= 160 and t - mv[1] < 1.5:
                 JOURNAL.mark("XT fader %s = %d ignoré (écho moteur)" % (label_of(strip), value))
                 return True
@@ -1653,6 +1670,8 @@ class FaderControl:
             JOURNAL.mark("XT toucher fader %s : %s" % (label_of(strip), "posé" if down else "lâché"))
             if not down:
                 self.hold_until[strip] = t + HOLD_AFTER
+                if self.readonly(strip):                 # lecture seule : le moteur reprend la position LV1
+                    surface.sent_fader.pop(surface.addr(strip), None)
             return True
         return False
 
@@ -1882,6 +1901,8 @@ def main():
         import xtouch_overlay
         overlay = xtouch_overlay.make_overlay(a.mixer)    # Qt (style Gain Recall v3) si PySide6, sinon tkinter
     faders.key_of = sends.key_of
+    # master en lecture seule quand il est sur LR (hors sends on fader : là, il règle le master de l'aux)
+    faders.readonly = lambda strip: strip == MASTER and sends.aux_track() is None
 
     def load_pans():
         """Pans de départ des entrées (le réseau ne les donne pas) : copie de la base de la LV1."""
@@ -2008,7 +2029,7 @@ def main():
                 timecode = seg_codes(sends.label() or "--", 5) + timecode[5:]
             surface.push_master_display(assign, timecode)
             if overlay:
-                touched = [s for s, v in faders.touched.items() if v]
+                touched = sorted(faders.held(now))         # touché, ou bougé sans toucher (ongle)
                 if touched:
                     recall_until[0] = now + RECALL_HOLD
                 if now < recall_until[0]:

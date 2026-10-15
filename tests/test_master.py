@@ -90,6 +90,10 @@ def inject():
         v = 12287 + i * 1000
         put(1.75 + i * 0.05, 1, 0xE8, v & 0x7F, v >> 7)
     put(2.0, 1, 0x90, 0x70, 0)                        # relâcher master
+    if not NOTOUCH:                                   # fader 3 monté à l'ongle (toucher non détecté), moteur au repos
+        for i in range(5):
+            v = 9000 + i * 600
+            put(2.3 + i * 0.05, 0, 0xE2, v & 0x7F, v >> 7)
 threading.Thread(target=inject, daemon=True).start()
 
 sys.argv = ["x", "--dry-run", "--x32", "aucun", "--host", "127.0.0.1", "--port", str(PORT), "--seconds", "3.3"]
@@ -97,3 +101,13 @@ D.main()
 print("\n/Set envoyés à la LV1 :")
 for g in got: print("  ", g[0], g[1], P.short_args(g[2]))
 print("Moteur master (instant, valeur) :", MASTER_OUT)
+
+# Master sur LR = LECTURE SEULE (demande de Joseph, 15/10) : rien n'est envoyé, le moteur reprend la position LV1.
+lr = [g for g in got if g[1] == "/Set/Track/Out/Gain" and g[2][0][1] == 3]
+assert not lr, "master en lecture seule : aucun /Set vers LR attendu, reçu %r" % lr
+back = [v for t, v in MASTER_OUT if 2.0 < t < 3.2]       # après le relâchement, avant la remise à zéro de l'arrêt
+assert back and back[-1] == D.db_to_fader(-6.0), "le moteur master doit revenir sur la position LV1"
+if not NOTOUCH:
+    nail = [g for g in got if g[1] == "/Set/Track/Out/Gain" and g[2][0][1] == 0 and g[2][1][1] == 2]
+    assert nail, "fader 3 bougé sans toucher (ongle) : il doit régler la LV1"
+print("OK : master en lecture seule, geste sans toucher pris en compte")

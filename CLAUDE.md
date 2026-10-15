@@ -120,7 +120,14 @@ Messages vérifiés :
 
 ## Garde-fous des faders (ne pas retirer sans raison)
 
-1. Fader non touché alors que le toucher a déjà été vu = moteur -> ignoré.
+1. Fader non touché alors que le toucher a déjà été vu = moteur -> ignoré, SEULEMENT si son moteur a reçu une
+   commande depuis moins de 1,5 s (`MOTOR_BUSY`) ; moteur au repos = geste sans toucher détecté (ongle, remarque de
+   Joseph du 15/10), accepté s'il s'écarte de plus de 80 (`UNTOUCHED_MIN`) ; il déclenche aussi le rappel à l'écran
+   (`faders.held`).
+0. **Master sur LR = lecture seule** (Joseph, 15/10 : fader critique, monitoring) : `FaderControl.readonly`, rien
+   n'est envoyé, `sent_fader` oublié au relâchement -> le moteur reprend la position LV1. En sends on fader (SEND ou
+   F-keys), master = master de l'aux, ÉCRITURE (test_sends). Libellé aux (`aux_short`) tiré du groupe/canal, pas du
+   nom (Fx 1 renommé « Reverb Hall » affichait « M1 »).
 2. Position proche d'une commande moteur récente (< 1,5 s) = écho moteur -> ignorée.
 3. Position identique à la dernière connue -> ignorée (évite toute boucle d'écho).
 4. Pendant le toucher (+0,3 s) : retours LV1 de cette piste ignorés (`held_tracks`).
@@ -130,7 +137,7 @@ Messages vérifiés :
 
 ## Choix de Joseph
 
-- Extender **à gauche** de la X-Touch (tranches 1-8 sur l'Extender). Master -> LR.
+- Extender **à gauche** de la X-Touch (tranches 1-8 sur l'Extender). Master -> LR (lecture seule).
 - Calibration sur les **repères imprimés** de la X-Touch (pas sur l'écran LV1). Un seul fichier de courbe pour tous.
 - Vumètres : il préfère ceux de la LV1 (post-fader).
 - ◄ CHANNEL ► = **sélection** canal suivant / précédent (pas de décalage de tranches, il n'en veut pas).

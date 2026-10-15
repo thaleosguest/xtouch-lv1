@@ -93,7 +93,9 @@ def inject():
     put(2.1, 0, 0x90, 0x1A, 127); put(2.15, 0, 0x90, 0x1A, 0)    # Select tranche 3 -> aux 2 (Fx 3)
     put(2.6, 0, 0x90, 0x68, 127); put(2.65, 0, 0xE0, 0x00, 0x40); put(3.0, 0, 0x90, 0x68, 0)  # envoi In1 -> Fx3
     put(3.3, 0, 0x90, 0x10, 127); put(3.35, 0, 0x90, 0x10, 0)    # Mute tranche 1 -> envoi OFF
+    put(3.4, 1, 0x90, 0x70, 127); put(3.45, 1, 0xE8, 0x00, 0x48); put(3.5, 1, 0x90, 0x70, 0)  # master = master Fx 3
     put(3.6, 1, 0x90, 0x29, 127); put(3.65, 1, 0x90, 0x29, 0)    # SEND -> retour
+    put(3.75, 1, 0x90, 0x70, 127); put(3.8, 1, 0xE8, 0x00, 0x30); put(3.85, 1, 0x90, 0x70, 0)  # master LR : lecture seule
     put(3.9, 0, 0x90, 0x69, 127); put(3.95, 0, 0xE1, 0x00, 0x50); put(4.3, 0, 0x90, 0x69, 0)  # fader 2 normal
 threading.Thread(target=inject, daemon=True).start()
 
@@ -112,6 +114,8 @@ ok = ok and any(a == "/Set/Aux/Send/Gain" and v == [0, 0, 2] for a, v in kinds)
 ok = ok and ("/Set/Aux/Send/On", [0, 0, 2]) in kinds and [v for a, v in SETS if a == "/Set/Aux/Send/On"][0][3] is False
 ok = ok and kinds[-1][0] == "/Set/Track/Out/Gain" and kinds[-1][1][:2] == [0, 1]
 ok = ok and not any(a == "/Set/Track/Out/Mute" for a, v in kinds)
+ok = ok and ("/Set/Track/Out/Gain", [2, 2]) in [(x, v[:2]) for x, v in kinds]          # master = master de l'aux
+ok = ok and not any(x == "/Set/Track/Out/Gain" and v[:2] == [3, 0] for x, v in kinds)  # master LR en lecture seule
 ok = ok and bool(picks)
 bottom = [v for t, d in sorted(LCD.items()) if 2.1 <= t < 3.6 for v in d if v[5:7] == b"8"]
 print("Ligne du bas en mode envois :", bottom[-1][7:30] if bottom else None)
