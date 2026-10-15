@@ -26,20 +26,20 @@ local routed, existing, odd = 0, 0, {}
 for _, e in ipairs(list) do
   if #e.rec > 0 then routed = routed + 1 end
   if tagged[e.ch] then existing = existing + 1 end
-  if C.mismatch(e) then
-    odd[#odd + 1] = string.format("  %s : enregistré sur %d, entrée B sur %d", e.name, e.rec[1] + 1, e.play[1] + 1)
+  if #e.rec > 0 and #e.play == 0 then     -- enregistré, mais rien ne revient en Flip B
+    odd[#odd + 1] = string.format("  %s (enregistré sur %d)", e.name, e.rec[1] + 1)
   end
 end
 local warn = ""
 if #odd > 0 then
-  warn = "\n\nEntrée B pas sur le même numéro que l'enregistrement (" .. #odd .. ") :\n" ..
+  warn = "\n\nCanaux enregistrés SANS entrée B sur le pilote : muets en Flip B (" .. #odd .. ") :\n" ..
          table.concat(odd, "\n", 1, math.min(#odd, 6)) .. (#odd > 6 and "\n  …" or "")
 end
 local answer = reaper.ShowMessageBox(string.format(
   "%d entrées LV1, dont %d qui reçoivent une source enregistrée sur le pilote de ce PC ; %d déjà dans Reaper.\n\n" ..
   "OUI : seulement les canaux qui reçoivent une source (%d)\nNON : toutes les entrées (%d)\nANNULER : ne rien faire\n\n" ..
   "Chaque piste prend le nom, la couleur et le routage : entrée = canal du pilote enregistré, sortie = entrée B " ..
-  "(ou, si l'entrée B n'est pas sur le pilote, le même numéro que l'enregistrement). Rien n'est supprimé.%s",
+  "(ou, si l'entrée B n'est pas sur le pilote, le même numéro que l'enregistrement : patche alors l'entrée B dessus). Rien n'est supprimé.%s",
   #list, routed, existing, routed, #list, warn), TITLE, 3)
 if answer ~= 6 and answer ~= 7 then return end
 local mode = answer == 6 and "routed" or "all"

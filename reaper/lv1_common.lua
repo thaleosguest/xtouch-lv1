@@ -78,11 +78,6 @@ function M.out_of(e)
   return e.rec
 end
 
--- Entrée B branchée sur un autre numéro que l'enregistrement ?
-function M.mismatch(e)
-  return #e.play > 0 and #e.rec > 0 and e.play[1] ~= e.rec[1]
-end
-
 -- Routage : entrée d'enregistrement = canaux « rec » du pilote ; sortie matérielle = M.out_of (entrée B).
 -- La sortie matérielle créée ici est marquée (P_EXT:lv1) : on ne touche jamais aux autres envois de la piste.
 -- À n'appeler que Reaper à l'ARRÊT (changer l'entrée d'une piste en enregistrement couperait la prise).
