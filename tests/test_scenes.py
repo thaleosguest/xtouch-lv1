@@ -46,8 +46,9 @@ def lv1():
     send("/Notify/CurSceneIndex", [("i", 0)])                         # connexion : pas transmis
     at(1.0); send("/Channels", [("i", 1)] + track("Ch1", 0, 0))      # état complet (Flip A/B)
     send("/Notify/CurSceneIndex", [("i", 0)])                         # même scène dans l'état : pas transmis
-    at(3.2); send("/Notify/CurSceneIndex", [("i", 1)])                # rappel « Chanson 1 » : transmis
+    at(2.2); send("/Notify/CurSceneIndex", [("i", 1)])                # rappel « Chanson 1 » : transmis
     send("/Notify/Scene/Name", [("s", "Chanson 1")])
+    time.sleep(0.05); send("/Notify/CurSceneIndex", [("i", 1)])       # la LV1 le répète : PAS transmis
     at(3.8); send("/Notify/CurSceneIndex", [("i", 1)])                # même scène rappelée à nouveau : transmis
     at(6)
 threading.Thread(target=lv1, daemon=True).start()

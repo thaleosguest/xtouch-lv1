@@ -219,6 +219,7 @@ class LV1State:
         # Hypothèse tirée du journal du 14/10 : le 1er nombre de /Notify/Layers est la vue.
         self.last_set = {}        # vue -> dernier jeu de couches reçu [(nom, [(g, ch) | None, ...]), ...]
         self.last_flag = {}       # vue -> 2e nombre de ce paquet (1 = custom d'après le module Companion)
+        self.pending_set = {}     # vue -> (jeu, flag) reçu, adopté au /Notify/CurrentLayer qui le suit
         self.current = {}         # vue -> index de couche (/Notify/CurrentLayer)
         self.local = {}           # vue -> index choisi par ◄ BANK ► sur la X-Touch (effacé au clic LV1)
         self.selected = None      # (g, ch) sélectionné dans le pont (Select / ◄ CHANNEL ►), local comme MyFOH
@@ -229,6 +230,7 @@ class LV1State:
         self.on_b = None          # entrées sur B ? (base LV1, relue après chaque Flip A/B) ; None = inconnu
         self.scenes = {}          # index -> nom (/Notify/SceneList, /Notify/Scene/Name)
         self.cur_scene = None     # index de la scène courante (/Notify/CurSceneIndex), -1 = aucune
+        self.scene_last = (None, 0.0)   # (index, instant) du dernier rappel retenu
         self.scene_events = []    # [(index, instant)] scènes rappelées sur la LV1, à transmettre à Reaper
         self.channels_at = 0.0    # instant du dernier /Channels (état complet renvoyé : connexion, Flip A/B…)
         self.custom_on = {}       # vue -> bouton Custom allumé ? (/Notify/CustomButton, hypothèse)
@@ -405,11 +407,17 @@ def handle(state, address, args):
         elif address == "/Notify/CurSceneIndex" and args and args[0][0] == "i":
             # Scène rappelée. La LV1 renvoie aussi la scène courante dans chaque état complet (connexion, Flip A/B) :
             # là, seul un CHANGEMENT d'index compte ; sinon tout rappel compte (même scène rappelée à nouveau).
-            idx, prev = args[0][1], state.cur_scene
-            dump = time.time() - state.channels_at < 2.0
+            # Un rappel envoie CurSceneIndex TROIS fois en ~0,15 s (journal 155042) : une seule fois compte.
+            idx, prev, now = args[0][1], state.cur_scene, time.time()
+            dump = now - state.channels_at < 2.0
             state.cur_scene = idx
-            if prev is not None and idx >= 0 and (idx != prev or not dump):
-                state.scene_events.append((idx, time.time()))
+            last_idx, last_t = state.scene_last
+            repeat = idx == last_idx and now - last_t < 1.0
+            if prev is not None and idx >= 0 and (idx != prev or not dump) and not repeat:
+                state.scene_events.append((idx, now))
+                state.scene_last = (idx, now)
+            elif repeat:
+                state.scene_last = (idx, now)
         elif address == "/Notify/UserKeyInfo" and len(args) >= 4 and args[0][0] == "i":
             # ,issi [n°, nom court, fonction, assignée] ; ex. i:0 "Mon 1" "Flip Sends: MX1: Mon 1" i:1
             state.user_keys[args[0][1]] = (args[1][1], args[2][1], bool(args[3][1]))
@@ -473,15 +481,21 @@ def handle(state, address, args):
                     if mu[0] == "i":
                         t["mute"] = mu[1] != 0
         elif address == "/Notify/Layers":
+            # Jeu adopté SEULEMENT s'il est suivi de /Notify/CurrentLayer pour la même vue (bug du 15/10, journal
+            # 155042) : dans un état complet (connexion, rappel de scène, Flip A/B), la LV1 envoie les jeux d'usine
+            # suivis de CurrentLayer, PUIS les pages Custom SANS CurrentLayer -> « dernier jeu reçu » affichait à
+            # tort Custom Page-1. Un vrai passage en Custom envoie bien Layers (Custom) + CurrentLayer.
             page, is_custom, layers = parse_layers(args)
             if layers:
-                state.last_set[page] = layers
-                state.last_flag[page] = is_custom
+                state.pending_set[page] = (layers, is_custom)
         elif address == "/Notify/CustomButton" and len(args) >= 2 and args[1][0] == "i":
             state.custom_on[args[0][1]] = args[1][1] != 0
         elif address == "/Notify/SpillButton" and len(args) >= 2 and args[1][0] == "i":
             state.spill_on[args[0][1]] = args[1][1] != 0
         elif address == "/Notify/CurrentLayer" and len(args) >= 2:
+            pend = state.pending_set.pop(args[0][1], None)
+            if pend:
+                state.last_set[args[0][1]], state.last_flag[args[0][1]] = pend
             state.current[args[0][1]] = args[1][1]
             state.local.pop(args[0][1], None)   # clic de couche sur la LV1 : elle reprend la main
         elif address == "/Notify/ServiceVersion" and args and args[0][0] == "s":

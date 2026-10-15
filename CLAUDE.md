@@ -89,8 +89,10 @@ Messages vérifiés :
 - `/Notify/Track/Out/Mute ii i T` (groupe 13 = groupes de mute) ; écriture `/Set/Track/Out/Mute ii T|F`.
 - `/Notify/Solo ii i` ; écriture `/Set/Solo ii i(0|1)`.
 - Couches : à chaque clic, la LV1 envoie `/Notify/Layers` (le jeu affiché) PUIS `/Notify/CurrentLayer i:vue i:index`.
-  `/Notify/Layers` = vue, flag, nb, puis (nom, n, (groupe, canal)×n) ; (-1,-1) = vide. **Règle retenue : suivre le
-  dernier jeu reçu pour la vue.** Le flag (2e nombre) n'indique pas fiablement « custom » ; `/Notify/CustomButton`
+  `/Notify/Layers` = vue, flag, nb, puis (nom, n, (groupe, canal)×n) ; (-1,-1) = vide. **Règle retenue (corrigée le 15/10) : adopter
+  un jeu SEULEMENT quand il est suivi de /Notify/CurrentLayer pour la même vue** — dans un état complet (connexion,
+  rappel de scène, Flip A/B) les pages Custom arrivent en dernier SANS CurrentLayer (journal 155042 : la X-Touch
+  sautait sur Custom Page-1). Tests `tests/test_couches_etat.py`, `py tests/rejouer_couches.py . journal`. Le flag (2e nombre) n'indique pas fiablement « custom » ; `/Notify/CustomButton`
   et `/Notify/SpillButton` **ne changent pas** quand on allume Custom/Spill (vérifié) : ne pas s'en servir.
 - **Capture MyFOH du 14/10 (myfoh.pcapng)** : changer de couche dans MyFOH n'envoie **rien** à la LV1 ;
   sélectionner un canal envoie seulement `/GetEQ ii` + `/GetGEQ ii` (groupe, canal), la LV1 répond par
