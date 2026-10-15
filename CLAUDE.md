@@ -140,13 +140,13 @@ Messages vérifiés :
   et Mixer 2 à vérifier plus tard (le suivi des couches est générique ; `--mixer 2` et l'onglet Mixer 2 sont prévus).
 - Avancer par petites étapes testées, hors concert ; journal + rapport à chaque test.
 
-## À reprendre (arrêt du 14/10/2026 au soir)
+## À reprendre (fin de session du 15/10/2026)
 
-- **Sélection depuis l'onglet Channel** : l'aller-retour d'onglet est codé mais REFUSÉ sur le matériel (journal 191748 :
-  « onglet lu : None » sur la page Channel). Il faut une capture de la page Channel (script d'attente : LV1 au premier
-  plan ET hors Mixer 1/2) pour voir la barre d'onglets à cet endroit et corriger `lv1_clic.Target.active_tab`.
-- À tester sur le matériel : pan plus sensible (3/45 par cran), clic de sélection par recherche de la bande du nom
-  (essayer Big Fader / autres modes), afficheur 7 segments option C + LED SOLO (CC non vérifiés).
+- À vérifier sur le matériel : rappel de pistes avec les vrais faders (alignement réglé par Joseph : ext 0-911, xt
+  953-1867, master 1884-1920 -> master en présentation compacte), FLIP A/B (LED + pastille), PAN plus sensible,
+  afficheur 7 segments option C, Mon 9-16 dans les sends, faders = masters des aux pendant le choix SEND.
+- Plus tard : Reaper (OSC, transport, jog selon la page LV1), 64/32/16 ch et Mixer 2.
+- Tests : `for t in tests/test_*.py; do py $t .; done` (15 tests, tous OK au 15/10).
 
 ## Reste à faire / idées
 

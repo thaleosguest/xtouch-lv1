@@ -42,7 +42,8 @@ Chaque ligne correspond à un ou plusieurs commits git (`git log` pour le détai
 | Bouton **SOLO** : allumé si un solo est actif ; appui = efface tous les solos | vérifié |
 | Bouton **FLIP** = Flip A/B (via la User Key « Flip AB »), LED = entrées sur B | codé |
 | Indicateur **FLIP A / FLIP B** posé sur la touche FlipAB de la LV1 (Qt, opaque) | codé |
-| **Rappel de pistes** à l'écran, aligné sur la X-Touch + Extender, au toucher d'un fader | codé |
+| **Rappel de pistes** à l'écran, aligné sur la X-Touch + Extender, au toucher d'un fader : couleur, nom, fader,
+  vumètres (2 en stéréo), mute / solo / 48V / gain / pan, opaque, fondu ; réglage des blocs à la main ; master compact | codé |
 
 ## Décisions de Joseph
 
