@@ -1611,6 +1611,68 @@ class TransportControl:
                 NOTE_MARKER: self.marker_down}
 
 
+# ─── Bascule LV1 <-> Reaper et SAVE (demande de Joseph, 15/10) ──────────────────────────────────────────────────────
+NOTE_DISPLAY = 0x34      # DISPLAY (NAME/VALUE, Mackie, non vérifié) : met Reaper ou la LV1 au premier plan
+NOTE_SAVE = 0x50         # SAVE (Mackie, non vérifié) : selon la fenêtre active
+ACT_REAPER_SAVE_AS = 40022   # File: Save project as...
+
+
+class AppControl:
+    """DISPLAY = bascule du premier plan : LV1 devant -> Reaper ; sinon -> LV1. LED DISPLAY allumée = Reaper devant.
+    SAVE : Reaper devant -> « Save project as » ; LV1 devant -> User Key de la LV1 dont la fonction contient « Store »
+    (pas de commande réseau connue pour enregistrer une scène) ; autre fenêtre -> rien."""
+
+    def __init__(self, state, link, reaper, mixer=1, write=True):
+        self.state, self.link, self.reaper, self.mixer, self.write = state, link, reaper, mixer, write
+        self.front = "autre"
+        self.warned = set()
+        threading.Thread(target=self._watch, daemon=True).start()
+
+    def _watch(self):
+        import fenetres
+        while True:
+            self.front = fenetres.front_app(self.mixer)
+            time.sleep(0.4)
+
+    def _switch(self):
+        import fenetres
+        target = "lv1" if fenetres.front_app(self.mixer) == "reaper" else "reaper"
+        ok = fenetres.bring(target, self.mixer)
+        JOURNAL.mark("XT Display -> %s au premier plan : %s" % (target, "ok" if ok else "refusé / introuvable"))
+        self.front = fenetres.front_app(self.mixer)
+
+    def on_midi(self, unit, status, d1, d2, t, entries, surface):
+        if (status & 0xF0) != 0x90 or d1 not in (NOTE_DISPLAY, NOTE_SAVE) or unit != surface.master_unit:
+            return False
+        if not d2:
+            return True
+        if d1 == NOTE_DISPLAY:
+            threading.Thread(target=self._switch, daemon=True).start()
+            return True
+        import fenetres
+        front = fenetres.front_app(self.mixer)
+        if front == "reaper":
+            if self.reaper:
+                self.reaper.action(ACT_REAPER_SAVE_AS)
+                JOURNAL.mark("XT Save -> Reaper : Save project as")
+        elif front == "lv1":
+            with self.state.lock:
+                keys = [k for k, (_s, func, on) in sorted(self.state.user_keys.items())
+                        if on and "store" in (func or "").lower()]
+            if keys and self.write:
+                self.link.send("/Set/UserKey", [("i", keys[0]), ("T", True)])
+                self.link.send("/Set/UserKey", [("i", keys[0]), ("F", False)])
+                JOURNAL.mark("XT Save -> LV1 User Key %d (store)" % (keys[0] + 1))
+            elif not keys:
+                JOURNAL.mark("XT Save : aucune User Key « Store » dans la LV1")
+                if "store" not in self.warned:
+                    print("  SAVE : assigne une User Key de la LV1 à l'enregistrement de scène (fonction « Store … »).")
+                    self.warned.add("store")
+        else:
+            JOURNAL.mark("XT Save ignoré : ni la LV1 ni Reaper au premier plan")
+        return True
+
+
 class ButtonControl:
     """Mute / Solo -> LV1 ; ◄ BANK ► -> couche, Select / ◄ CHANNEL ► -> sélection (locales). Rec : rien."""
 
@@ -2113,6 +2175,7 @@ def main():
         reaper = reaper_link.ReaperLink(*target, journal=lambda m: JOURNAL.mark(m))
         print("  Reaper (OSC %s:%d, retours sur %d) : transport, marqueurs, zoom, jog hors plugin LV1." % target)
     transport = TransportControl(reaper)
+    apps = AppControl(state, link, reaper, a.mixer, write=not a.lecture_seule) if not a.dry_run else None
     scene_bridge = None
     if reaper:                       # scènes LV1 <-> marqueurs Reaper (script reaper/lv1_scenes.lua dans Reaper)
         import reaper_scenes
@@ -2236,6 +2299,7 @@ def main():
                         or sends.on_midi(unit, st, d1, d2, t, entries, surface)
                         or gain.on_midi(unit, st, d1, d2, t, entries, surface)
                         or transport.on_midi(unit, st, d1, d2, t, entries, surface)
+                        or (apps is not None and apps.on_midi(unit, st, d1, d2, t, entries, surface))
                         or buttons.on_midi(unit, st, d1, d2, t, entries, surface)):
                     JOURNAL.mark("MIDI unité %d : %02X %02X %02X" % (unit, st, d1, d2))
             held = faders.flush(now)
@@ -2266,6 +2330,8 @@ def main():
                 if now - tracks_sent[0] >= 1.0:                  # liste des entrées pour la synchro des pistes Reaper
                     tracks_sent[0] = now
                     scene_bridge.write_tracks(input_list(state))
+            if apps is not None:
+                surface.set_main_led(NOTE_DISPLAY, apps.front == "reaper")      # LED DISPLAY = Reaper devant
             if reaper:
                 for note, on in transport.leds().items():
                     surface.set_main_led(note, on)

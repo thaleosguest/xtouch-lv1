@@ -311,6 +311,13 @@ une nouvelle entrée (ou, en mode NON, une entrée que tu renommes) a sa piste a
 seulement**. Attention : une piste synchronisée que tu supprimes dans Reaper revient à l'arrêt suivant (relance la
 synchro en mode NON et laisse l'entrée en « Channel N » sur la LV1 pour qu'elle ne revienne pas).
 
+## DISPLAY et SAVE
+
+- **DISPLAY** : met Reaper au premier plan (si la LV1 est devant), sinon la LV1. LED allumée = Reaper devant.
+- **SAVE** : Reaper devant -> *Save project as* ; LV1 devant -> appuie sur la User Key de la LV1 dont la fonction
+  contient « Store » (à assigner dans la LV1 à l'enregistrement de scène) ; autre fenêtre devant -> rien.
+  Essai sans X-Touch : `py fenetres.py` (qui est devant), `py fenetres.py reaper` / `py fenetres.py lv1`.
+
 ## Affichage à l'écran
 
 La pastille FLIP n'apparaît **que quand la LV1 est au premier plan**. Le rappel de pistes et le bandeau / cadre

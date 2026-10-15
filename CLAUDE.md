@@ -205,6 +205,11 @@ Messages vérifiés :
   A, play = lecture du pilote sur l'entrée B ; relu toutes les 5 s (copie 10 ms), ajouté à lv1_tracks.txt ;
   `reaper/lv1_common.lua` (module commun) règle I_RECINPUT (1024+n = paire) et une sortie matérielle marquée
   P_EXT:lv1 (I_DSTCHAN, 1024 = mono), à l'ARRÊT seulement. Test `tests/test_routage.py`.
+- **DISPLAY = bascule LV1 <-> Reaper au premier plan, SAVE selon la fenêtre active (codé le 15/10, test
+  `tests/test_apps.py`, notes Mackie 0x34 / 0x50 non vérifiées)** — choix du bouton : DISPLAY (NAME/VALUE), FLIP étant
+  pris par Flip A/B. `fenetres.py` (front_app, bring : AttachThreadInput + SetForegroundWindow) ; `AppControl` :
+  LED DISPLAY = Reaper devant ; SAVE : Reaper -> action 40022 (Save project as), LV1 -> User Key dont la fonction
+  contient « Store » (aucune commande réseau de scène à enregistrer dans le module Companion), autre -> rien.
 - **Pastille FLIP visible seulement si la LV1 est au premier plan** (Joseph, 15/10 : elle restait devant les autres
   programmes ; rappel de pistes et sends on fader restent affichés LV1 en arrière-plan, choix de Joseph) : processus de la fenêtre de premier plan = celui de la LV1 (fenêtres détachées et
   boîtes de dialogue comprises) ou l'overlay lui-même (réglage).
