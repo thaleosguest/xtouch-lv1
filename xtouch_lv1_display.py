@@ -224,6 +224,8 @@ class LV1State:
         self.sends = {}           # (g, ch, aux) -> {"fader": dB, "on": bool, "pan": -1..1} (envois aux)
         self.aux_tracks = []      # /Aux/Tracks : [(groupe, canal, nom)] dans l'ordre des index aux (Fx 1-8, Mon 1-16)
         self.user_keys = {}       # n° 0..15 -> (nom court, fonction, assignée) : /Notify/UserKeyInfo
+        self.on_b = None          # entrées sur B ? (base LV1, relue après chaque Flip A/B) ; None = inconnu
+        self.channels_at = 0.0    # instant du dernier /Channels (état complet renvoyé : connexion, Flip A/B…)
         self.custom_on = {}       # vue -> bouton Custom allumé ? (/Notify/CustomButton, hypothèse)
         self.spill_on = {}        # vue -> bouton Spill allumé ? (/Notify/SpillButton, hypothèse)
         self.version = ""
@@ -415,6 +417,7 @@ def handle(state, address, args):
             else:
                 state.track(*key)["fader"] = val
         elif address == "/Channels" and args and args[0][0] == "i":
+            state.channels_at = time.time()
             count = args[0][1]
             for k in range(max(0, min(count, 256))):
                 base = 1 + k * 19
@@ -720,6 +723,7 @@ class Surface:
                     self.midi.short(h, 0x90, NOTE_RUDE_SOLO, 0)
                     self.midi.short(h, 0x90, NOTE_SEND, 0)
                     self.midi.short(h, 0x90, NOTE_SOLO_ALL, 0)
+                    self.midi.short(h, 0x90, NOTE_FLIP, 0)
                     for k in range(8):
                         self.midi.short(h, 0x90, NOTE_F1 + k, 0)
                     for cc in list(range(CC_TIMECODE, CC_TIMECODE + 10)) + [CC_ASSIGN_L, CC_ASSIGN_R]:
@@ -813,6 +817,7 @@ NOTE_CHANNEL_LEFT, NOTE_CHANNEL_RIGHT = 0x30, 0x31
 # Jog wheel (cranté sur la X-Touch) : CC 0x3C relatif, 0x01 = un cran horaire, 0x41 = anti-horaire (Mackie, à confirmer).
 # Page Channel : il règle le potard de plugin sélectionné (fader horizontal du bas) par crans de molette.
 CC_JOG = 0x3C
+NOTE_FLIP = 0x32                  # FLIP (vérifié le 14/10) -> User Key « Flip AB Input channel » de la LV1
 NOTE_SOLO_ALL = 0x5A              # bouton SOLO (groupe Marker..Click..Solo, Mackie, à confirmer) : allumé si un solo
                                   # est actif dans la LV1 ; appui = /ClearAllSolo (demande de Joseph, 15/10)
 # Assignation des encodeurs (norme Mackie, à confirmer) : TRACK 0x28. Encodeurs : CC 0x10-0x17 relatifs
@@ -1515,6 +1520,21 @@ class ButtonControl:
                 print("  Jog wheel : réglage des plugins avec --clic-lv1 seulement.")
                 self.warned.add("jog")
             return True
+        if (status & 0xF0) == 0x90 and d1 == NOTE_FLIP:
+            if d2:
+                with self.state.lock:
+                    keys = [k for k, (_s, func, on) in sorted(self.state.user_keys.items())
+                            if on and "flip ab" in (func or "").lower()]
+                if not keys:
+                    JOURNAL.mark("XT bouton Flip : aucune User Key « Flip AB » dans la LV1")
+                    if "flip" not in self.warned:
+                        print("  FLIP : assigne une User Key de la LV1 à « Flip AB Input channel ».")
+                        self.warned.add("flip")
+                elif self.write:
+                    self.link.send("/Set/UserKey", [("i", keys[0]), ("T", True)])
+                    self.link.send("/Set/UserKey", [("i", keys[0]), ("F", False)])
+                    JOURNAL.mark("XT bouton Flip -> User Key %d (Flip A/B)" % (keys[0] + 1))
+            return True
         if (status & 0xF0) == 0x90 and d1 == NOTE_SOLO_ALL:
             if d2:
                 with self.state.lock:
@@ -1841,6 +1861,20 @@ def main():
                 if s["on"] is None:
                     s["on"] = on
         JOURNAL.mark("envois de départ lus dans la base LV1 : %d" % len(snd))
+    ab_seen = [0.0]
+
+    def load_ab():
+        """LED FLIP : entrées sur B ? (la LV1 ne l'annonce pas ; elle renvoie tout son état à chaque Flip A/B)."""
+        try:
+            import lv1_db
+            ab = lv1_db.input_ab()
+        except Exception as e:
+            JOURNAL.mark("A/B illisible : %r" % e)
+            return
+        n_b = sum(1 for v in ab.values() if v)
+        with state.lock:
+            state.on_b = n_b > 0
+        JOURNAL.mark("entrées sur B : %d / %d" % (n_b, len(ab)))
     if not a.dry_run:
         link.on_connect = load_pans
         with state.lock:
@@ -1927,6 +1961,12 @@ def main():
                 overlay.set_info(*sends.overlay_info())
             surface.set_main_led(NOTE_RUDE_SOLO, any_solo and int(now * 2) % 2 == 0)   # clignote si un solo
             surface.set_main_led(NOTE_SOLO_ALL, any_solo)                                # SOLO : allumé si un solo
+            with state.lock:
+                on_b, ch_at = state.on_b, state.channels_at
+            surface.set_main_led(NOTE_FLIP, bool(on_b))                                  # FLIP : entrées sur B
+            if ch_at != ab_seen[0] and now - ch_at > 1.0 and not a.dry_run:              # état renvoyé (Flip A/B…)
+                ab_seen[0] = ch_at
+                threading.Thread(target=load_ab, daemon=True).start()
             time.sleep(0.01 if faders.pending else TICK)
     except KeyboardInterrupt:
         pass

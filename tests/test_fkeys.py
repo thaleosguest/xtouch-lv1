@@ -71,6 +71,7 @@ def server():
     send("/Notify/UserKeyInfo", [("i", 0), ("s", "Fx 2"), ("s", "Flip Sends: MX1: Fx 2"), ("i", 1)])
     send("/Notify/UserKeyInfo", [("i", 1), ("s", "TB"), ("s", "Talkback"), ("i", 1)])
     send("/Notify/UserKeyInfo", [("i", 2), ("s", "User 3"), ("s", "User 3"), ("i", 0)])
+    send("/Notify/UserKeyInfo", [("i", 15), ("s", "FlipAB"), ("s", "Flip AB Input channel"), ("i", 1)])
     time.sleep(6)
 threading.Thread(target=server, daemon=True).start()
 
@@ -94,6 +95,7 @@ def inject():
     put(2.8, 1, 0x90, 0x36, 127); put(2.85, 1, 0x90, 0x36, 0)    # F1 -> fin du Flip Sends (User Key 1 à nouveau)
     fader(3.1, 9000)                                             # -> fader de piste
     put(3.7, 1, 0x90, 0x38, 127); put(3.75, 1, 0x90, 0x38, 0)    # F3 -> User Key 3 non assignée : envoyée quand même
+    put(3.9, 1, 0x90, 0x32, 127); put(3.95, 1, 0x90, 0x32, 0)    # FLIP -> User Key 16 « Flip AB Input channel »
 threading.Thread(target=inject, daemon=True).start()
 
 sys.argv = ["x", "--dry-run", "--no-journal", "--host", "127.0.0.1", "--port", str(srv.getsockname()[1]),
@@ -105,7 +107,8 @@ print("/Set envoyés :", seq)
 keys = [v for a, v in SETS if a == "/Set/UserKey"]
 print("LED F1 :", [(t, v) for t, d, v in LEDS if d == 0x36])
 gains = [(a, v[:3]) for a, v in SETS if "Gain" in a]
-ok = [k[:2] for k in keys] == [[0, True], [0, False], [1, True], [1, False], [0, True], [0, False], [2, True], [2, False]]
+ok = [k[:2] for k in keys] == [[0, True], [0, False], [1, True], [1, False], [0, True], [0, False], [2, True], [2, False],
+                               [15, True], [15, False]]
 ok = ok and gains[0] == ("/Set/Aux/Send/Gain", [0, 0, 1]) and gains[-1][0] == "/Set/Track/Out/Gain"
 ok = ok and any(a == "/Set/Aux/Send/Gain" for a, v in gains[1:-1]) and not any(a == "/Set/Track/Out/Gain" for a, v in gains[:-1])
 on = [v for t, d, v in LEDS if d == 0x36]

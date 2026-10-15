@@ -217,6 +217,11 @@ Sur la page **Channel**, touche un potard de plugin dans la LV1 : son réglage a
 Le **jog wheel** de la X-Touch le règle, un cran = un cran de molette. Rien ne se passe si la LV1 n'est pas sur
 Channel ou si aucun potard n'est sélectionné. Si la LV1 ne réagit pas : `--jog-methode souris`.
 
+## Bouton FLIP = Flip A/B
+
+Assigne une User Key de la LV1 à **« Flip AB Input channel »** (ex. User Key 16) : **FLIP** de la X-Touch appuie
+dessus. La LED FLIP est allumée quand des entrées sont sur **B** (virtual soundcheck).
+
 ## Bouton SOLO
 
 Le bouton **SOLO** de la X-Touch s'allume dès qu'un solo est actif dans la LV1 ; un appui **retire tous les solos**.

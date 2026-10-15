@@ -207,7 +207,11 @@ Messages vérifiés :
 - **Bouton SOLO** (0x5A, Mackie, non vérifié) : LED allumée si un solo est actif ; appui = `/ClearAllSolo` (sans argument,
   commande du module Companion). Test dans `tests/test_buttons.py`.
 - `HISTORIQUE.md` : journal lisible du développement (à tenir à jour à chaque étape).
-- FLIP (0x32) sans fonction.
+- **FLIP (0x32) = Flip A/B (codé, à tester)** : appui sur la User Key dont la fonction contient « Flip AB » (Joseph :
+  User Key 16 = « FlipAB » / « Flip AB Input channel »). Pas de commande réseau A/B connue. **À chaque Flip A/B, la LV1
+  renvoie TOUT son état** (comme une connexion : /Channels, couches, couleurs, User Keys…) et Joseph voit un message
+  sur la LV1. LED FLIP = entrées sur B, lue dans la base (`lv1_db.input_ab`, param 0, 1 = B) au démarrage et ~1 s
+  après chaque /Channels (`state.channels_at`). Test dans `tests/test_fkeys.py`.
 - Sens LV1 -> X-Touch de la sélection (vérifié le 14/10, journal 185026) : `LV1SelectionWatcher` (avec --clic-lv1) lit le liseré
   jaune (255,242,0) y 98-102/1080, x 143+96i (`lv1_clic.selected_strip`, sans admin) toutes les 0,15 s ; ne réagit
   qu'aux changements. Test `tests/test_selection_lv1.py`.

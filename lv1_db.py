@@ -81,6 +81,26 @@ def input_sends(path=DB_PATH, n_aux=24):
     return out
 
 
+# Entrée A/B sélectionnée (établi par x32-gain-recall) : param 0 du canal, snapshot -1 ; 1.0 = B, absent = A.
+PARAM_INPUT_SELECT = 0
+
+
+def input_ab(path=DB_PATH):
+    """{(0, canal 0-based): True si l'entrée B est sélectionnée} pour toutes les entrées."""
+    dst = copy_db(path)
+    try:
+        db = sqlite3.connect(dst)
+        try:
+            objs = db.execute("select id, obj_index from object where obj_type = 0").fetchall()
+            vals = dict(db.execute("select chainer_id, param_value from snapshot_chainer_params "
+                                   "where snapshot_id = -1 and param_id = ?", (PARAM_INPUT_SELECT,)).fetchall())
+        finally:
+            db.close()
+    finally:
+        shutil.rmtree(os.path.dirname(dst), ignore_errors=True)
+    return {(0, idx): float(vals.get(oid, 0.0)) >= 0.5 for oid, idx in objs}
+
+
 def main():
     pans = input_pans(sys.argv[1] if len(sys.argv) > 1 else DB_PATH)
     for (g, ch), p in sorted(pans.items())[:16]:

@@ -40,6 +40,7 @@ Chaque ligne correspond à un ou plusieurs commits git (`git log` pour le détai
 | Sélection **depuis l'onglet Channel** (aller-retour d'onglet) | vérifié |
 | **Jog wheel** = potard de plugin sélectionné (page Channel), par crans de molette | vérifié |
 | Bouton **SOLO** : allumé si un solo est actif ; appui = efface tous les solos | codé |
+| Bouton **FLIP** = Flip A/B (via la User Key « Flip AB »), LED = entrées sur B | codé |
 
 ## Décisions de Joseph
 
