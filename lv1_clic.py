@@ -6,6 +6,7 @@ Essai (hors concert), dans un PowerShell lancé EN ADMINISTRATEUR (la LV1 l'est 
     py lv1_clic.py couche 2            # clique la 2e case de couche (Ch 17-32 en usine)
     py lv1_clic.py tranche 5           # clique le nom de la tranche 5 (sélection)
     py lv1_clic.py selection           # lit à l'écran la tranche sélectionnée (sans clic, sans admin)
+    py lv1_clic.py molette 5           # page Channel : 5 crans de molette sur le fader de plugin du bas (-5 : baisse)
 Options : --mixer 2, --methode souris (SendInput : bouge vraiment la souris, LV1 devant).
 
 Géométrie relevée le 14/10/2026 sur la LV1 V17 de Joseph, page Mixer plein écran 1920x1080, en
@@ -206,6 +207,37 @@ class Target:
         ok = ok and u.PostMessageW(h, WM_LBUTTONUP, 0, lp)
         return bool(ok)
 
+    def wheel(self, rx, ry, notches, method="message"):
+        """Crans de molette au point (rx, ry) : message WM_MOUSEWHEEL à la fenêtre (souris immobile), ou
+        « souris » : le pointeur va au-dessus, molette, puis revient (secours si la LV1 ignore le message)."""
+        sx, sy = self.screen(rx, ry)
+        delta = int(notches) * WHEEL_DELTA
+        if method == "souris":
+            u = u32()
+            old = wt.POINT()
+            u.GetCursorPos(ctypes.byref(old))
+            u.SetCursorPos(sx, sy)
+            u.mouse_event(0x0800, 0, 0, ctypes.c_ulong(delta & 0xFFFFFFFF).value, 0)   # MOUSEEVENTF_WHEEL
+            time.sleep(0.01)
+            u.SetCursorPos(old.x, old.y)
+            return True
+        u = u32()
+        cx, cy = self.pt(rx, ry)
+        h, p = self.hwnd, wt.POINT(cx, cy)
+        while True:
+            child = u.ChildWindowFromPointEx(h, p, 0x0001 | 0x0004)
+            if not child or child == h:
+                break
+            sp = wt.POINT(p.x, p.y)
+            u.ClientToScreen(h, ctypes.byref(sp))
+            u.ScreenToClient(child, ctypes.byref(sp))
+            h, p = child, sp
+        wparam = (delta & 0xFFFF) << 16
+        lparam = (sy & 0xFFFF) << 16 | (sx & 0xFFFF)          # WM_MOUSEWHEEL : coordonnées ÉCRAN
+        lpm = (p.y & 0xFFFF) << 16 | (p.x & 0xFFFF)
+        u.PostMessageW(h, WM_MOUSEMOVE, 0, lpm)
+        return bool(u.PostMessageW(h, 0x020A, wparam, lparam))
+
     def _click_mouse(self, sx, sy):
         u = u32()
         if u.GetForegroundWindow() != self.hwnd:
@@ -295,6 +327,38 @@ def selected_strip(mixer=1):
     return yellow_column(rows, w), None
 
 
+# Page Channel : quand on touche un potard de plugin, son réglage apparaît en bas en fader horizontal
+# (« Comp Attack 6.91 », capture du 15/10). La molette de la souris au-dessus le fait bouger (essai de Joseph ;
+# pas le clavier). Piste grise (54, 54, 54) x 690..1572, y 1040..1049 ; poignée claire (231, 231, 231).
+BOTTOM_Y = 1044
+BOTTOM_X = (690, 1572)
+BOTTOM_GREY = (54, 54, 54)
+WHEEL_DELTA = 120
+
+
+def bottom_fader_ok(read):
+    """Vrai si la piste du fader horizontal du bas est visible : gris aux 2 bouts et au milieu (poignée exceptée)."""
+    xs = (BOTTOM_X[0] + 8, (BOTTOM_X[0] + BOTTOM_X[1]) // 2, BOTTOM_X[1] - 8)
+    hits = [_close(read(x, BOTTOM_Y), BOTTOM_GREY, 10) for x in xs]
+    return sum(hits) >= 2                  # la poignée peut cacher un des trois points
+
+
+def jog_bottom_fader(notches, mixer=1, method="message"):
+    """Jog wheel (demande de Joseph) : `notches` crans de molette sur le fader horizontal du bas de la page
+    Channel (réglage du potard de plugin sélectionné). Renvoie (fait, raison)."""
+    t = Target(mixer)
+    if not is_admin():
+        return False, "pas administrateur"
+    if not t.hwnd or not t.rect or u32().IsIconic(t.hwnd):
+        return False, "LV1 introuvable ou réduite"
+    tab = t.active_tab()
+    if tab != "Channel":
+        return False, "onglet Channel pas affiché (lu : %s)" % tab
+    if not bottom_fader_ok(lambda x, y: pixel(*t.screen(x, y))):
+        return False, "pas de fader de plugin en bas (toucher d'abord un potard du plugin)"
+    return t.wheel((BOTTOM_X[0] + BOTTOM_X[1]) // 2, BOTTOM_Y, notches, method), None
+
+
 def layer_point(k):
     return LAYER_X, LAYER_Y0 + LAYER_PITCH * k
 
@@ -382,7 +446,7 @@ def click_strip(i, mixer=1, method="message", rgb=None):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Clics simulés dans la LV1 (essai).")
-    ap.add_argument("action", choices=["verifier", "couche", "tranche", "selection"])
+    ap.add_argument("action", choices=["verifier", "couche", "tranche", "selection", "molette"])
     ap.add_argument("numero", nargs="?", type=int, help="couche 1..8 ou tranche 1..16")
     ap.add_argument("--mixer", type=int, choices=[1, 2], default=1)
     ap.add_argument("--methode", choices=["message", "souris"], default="message")
@@ -405,7 +469,9 @@ def main(argv=None):
         ap.error("numéro manquant")
     print("Clic dans %.0f s : affiche la LV1 (page Mixer %d)…" % (a.delai, a.mixer))
     time.sleep(a.delai)
-    if a.action == "couche":
+    if a.action == "molette":                       # numero = crans (négatif : vers le bas)
+        ok, why = jog_bottom_fader(a.numero, a.mixer, a.methode)
+    elif a.action == "couche":
         ok, why = click_layer(a.numero - 1, a.mixer, a.methode)
     else:
         ok, why = click_strip(a.numero - 1, a.mixer, a.methode)

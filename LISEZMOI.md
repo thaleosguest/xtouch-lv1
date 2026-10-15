@@ -211,6 +211,12 @@ CHANNEL cliquent le nom de la tranche. Conditions :
 
 Outil d'essai séparé : `py lv1_clic.py verifier | couche N | tranche N`.
 
+## Jog wheel = potard de plugin (page Channel, avec `--clic-lv1`)
+
+Sur la page **Channel**, touche un potard de plugin dans la LV1 : son réglage apparaît en bas en fader horizontal.
+Le **jog wheel** de la X-Touch le règle, un cran = un cran de molette. Rien ne se passe si la LV1 n'est pas sur
+Channel ou si aucun potard n'est sélectionné. Si la LV1 ne réagit pas : `--jog-methode souris`.
+
 ## Capture du trafic MyFOH (recherche des commandes couche / sélection)
 
 `lv1_capture.py` décode une capture réseau tablette <-> LV1 en messages lisibles. La capture se fait avec

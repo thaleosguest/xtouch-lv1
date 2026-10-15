@@ -156,7 +156,7 @@ Messages vérifiés :
   PARAM_OUTPUT_BALANCE -45..+45 (absent = centre), chainer_id = object.id (obj_type 0 = entrées). Vérifié le 14/10 :
   In 4 tout à gauche = -45. 1 cran = 3/45 (x2 si crans < 80 ms ; 1/45 jugé pas assez sensible) ; appui encodeur = centre ; pan inconnu (« ? ») = encodeur sans effet ;
   retours LV1 ignorés 0,5 s après un envoi (`pan_hold`). Affichage « L45 / C / R12 », couronne mode 0. Test `tests/test_pan.py`.
-- **Sélection sur l'onglet Channel (codé, à tester)** : `lv1_clic.Target.on_mixer` = aller-retour d'onglet (clic Mixer N,
+- **Sélection sur l'onglet Channel (vérifiée le 15/10, Select et CHANNEL ◄ ►)** : `lv1_clic.Target.on_mixer` = aller-retour d'onglet (clic Mixer N,
   attente qu'il soit affiché, vérif case, clic, retour Channel). Onglets (relevé 14/10) : centres x 652 + 98k
   (Mixer 1, Mixer 2, All, Channel, Show, Patch, Setup), lus en y 14, actif = (56,201,255). La case « ‹ nom › » en
   haut à gauche (nom du canal sélectionné, flèches) existe sur toutes les pages : piste de secours.
@@ -189,6 +189,12 @@ Messages vérifiés :
   User Key à nouveau + retour normal. Notes F1..F8 0x36..0x3D (Mackie, non vérifiées). Non vérifié : qu'un 2e appui
   sur la User Key ramène bien la LV1 ; si Joseph quitte le Flip sur l'écran LV1, le pont ne le voit pas (pas de
   notification connue). Test `tests/test_fkeys.py`.
+- **Jog wheel -> potard de plugin (codé, à tester)** — demande de Joseph : page Channel, un potard de plugin touché
+  affiche son réglage en fader horizontal en bas (piste grise (54,54,54) x 690..1572, y 1040..1049, poignée claire).
+  La MOLETTE souris dessus le règle (essai de Joseph ; le clavier non). Jog = CC 0x3C relatif (Mackie, non vérifié),
+  -> `LV1Clicker.jog` (crans regroupés) -> `lv1_clic.jog_bottom_fader` : admin, onglet Channel lu, piste présente,
+  puis WM_MOUSEWHEEL à la fenêtre (souris immobile) ou `--jog-methode souris` (pointeur déplacé un instant).
+  Outil d'essai : `py lv1_clic.py molette 5` / `-5` (`--methode souris`).
 - FLIP (0x32) sans fonction.
 - Sens LV1 -> X-Touch de la sélection (vérifié le 14/10, journal 185026) : `LV1SelectionWatcher` (avec --clic-lv1) lit le liseré
   jaune (255,242,0) y 98-102/1080, x 143+96i (`lv1_clic.selected_strip`, sans admin) toutes les 0,15 s ; ne réagit

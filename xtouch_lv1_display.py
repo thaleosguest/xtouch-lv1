@@ -809,6 +809,9 @@ NOTE_REC, NOTE_SOLO, NOTE_MUTE, NOTE_SELECT = 0x00, 0x08, 0x10, 0x18
 # Navigation, norme Mackie (vérifié le 14/10/2026) : ◄ BANK ► 0x2E/0x2F, ◄ CHANNEL ► 0x30/0x31.
 NOTE_BANK_LEFT, NOTE_BANK_RIGHT = 0x2E, 0x2F
 NOTE_CHANNEL_LEFT, NOTE_CHANNEL_RIGHT = 0x30, 0x31
+# Jog wheel (cranté sur la X-Touch) : CC 0x3C relatif, 0x01 = un cran horaire, 0x41 = anti-horaire (Mackie, à confirmer).
+# Page Channel : il règle le potard de plugin sélectionné (fader horizontal du bas) par crans de molette.
+CC_JOG = 0x3C
 # Assignation des encodeurs (norme Mackie, à confirmer) : TRACK 0x28. Encodeurs : CC 0x10-0x17 relatifs
 # (bit 6 = sens, bits 0-3 = vitesse), couronnes : CC 0x30-0x37.
 NOTE_TRACK = 0x28
@@ -1301,7 +1304,7 @@ class LV1Clicker(threading.Thread):
     que si la LV1 affiche la couche qui la contient (sinon le clic sélectionnerait un autre canal)."""
     WAIT_LAYER = 1.0     # s d'attente de /Notify/CurrentLayer après un clic de couche
 
-    def __init__(self, state, page, click_layer=None, click_strip=None):
+    def __init__(self, state, page, click_layer=None, click_strip=None, jog=None, jog_method="message"):
         # click_strip(i, mixer, rgb=...) : couleur du canal (0..255) pour trouver la bande du nom à l'écran.
         # Bug du 15/10 : passée en 3e position, elle tombait dans « method » -> aucune sélection cliquée.
         super().__init__(daemon=True)
@@ -1311,11 +1314,20 @@ class LV1Clicker(threading.Thread):
             click_layer = click_layer or lv1_clic.click_layer
             click_strip = click_strip or lv1_clic.click_strip
         self.click_layer, self.click_strip = click_layer, click_strip
+        if jog is None:
+            import lv1_clic
+            jog = lambda n: lv1_clic.jog_bottom_fader(n, page + 1, jog_method)
+        self.jog_fn = jog
         self.q = queue.Queue()
         self.last_why = None
 
     def layer(self, k):
         self.q.put(("couche", k))
+
+    def jog(self, notches):
+        """Jog wheel : crans de molette sur le fader de plugin du bas de la page Channel."""
+        if notches:
+            self.q.put(("jog", notches))
 
     def select(self, track):
         if track is not None:
@@ -1339,7 +1351,20 @@ class LV1Clicker(threading.Thread):
                         kind, arg = self.q.get_nowait()
                 except IndexError:
                     pass
+            if kind == "jog":                    # crans rapides regroupés en un seul envoi
+                try:
+                    while self.q.queue and self.q.queue[0][0] == "jog":
+                        arg += self.q.get_nowait()[1]
+                except (IndexError, queue.Empty):
+                    pass
             try:
+                if kind == "jog":
+                    if arg:
+                        ok, why = self.jog_fn(arg)
+                        JOURNAL.mark("molette LV1 %+d : %s" % (arg, "envoyée" if ok else why))
+                        if not ok:
+                            self._refused("jog", why or "envoi refusé par Windows")
+                    continue
                 if kind == "couche":
                     with self.state.lock:
                         if self.state.current.get(self.page) == arg:
@@ -1477,6 +1502,16 @@ class ButtonControl:
         return True
 
     def on_midi(self, unit, status, d1, d2, t, entries, surface):
+        if (status & 0xF0) == 0xB0 and d1 == CC_JOG:
+            n = d2 & 0x0F
+            notches = -n if d2 & 0x40 else n
+            JOURNAL.mark("XT jog %+d" % notches)
+            if self.lv1:
+                self.lv1.jog(notches)
+            elif "jog" not in self.warned:
+                print("  Jog wheel : réglage des plugins avec --clic-lv1 seulement.")
+                self.warned.add("jog")
+            return True
         if (status & 0xF0) == 0x90 and d1 in (NOTE_BANK_LEFT, NOTE_BANK_RIGHT):
             return True if d2 == 0 else self.on_bank(d1)
         if (status & 0xF0) == 0x90 and d1 in (NOTE_CHANNEL_LEFT, NOTE_CHANNEL_RIGHT):
@@ -1681,6 +1716,8 @@ def main():
                     help="adresse de X/M32 Gain Recall pour le gain / 48 V X32 ('aucun' pour désactiver)")
     ap.add_argument("--sans-cadre", action="store_true",
                     help="pas de bandeau ni de cadre rouge à l'écran du PC en mode sends")
+    ap.add_argument("--jog-methode", choices=["message", "souris"], default="message",
+                    help="jog wheel -> LV1 : message de molette à la fenêtre (défaut) ou pointeur déplacé un instant")
     ap.add_argument("--clic-lv1", action="store_true",
                     help="la LV1 suit BANK et la sélection par clics simulés (pont lancé en administrateur)")
     ap.add_argument("--master", default="3:0",
@@ -1804,7 +1841,7 @@ def main():
         import lv1_clic
         if not lv1_clic.is_admin():
             print("  --clic-lv1 : PAS administrateur, Windows bloquera les clics (relancer en administrateur).")
-        buttons.lv1 = LV1Clicker(state, a.mixer - 1)
+        buttons.lv1 = LV1Clicker(state, a.mixer - 1, jog_method=a.jog_methode)
         buttons.lv1.start()
         LV1SelectionWatcher(state, a.mixer - 1).start()
         print("  Clics LV1 : la LV1 suit BANK et la sélection, la X-Touch suit la sélection LV1 (page Mixer %d)." % a.mixer)

@@ -44,7 +44,12 @@ def fake_strip(i, mixer=1, method="message", rgb=None):     # même signature qu
 
 
 b = D.ButtonControl(st, link=None, write=False, page=0)
-b.lv1 = D.LV1Clicker(st, 0, fake_layer, fake_strip)
+JOGS = []
+def fake_jog(n):
+    JOGS.append(n)
+    time.sleep(0.05)                       # un envoi prend un peu de temps : les crans suivants s'accumulent
+    return True, None
+b.lv1 = D.LV1Clicker(st, 0, fake_layer, fake_strip, jog=fake_jog)
 b.lv1.start()
 
 
@@ -68,6 +73,11 @@ REFUSE["on"] = True
 press(0x2E)              # BANK ◄ refusé : pas de clic, le pont continue
 time.sleep(0.3)
 
+for v in (0x01, 0x01, 0x01, 0x41):         # jog : 3 crans horaires puis 1 anti-horaire, très vite
+    b.on_midi(1, 0xB0, 0x3C, v, time.time(), entries(), None)
+time.sleep(0.4)
+print("Molette :", JOGS)
+ok_jog = sum(JOGS) == 2 and len(JOGS) <= 3
 print("Clics :", CLICKS)
 ok = (CLICKS[:4] == [("tranche", 4, 0), ("couche", 1), ("tranche", 0, 1), ("tranche", 1, 1)] or
       CLICKS[:3] == [("tranche", 4, 0), ("couche", 1), ("tranche", 0, 1)])
@@ -77,5 +87,6 @@ ok = ok and CLICKS.index(("couche", 2)) < len(CLICKS) - 1
 ok = ok and not any(c == ("couche", 1) for c in CLICKS[CLICKS.index(("couche", 2)):])
 with st.lock:
     ok = ok and st.selected == (0, 32) and st.local.get(0) == 1   # BANK ◄ local malgré le refus
+ok = ok and ok_jog
 print("OK" if ok else "ÉCHEC")
 sys.exit(0 if ok else 1)
