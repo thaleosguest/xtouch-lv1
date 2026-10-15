@@ -245,7 +245,8 @@ RECALL_OPTIONS = [
 # Deux hauteurs mémorisées (demande de Joseph, 15/10) : « petit » (nom, couleur, valeur, diode) et « grand »
 # (présentation complète) ; `taille` = celle en cours, y0 / y1 = ses valeurs. Bascule : --taille petit|grand.
 MINI_H = 140                 # bandeau moins haut que ça (px) : présentation « petit »
-CFG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "xtouch_ecran.json")
+CFG_FILE = os.path.join((os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.abspath(__file__))),
+                        "xtouch_ecran.json")
 GREEN, AMBER, WARN = QColor("#3ddc84"), QColor("#f2b63b"), QColor("#ff5b4d")
 # Couleurs de la tranche LV1 (relevées sur les captures de Joseph du 15/10)
 LV1_BG, LV1_LINE, LV1_SEL, LV1_TXT = "#111111", "#a0a0a0", "#787878", "#e7e7e7"

@@ -3,6 +3,24 @@
 Deux tests indépendants, Python 3 standard (rien à installer), à lancer sur le PC de la LV1.
 Les deux écrivent un rapport `.json` dans ce dossier : c'est ce fichier qu'il faut m'envoyer.
 
+
+## Version compilée V0.1 (plug and play)
+
+Fabriquer : `py build.py` (PyInstaller + PySide6, quelques minutes). Résultat : le dossier `dist/XTouch-LV1/`.
+
+- **Lancer** : double-clic sur `XTouch-LV1.exe`. Windows demande les droits administrateur (nécessaires pour que
+  la LV1 suive BANK et la sélection). Une fenêtre noire affiche ce qui se passe : la laisser ouverte, la fermer = arrêter.
+- Les X-Touch peuvent être branchées après le lancement : il les attend. Il trouve la LV1 tout seul et reconnecte
+  si elle redémarre.
+- Sans argument, l'exe = `--clic-lv1 --attendre`. Les mêmes options que `xtouch_lv1_display.py` restent possibles
+  (raccourci Windows avec des arguments, ex. `XTouch-LV1.exe --clic-lv1 --attendre --pilote TracksLive-FL`).
+- Réglages (courbe des faders, rappel de pistes) et journaux : dans le dossier de l'exe. Ils sont copiés une fois
+  depuis le dossier de développement et **jamais écrasés** par une nouvelle compilation.
+- Scripts Reaper : `dist/XTouch-LV1/reaper/` (les recharger dans Reaper depuis ce dossier, pour que pont et scripts
+  s'échangent les mêmes fichiers).
+- `dist/XTouch-LV1-v0.1.zip` : la version à donner à quelqu'un (sans tes réglages ni journaux).
+- Réglage à la main du rappel de pistes : `XTouch-LV1.exe --overlay --reglage` (ou le bouton ADJUST à l'écran).
+
 ## Test 1 : la LV1 donne-t-elle les couleurs et les vumètres ?
 
 `lv1_probe.py` se connecte à la LV1 comme le ferait l'app MyFOH, **en lecture seule**.

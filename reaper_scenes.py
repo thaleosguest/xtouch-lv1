@@ -9,10 +9,11 @@ LV1 (module Companion + journaux de Joseph) : /Notify/SceneList i:N (i index, s 
 """
 import os
 import queue
+import sys
 import threading
 import time
 
-FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reaper")
+FOLDER = os.path.join((os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.abspath(__file__))), "reaper")
 TO_REAPER, TO_LV1 = "lv1_to_reaper.txt", "reaper_to_lv1.txt"
 TRACKS_FILE = "lv1_tracks.txt"            # entrées LV1 pour la synchro des pistes (reaper/lv1_sync_tracks.lua)
 

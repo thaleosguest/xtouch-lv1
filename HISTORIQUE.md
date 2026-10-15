@@ -58,3 +58,10 @@ Chaque ligne correspond à un ou plusieurs commits git (`git log` pour le détai
 - Mon 9-16 dans les sends (correspondance de la base supposée).
 - Contrôle de **Reaper** (transport, jog, zoom, scrub, marqueurs) pour un virtual soundcheck : prévu plus tard,
   par l'OSC de Reaper ; jog partagé selon la page LV1 (Channel + plugin -> plugin, sinon Reaper).
+
+## 16/10/2026 : V0.1
+
+- Reaper façon Tracks Live 2 : barre de vumètres tactile (`reaper/lv1_meter_bridge.lua`), ARM ALL, monitoring
+  OFF/ON/AUTO, hauteur des formes d'onde.
+- **V0.1 compilée** : `py build.py` -> `dist/XTouch-LV1/XTouch-LV1.exe` (un seul exe, overlay compris, droits
+  administrateur, attend les X-Touch), zip à donner `dist/XTouch-LV1-v0.1.zip`.

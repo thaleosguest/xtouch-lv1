@@ -9,3 +9,5 @@ xtouch_probe_report_*.json
 reaper/lv1_to_reaper.txt*
 reaper/reaper_to_lv1.txt
 reaper/lv1_tracks.txt*
+build/
+dist/

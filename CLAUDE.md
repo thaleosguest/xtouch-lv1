@@ -46,6 +46,13 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
 
 ## Fichiers
 
+- **V0.1 compilée (16/10/2026)** : `py build.py` -> `dist/XTouch-LV1/XTouch-LV1.exe` (PyInstaller 6.22 onedir, console,
+  `--uac-admin`) + `dist/XTouch-LV1-v0.1.zip`. Un seul exe : `--overlay` = processus overlay Qt (xtouch_overlay.py
+  lance `sys.executable --overlay` si `sys.frozen`). Fichiers de Joseph à côté de l'exe (HERE / CFG_FILE / FOLDER
+  = dossier de sys.executable si compilé). Réglages personnels copiés une fois, jamais écrasés ; le dossier final
+  n'est pas effacé (compilation dans build/out). Sans argument : `--clic-lv1 --attendre` (attend les ports USB).
+  `VERSION` dans xtouch_lv1_display.py. Essai sans élévation : `__COMPAT_LAYER=RunAsInvoker`.
+
 - `xtouch_lv1_display.py` : le programme principal (affichage + faders + master + Mute/Solo).
   Options : `--mixer 1|2`, `--ext-droite` (Extender à gauche par défaut), `--master g:c` (défaut `3:0` = LR,
   `aucun`), `--lecture-seule`, `--no-journal`, `--dry-run`, `--host/--port`, `--main/--ext`, `--seconds`.

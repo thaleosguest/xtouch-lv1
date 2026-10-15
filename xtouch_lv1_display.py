@@ -44,7 +44,9 @@ import unicodedata
 import lv1_probe as L
 import xtouch_probe as X
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+VERSION = "0.1"
+# Dossier des fichiers de Joseph (réglages, courbe, journaux, reaper/) : à côté de l'exe une fois compilé (build.py)
+HERE = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.abspath(__file__))
 COLOR_FILE = os.path.join(HERE, "xtouch_couleurs.json")
 
 # Couleurs X-Touch (validées par xtouch_probe le 14/10/2026) : 0 vide, 1 rouge, 2 vert,
@@ -2160,7 +2162,13 @@ def main():
                     help="la LV1 suit BANK et la sélection par clics simulés (pont lancé en administrateur)")
     ap.add_argument("--master", default="3:0",
                     help="piste LV1 du fader master, groupe:canal (3:0 = LR, défaut ; 'aucun' pour désactiver)")
-    a = ap.parse_args()
+    ap.add_argument("--attendre", action="store_true",
+                    help="attendre que les X-Touch soient branchées (défaut de l'exe compilé)")
+    argv = sys.argv[1:]
+    if getattr(sys, "frozen", False) and not argv:      # exe lancé d'un double-clic : réglage de Joseph
+        argv = ["--clic-lv1", "--attendre"]
+    a = ap.parse_args(argv)
+    print("  XTouch-LV1 v%s" % VERSION)
 
     global JOURNAL
     if not a.no_journal:
@@ -2178,6 +2186,15 @@ def main():
 
     ports = midi.list()
     main_idx, ext_idx = X.pick_ports(ports, a.main, a.ext)
+    if a.attendre and main_idx is None and ext_idx is None:     # plug and play : on attend le branchement USB
+        print("  En attente des X-Touch (brancher l'USB)...")
+        while main_idx is None and ext_idx is None:
+            time.sleep(2)
+            ports = midi.list()
+            main_idx, ext_idx = X.pick_ports(ports, a.main, a.ext)
+        time.sleep(2)                                  # laisser Windows finir d'installer les deux ports
+        ports = midi.list()
+        main_idx, ext_idx = X.pick_ports(ports, a.main, a.ext)
     units = []
     for label, idx, dev in (("X-Touch", main_idx, X.ID_MAIN), ("Extender", ext_idx, X.ID_EXT)):
         if idx is None:
@@ -2487,4 +2504,8 @@ def main():
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "--overlay":     # exe compilé : processus de l'overlay Qt
+        del sys.argv[1]
+        import xtouch_overlay_qt
+        sys.exit(xtouch_overlay_qt.main())
     sys.exit(main())

@@ -172,7 +172,11 @@ class QtOverlay:
     def __init__(self, mixer=1):
         import subprocess
         here = os.path.dirname(os.path.abspath(__file__))
-        args = [sys.executable, os.path.join(here, "xtouch_overlay_qt.py")] + (["--mixer=2"] if mixer == 2 else [])
+        if getattr(sys, "frozen", False):        # exe compilé (build.py) : le même exe joue l'overlay
+            args = [sys.executable, "--overlay"]
+        else:
+            args = [sys.executable, os.path.join(here, "xtouch_overlay_qt.py")]
+        args += ["--mixer=2"] if mixer == 2 else []
         flags = 0x08000000 if sys.platform == "win32" else 0          # CREATE_NO_WINDOW
         self.proc = subprocess.Popen(args, stdin=subprocess.PIPE, creationflags=flags)
         self.last = object()
