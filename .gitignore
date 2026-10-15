@@ -8,3 +8,4 @@ xtouch_probe_report_*.json
 *.pcap
 reaper/lv1_to_reaper.txt*
 reaper/reaper_to_lv1.txt
+reaper/lv1_tracks.txt*

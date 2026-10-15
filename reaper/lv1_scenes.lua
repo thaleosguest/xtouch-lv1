@@ -13,6 +13,7 @@
 
 local dir = ({reaper.get_action_context()})[2]:match("^(.*[\\/])")
 local IN_FILE, OUT_FILE = dir .. "lv1_to_reaper.txt", dir .. "reaper_to_lv1.txt"
+local TRACKS_FILE = dir .. "lv1_tracks.txt"      -- entrées LV1 (nom, couleur) : pistes synchronisées mises à jour
 local SCENE_COLOR = reaper.ColorToNative(40, 200, 90) | 0x1000000
 local MAX_STEP = 0.5            -- s : avance de lecture au-delà de laquelle c'est un saut (rien n'est rappelé)
 
@@ -84,6 +85,41 @@ local function check_crossing()
   last_pos = pos
 end
 
+-- Noms et couleurs des pistes synchronisées (lv1_sync_tracks.lua) suivent la LV1 en direct, comme Tracks Live pour
+-- un changement de nom / couleur seul. Rien n'est créé ni supprimé ici (ça, c'est la synchro, à la main).
+local tracks_text, tracks_t = nil, 0
+local function follow_tracks()
+  local now = reaper.time_precise()
+  if now - tracks_t < 1.0 then return end
+  tracks_t = now
+  local f = io.open(TRACKS_FILE, "r")
+  if not f then return end
+  local text = f:read("a")
+  f:close()
+  if text == tracks_text then return end
+  tracks_text = text
+  local by_ch = {}
+  for line in text:gmatch("[^\n]+") do
+    local ch, name, r, g, b = line:match("^(%d+)\t(.-)\t(%-?%d+)\t(%-?%d+)\t(%-?%d+)\t%d$")
+    if ch then
+      r, g, b = tonumber(r), tonumber(g), tonumber(b)
+      by_ch[tonumber(ch)] = {name = name, color = r >= 0 and (reaper.ColorToNative(r, g, b) | 0x1000000) or 0}
+    end
+  end
+  for i = 0, reaper.CountTracks(0) - 1 do
+    local tr = reaper.GetTrack(0, i)
+    local ok, v = reaper.GetSetMediaTrackInfo_String(tr, "P_EXT:lv1_in", "", false)
+    local e = ok and v ~= "" and by_ch[tonumber(v)]
+    if e then
+      local _, cur = reaper.GetSetMediaTrackInfo_String(tr, "P_NAME", "", false)
+      if cur ~= e.name then reaper.GetSetMediaTrackInfo_String(tr, "P_NAME", e.name, true) end
+      if math.floor(reaper.GetMediaTrackInfo_Value(tr, "I_CUSTOMCOLOR")) ~= e.color then
+        reaper.SetMediaTrackInfo_Value(tr, "I_CUSTOMCOLOR", e.color)
+      end
+    end
+  end
+end
+
 local function loop()
   local seq, _, name = read_in()
   if seq and seq ~= last_seq then
@@ -93,6 +129,7 @@ local function loop()
     last_seq = ""                                          -- pas encore de fichier : tout événement sera nouveau
   end
   check_crossing()
+  follow_tracks()
   reaper.defer(loop)
 end
 

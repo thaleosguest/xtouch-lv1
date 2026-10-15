@@ -14,6 +14,7 @@ import time
 
 FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reaper")
 TO_REAPER, TO_LV1 = "lv1_to_reaper.txt", "reaper_to_lv1.txt"
+TRACKS_FILE = "lv1_tracks.txt"            # entrées LV1 pour la synchro des pistes (reaper/lv1_sync_tracks.lua)
 
 
 class SceneBridge:
@@ -24,6 +25,7 @@ class SceneBridge:
         self.requests = queue.Queue()        # noms de scènes à rappeler sur la LV1
         self.poll = poll
         self.stop_flag = False
+        self._tracks_last = None
         threading.Thread(target=self._watch, daemon=True).start()
 
     def scene_recalled(self, idx, name):
@@ -43,6 +45,29 @@ class SceneBridge:
                 time.sleep(0.01)
         self.mark("-> Reaper scène %d : fichier %s inaccessible" % (idx, path))
         return False
+
+    def write_tracks(self, entries):
+        """Entrées LV1 [(canal 0-based, nom, (r, g, b) ou None, stéréo)] -> lv1_tracks.txt (synchro des pistes),
+        réécrit seulement s'il change. Une ligne par entrée : canal TAB nom TAB r TAB g TAB b TAB stéréo (r = -1 :
+        pas de couleur)."""
+        lines = []
+        for ch, name, rgb, stereo in entries:
+            r, g, b = rgb if rgb else (-1, -1, -1)
+            name = name.replace("\t", " ").replace("\n", " ")
+            lines.append("%d\t%s\t%d\t%d\t%d\t%d\n" % (ch, name, r, g, b, 1 if stereo else 0))
+        text = "".join(lines)
+        if not entries or text == self._tracks_last:
+            return False
+        path = os.path.join(self.folder, TRACKS_FILE)
+        try:
+            with open(path + ".tmp", "w", encoding="utf-8", newline="\n") as f:
+                f.write(text)
+            os.replace(path + ".tmp", path)
+        except OSError:
+            return False
+        self._tracks_last = text
+        self.mark("-> Reaper liste des entrées LV1 (%d)" % len(entries))
+        return True
 
     def _read(self):
         try:

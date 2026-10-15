@@ -194,6 +194,11 @@ Messages vérifiés :
   lv1_to_reaper.txt / reaper_to_lv1.txt (« n°	index	nom ») : enregistrement = marqueur vert (couleur = signature),
   lecture = marqueur franchi (pas de saut > 0,5 s) -> rappel par NOM, arrêt = curseur sur le marqueur. Tracks Live
   lui-même n'est pas pilotable (ni MIDI ni OSC ; raccourcis envoyés refusés, `tracks_live.py`).
+- **Synchro des pistes Reaper (a) (codée le 15/10, scripts Lua non essayés)** : le pont écrit `reaper/lv1_tracks.txt`
+  (entrées g=0 : canal, nom, r g b, stéréo = 12e entier de /Channels == 2, vérifié) chaque seconde s'il change ;
+  `reaper/lv1_sync_tracks.lua` (à la main, OUI = toutes, NON = renommées seulement) crée / met à jour les pistes,
+  marquées P_EXT:lv1_in = canal (jamais d'autres pistes touchées, rien supprimé) ; `lv1_scenes.lua` fait suivre nom et
+  couleur en direct. (b) = seulement les canaux patchés vers le pilote SoundGrid + entrée d'enregistrement : à faire.
 - **Pastille FLIP visible seulement si la LV1 est au premier plan** (Joseph, 15/10 : elle restait devant les autres
   programmes ; rappel de pistes et sends on fader restent affichés LV1 en arrière-plan, choix de Joseph) : processus de la fenêtre de premier plan = celui de la LV1 (fenêtres détachées et
   boîtes de dialogue comprises) ou l'overlay lui-même (réglage).

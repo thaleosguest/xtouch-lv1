@@ -296,6 +296,13 @@ l'arrête. Pour qu'il démarre avec Reaper : SWS (Startup actions) ou `__startup
 
 Ne change pas la couleur des marqueurs de scène à la main : c'est elle qui les fait reconnaître.
 
+## Pistes Reaper = entrées LV1 (synchro)
+
+Charger aussi `reaper/lv1_sync_tracks.lua` (Load ReaScript…) et le lancer à chaque synchro : il propose **OUI** =
+toutes les entrées, **NON** = seulement celles renommées (pas « Channel N »), puis crée / met à jour une piste par
+entrée, dans l'ordre de la LV1, avec son nom et sa couleur. Il ne touche jamais à tes autres pistes et ne supprime
+rien. Ensuite, tant que `lv1_scenes.lua` tourne, un nom ou une couleur changés sur la LV1 suivent tout seuls.
+
 ## Affichage à l'écran
 
 La pastille FLIP n'apparaît **que quand la LV1 est au premier plan**. Le rappel de pistes et le bandeau / cadre

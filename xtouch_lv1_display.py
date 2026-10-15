@@ -482,6 +482,9 @@ def handle(state, address, args):
                         t["solo"] = so[1] != 0
                     if mu[0] == "i":
                         t["mute"] = mu[1] != 0
+                    # 12e entier : 1 = mono, 2 = stéréo (vérifié le 15/10 : P170 ST et Channel 11 = 2)
+                    if base + 16 < len(args) and args[base + 16][0] == "i":
+                        t["stereo"] = args[base + 16][1] == 2
         elif address == "/Notify/Layers":
             # Jeu adopté SEULEMENT s'il est suivi de /Notify/CurrentLayer pour la même vue (bug du 15/10, journal
             # 155042) : dans un état complet (connexion, rappel de scène, Flip A/B), la LV1 envoie les jeux d'usine
@@ -1901,6 +1904,19 @@ def build_frame(state, mixer_page, n_strips, overrides):
         return top, bot, cols, lvls, fads, layer_name, entries
 
 
+def input_list(state):
+    """Entrées de la LV1 dans l'ordre : [(canal, nom, (r, g, b) 0..255 ou None, stéréo)] (synchro des pistes Reaper)."""
+    out = []
+    with state.lock:
+        for (g, ch), t in sorted(state.tracks.items()):
+            if g != 0 or not t.get("name"):
+                continue
+            rgb = t.get("rgb")
+            out.append((ch, t["name"].strip(), tuple(int(round(v * 255)) for v in rgb) if rgb else None,
+                        bool(t.get("stereo"))))
+    return out
+
+
 SCENE_DELAY = 0.2        # s : on attend un peu le nom de la scène (/Notify/Scene/Name) avant de la transmettre
 
 
@@ -2180,7 +2196,8 @@ def main():
     if master_target and surface.master_unit is not None:
         print("  Fader master -> %s" % default_label(*master_target))
     last_layer = object()
-    woke = []                    # message reçu pendant l'attente de fin de tour, traité au début du suivant
+    woke = []
+    tracks_sent = [0.0]                    # message reçu pendant l'attente de fin de tour, traité au début du suivant
     recall_until, recall_sent = [0.0], [0.0]
     t_end = time.time() + a.seconds if a.seconds else None
     try:
@@ -2225,6 +2242,9 @@ def main():
             surface.set_main_led(NOTE_SEND, sends.aux is not None or (sends.picking and int(now * 3) % 2 == 0))
             if scene_bridge:
                 scene_relay(state, scene_bridge, link, now, write=not a.lecture_seule)
+                if now - tracks_sent[0] >= 1.0:                  # liste des entrées pour la synchro des pistes Reaper
+                    tracks_sent[0] = now
+                    scene_bridge.write_tracks(input_list(state))
             if reaper:
                 for note, on in transport.leds().items():
                     surface.set_main_led(note, on)
