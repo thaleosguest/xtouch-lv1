@@ -181,8 +181,8 @@ Messages vérifiés :
   ZOOM = 1011/1012/40111/40112, jog = 40084/40085 (SCRUB : 40104/40105 au pixel). Jog : LV1Clicker essaie le
   fader de plugin, sinon `jog_fallback` -> Reaper. LED = retours /play /record /repeat /click. `--reaper aucun`.
   Rien en --dry-run (tests) sauf `--reaper` explicite.
-- **Overlay visible seulement si la LV1 est au premier plan** (Joseph, 15/10 : la pastille FLIP restait devant
-  les autres programmes) : processus de la fenêtre de premier plan = celui de la LV1 (fenêtres détachées et
+- **Pastille FLIP visible seulement si la LV1 est au premier plan** (Joseph, 15/10 : elle restait devant les autres
+  programmes ; rappel de pistes et sends on fader restent affichés LV1 en arrière-plan, choix de Joseph) : processus de la fenêtre de premier plan = celui de la LV1 (fenêtres détachées et
   boîtes de dialogue comprises) ou l'overlay lui-même (réglage).
 - **PAN (codé, à tester)** : bouton PAN (0x2A) = encodeurs sur le pan LV1 (exclusif avec TRACK). `/Set/Track/Pan ii d`
   (-1..+1), retour `/Notify/Track/Pan ii d i` envoyé SEULEMENT aux changements (rien à la connexion, rien dans

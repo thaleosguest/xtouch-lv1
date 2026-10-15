@@ -745,10 +745,11 @@ class Bus(QObject):
 
 class Overlay:
     def __init__(self, mixer=1, rect_fn=None):
-        # Tout l'affichage n'apparaît que si la LV1 (ou une de ses fenêtres / boîtes de dialogue) est au premier
-        # plan : remarque de Joseph du 15/10, la pastille FLIP restait par-dessus les autres programmes.
+        # La pastille FLIP n'apparaît que si la LV1 (ou une de ses fenêtres / boîtes de dialogue) est au premier
+        # plan (Joseph, 15/10 : elle restait par-dessus les autres programmes). Rappel de pistes et sends on fader
+        # restent affichés même LV1 en arrière-plan (choix de Joseph).
         self.pid_fn = (lambda: None) if rect_fn else (lambda: lv1_pid(mixer))     # démo : toujours affiché
-        self.pid, self.lv1_rect = None, None
+        self.pid, self.lv1_rect, self.front = None, None, True
         self.rect_fn = rect_fn or (lambda: lv1_rect(mixer))
         self.banner, self.frame = Banner(), Frame()
         self.badge, self.ab, self.ab_key = AbBadge(), None, None
@@ -842,7 +843,7 @@ class Overlay:
             self.recall.raise_()
 
     def tick_badge(self, now):
-        if not self.ab or self.ab_key is None or not self.rect:
+        if not self.ab or self.ab_key is None or not self.rect or not self.front:
             if self.badge.isVisible():
                 self.badge.hide()
             return
@@ -885,8 +886,8 @@ class Overlay:
         if now - self.rect_t > 1.0:
             self.lv1_rect, self.rect_t = self.rect_fn(), now
             self.pid = self.pid_fn()
-        front = self.pid is None or foreground_pid() in (self.pid, os.getpid())
-        self.rect = self.lv1_rect if front else None       # None = tout se cache (fondu pour le rappel)
+        self.front = self.pid is None or foreground_pid() in (self.pid, os.getpid())
+        self.rect = self.lv1_rect
         self.tick_badge(now)
         self.tick_recall()
         self.tick_buttons(now)

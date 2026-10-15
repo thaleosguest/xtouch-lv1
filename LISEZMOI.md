@@ -285,7 +285,8 @@ Essai sans X-Touch : `py reaper_link.py play`, `py reaper_link.py stop`, `py rea
 
 ## Affichage à l'écran
 
-Pastille FLIP, rappel de pistes, bandeau / cadre SEND : affichés **seulement quand la LV1 est au premier plan**.
+La pastille FLIP n'apparaît **que quand la LV1 est au premier plan**. Le rappel de pistes et le bandeau / cadre
+SEND restent affichés même quand une autre fenêtre est devant.
 
 ## Capture du trafic MyFOH (recherche des commandes couche / sélection)
 
