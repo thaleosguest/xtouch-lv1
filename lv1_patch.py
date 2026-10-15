@@ -10,7 +10,7 @@ Avant : LV1 sur la page Patch > Input > Input B, vignette du pilote sélectionn�
 
     py lv1_patch.py lire              # lit la grille, compare à la diagonale (aucun clic)
     py lv1_patch.py case 52 100       # ESSAI : clique UNE case (ligne 52, colonne 100) et dit ce qui a changé
-    py lv1_patch.py diagonale         # affiche les clics nécessaires (aucun clic)
+    py lv1_patch.py diagonale [--n 48]   # affiche les clics nécessaires (aucun clic) ; --n : nb de lignes à patcher
     py lv1_patch.py diagonale --go    # les fait, puis relit la grille
 
 Géométrie relevée le 15/10 (1920x1080, vue réduite) : lignes de grille (120,120,120), pas 13 px, 1re colonne à
@@ -28,13 +28,19 @@ CELL_ON = (56, 201, 255)
 INPUT_B_BTN, INPUT_A_BTN = (100, 385), (100, 315)       # fonds des boutons Input B / Input A (allumé = bleu)
 TILE_X0, TILE_PITCH, TILE_Y = 575, 106, 160             # vignettes d'appareils : contour gauche, pas, hauteur lue
 GRID_X0, GRID_X1, GRID_Y0, GRID_Y1 = 455, 1880, 340, 1045
-PROBE_Y, PROBE_X = 700, 1500                            # rangée / colonne où l'on cherche les lignes de la grille
+PROBE_YS, PROBE_XS = (700, 806, 910), (1500, 1300)      # rangées / colonnes où l'on cherche les lignes de la grille
+# Grille en haut à gauche (pas défilée) : le curseur des ascenseurs touche le début de leur rail (relevé le 16/10).
+# Défilée, la 1re ligne visible n'est plus la ligne 1 : on refuse (essais de Joseph : « ligne 1 -> [42] »).
+SCROLL_THUMB = (231, 231, 231)
+VSCROLL_TOP, HSCROLL_LEFT = (1891, 230), (131, 1055)
 
 
 class Screen:
-    """Copie de l'écran (une seule capture GDI, puis lecture des pixels en mémoire)."""
+    """Image de la fenêtre LV1 (une seule capture GDI, puis lecture des pixels en mémoire). hwnd donné : PrintWindow
+    de la fenêtre elle-même, même cachée par d'autres fenêtres (16/10 : PowerShell et Claude couvraient la grille ->
+    ascenseurs mal lus) ; refusé hors administrateur -> copie de l'écran (la LV1 doit alors être visible)."""
 
-    def __init__(self):
+    def __init__(self, hwnd=None):
         import ctypes
         import ctypes.wintypes as wt
         u, g = ctypes.windll.user32, ctypes.windll.gdi32
@@ -54,7 +60,12 @@ class Screen:
         mdc = g.CreateCompatibleDC(sdc)
         bmp = g.CreateCompatibleBitmap(sdc, self.w, self.h)
         g.SelectObject(mdc, bmp)
-        g.BitBlt(mdc, 0, 0, self.w, self.h, sdc, 0, 0, 0x00CC0020)
+        u.PrintWindow.argtypes = [vp, vp, wt.UINT]
+        self.source = "écran"
+        if hwnd and u.PrintWindow(hwnd, mdc, 3):          # PW_CLIENTONLY | PW_RENDERFULLCONTENT
+            self.source = "fenêtre LV1"
+        else:
+            g.BitBlt(mdc, 0, 0, self.w, self.h, sdc, 0, 0, 0x00CC0020)
 
         class BIH(ctypes.Structure):
             _fields_ = [("biSize", wt.DWORD), ("biWidth", ctypes.c_long), ("biHeight", ctypes.c_long),
@@ -87,15 +98,19 @@ def read_grid(sc=None):
         return None, "fenêtre LV1 introuvable"
     if t.rect != (0, 0, 1920, 1080):
         return None, "LV1 pas en plein écran 1920x1080 (%s)" % (t.rect,)
-    if t.active_tab() != "Patch":
-        return None, "la LV1 n'est pas sur la page Patch"
-    sc = sc or Screen()
+    sc = sc or Screen(t.hwnd)
+    tab = [n for n, x in LC.TABS.items() if close(sc.px(x, LC.TAB_READ_Y), LC.TAB_ACTIVE)]
+    if tab != ["Patch"]:
+        return None, "la LV1 n'est pas sur la page Patch (lu : %s, image : %s)" % (tab or "?", sc.source)
     if not close(sc.px(*INPUT_B_BTN), CELL_ON) or close(sc.px(*INPUT_A_BTN), CELL_ON):
         return None, "Input B n'est pas sélectionné (page Patch > Input > Input B)"
     tiles = [k + 1 for k in range(12) if TILE_X0 + TILE_PITCH * k < GRID_X1
              and close(sc.px(TILE_X0 + TILE_PITCH * k, TILE_Y), CELL_ON)]      # contour bleu = sélectionnée
-    vx = [x for x in range(GRID_X0, GRID_X1) if sc.px(x, PROBE_Y) == GRID_LINE]
-    hy = [y for y in range(GRID_Y0, GRID_Y1) if sc.px(PROBE_X, y) == GRID_LINE]
+    if not close(sc.px(*VSCROLL_TOP), SCROLL_THUMB) or not close(sc.px(*HSCROLL_LEFT), SCROLL_THUMB):
+        return None, "grille défilée : remonte-la tout en haut et tout à gauche (ascenseurs au début)"
+    # plusieurs rangées / colonnes d'essai : celle du canal sélectionné est surlignée (lignes d'une autre couleur)
+    vx = max(([x for x in range(GRID_X0, GRID_X1) if sc.px(x, y) == GRID_LINE] for y in PROBE_YS), key=len)
+    hy = max(([y for y in range(GRID_Y0, GRID_Y1) if sc.px(x, y) == GRID_LINE] for x in PROBE_XS), key=len)
     if len(vx) < 10 or len(hy) < 10:
         return None, "grille introuvable"
     px_ = (vx[-1] - vx[0]) / (len(vx) - 1)
@@ -108,33 +123,41 @@ def read_grid(sc=None):
         hit = [c for c, x in enumerate(cols) if close(sc.px(int(round(x)), int(round(y))), CELL_ON, 20)]
         if hit:
             on[r] = hit
-    return {"cols": cols, "rows": rows, "on": on, "tile": tiles[0] if tiles else None,
+    return {"cols": cols, "rows": rows, "on": on, "tile": tiles[0] if tiles else None, "source": sc.source,
             "pitch": (round(px_, 2), round(py_, 2))}, None
 
 
 def plan(grid, n=None):
     """Clics pour la diagonale ligne r -> colonne r (r < n, n = nb de colonnes visibles par défaut)."""
     n = min(n or len(grid["cols"]), len(grid["rows"]), len(grid["cols"]))
-    add, remove = [], []
+    add, extra = [], []
     for r in range(len(grid["rows"])):
         cur = grid["on"].get(r, [])
-        want = [r] if r < n else []
-        remove += [(r, c) for c in cur if c not in want]
-        add += [(r, c) for c in want if c not in cur]
-    return add, remove
+        if r < n:
+            if cur != [r]:
+                add.append((r, r))          # le clic remplace la source de la ligne
+        elif cur:
+            extra.append((r, cur[0]))       # ligne au-delà de la diagonale encore patchée : signalée, pas touchée
+    return add, extra
 
 
 def click_cell(grid, r, c):
+    """Un clic sur une case REMPLACE la source de la ligne (essai de Joseph du 16/10 : ligne 4, clic colonne 18 ->
+    [18], la 4 a disparu) : pas besoin de retirer l'ancienne avant."""
     t = LC.Target(1)
-    why = t.check()
-    if why:
-        return False, why
+    if not LC.is_admin():
+        return False, "pas administrateur (la LV1 l'est : Windows bloquerait le clic)"
+    if not t.hwnd or LC.u32().IsIconic(t.hwnd):
+        return False, "fenêtre LV1 introuvable ou réduite"
+    sc = Screen(t.hwnd)
+    if not close(sc.px(LC.TABS["Patch"], LC.TAB_READ_Y), LC.TAB_ACTIVE):
+        return False, "la LV1 n'est plus sur la page Patch"
     return t.click(grid["cols"][c], grid["rows"][r]), None
 
 
 def show(grid):
-    print("grille : %d colonnes x %d lignes visibles, pas %s, vignette sélectionnée : %s"
-          % (len(grid["cols"]), len(grid["rows"]), grid["pitch"], grid["tile"]))
+    print("grille : %d colonnes x %d lignes visibles, pas %s, vignette sélectionnée : %s (image : %s)"
+          % (len(grid["cols"]), len(grid["rows"]), grid["pitch"], grid["tile"], grid["source"]))
     bad = [(r, cs) for r, cs in sorted(grid["on"].items()) if cs != [r]]
     print("cases patchées : %d lignes ; hors diagonale : %s" % (len(grid["on"]),
           ", ".join("ligne %d -> %s" % (r + 1, [c + 1 for c in cs]) for r, cs in bad) or "aucune"))
@@ -163,13 +186,14 @@ def main():
         n = None
         if "--n" in sys.argv:
             n = int(sys.argv[sys.argv.index("--n") + 1])
-        add, remove = plan(grid, n)
-        print("à retirer : %s" % ([(r + 1, c + 1) for r, c in remove] or "rien"))
-        print("à ajouter : %s" % ([(r + 1, c + 1) for r, c in add] or "rien"))
+        add, extra = plan(grid, n)
+        print("à cliquer (ligne, colonne) : %s" % ([(r + 1, c + 1) for r, c in add] or "rien"))
+        if extra:
+            print("lignes après la diagonale encore patchées (non touchées) : %s" % [(r + 1, c + 1) for r, c in extra])
         if "--go" not in sys.argv:
             print("(rien n'est cliqué : ajoute --go pour le faire)")
             return 0
-        for r, c in remove + add:
+        for r, c in add:
             ok, why = click_cell(grid, r, c)
             if not ok:
                 print("clic refusé :", why)
@@ -180,8 +204,8 @@ def main():
         if why:
             print("relecture impossible :", why)
             return 1
-        add2, remove2 = plan(grid2, n)
-        print("après : %s" % ("diagonale OK" if not add2 and not remove2 else "reste %s" % (add2 + remove2)))
+        add2, _ = plan(grid2, n)
+        print("après : %s" % ("diagonale OK" if not add2 else "reste %s" % [(r + 1, c + 1) for r, c in add2]))
     return 0
 
 
