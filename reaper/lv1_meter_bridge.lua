@@ -184,6 +184,14 @@ local WAVE_UP = find_action("Peaks: Increase peaks display zoom for project")
 local WAVE_DOWN = find_action("Peaks: Decrease peaks display zoom for project")
 
 local buttons = {}                      -- boutons globaux dessinés : {x, y, w, h, act}
+local flash = {}                        -- act -> heure de l'appui : bouton allumé 0,2 s (retour visuel, Joseph 16/10)
+
+-- Zoom des formes d'onde du projet (variable « projpeaksgain », 1 = normal) ; nil si illisible
+local function wave_zoom()
+  if not reaper.get_config_var_string then return nil end
+  local ok, v = reaper.get_config_var_string("projpeaksgain")
+  return ok and tonumber(v) or nil
+end
 
 -- État commun des pistes affichées : true / false si toutes pareilles, nil si mélangé
 local function common(list, key)
@@ -196,6 +204,7 @@ local function common(list, key)
 end
 
 local function button(x, y, w, h, label, on, act, color)
+  if flash[act] and reaper.time_precise() - flash[act] < 0.2 then on, color = true, TEXT end
   set(on and (color or {0.95, 0.2, 0.18}) or {0.22, 0.24, 0.27})
   gfx.rect(x, y, w, h, 1)
   set(on and {0.05, 0.05, 0.05} or TEXT)
@@ -218,7 +227,8 @@ local function draw_panel(list)
   if #list == 0 then label = "MON" end
   button(x2, row(0), BTN_W, bh, label, mon == 1 or mon == 2, "mon", {0.95, 0.75, 0.2})
   button(x1, row(1), BTN_W, bh, WAVE_DOWN and "WAVE -" or "?", false, "wave_down")
-  button(x2, row(1), BTN_W, bh, WAVE_UP and "WAVE +" or "?", false, "wave_up")
+  local z = wave_zoom()
+  button(x2, row(1), BTN_W, bh, WAVE_UP and (z and string.format("+  %.2fx", z) or "WAVE +") or "?", false, "wave_up")
   button(x1, row(2), BTN_W, bh, "FIT", fit, "fit", {0.22, 0.79, 1.0})
   button(x2, row(2), BTN_W, bh, "MENU", false, "menu")
 end
@@ -299,6 +309,7 @@ end
 local function click(x, y)                                 -- boutons : dès l'appui
   for _, b in ipairs(buttons) do
     if x >= b.x and x < b.x + b.w and y >= b.y and y < b.y + b.h then
+      flash[b.act] = reaper.time_precise()
       local list = tracks()
       if b.act == "menu" then menu()
       elseif b.act == "fit" then
