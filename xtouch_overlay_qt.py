@@ -928,7 +928,8 @@ class Overlay:
         x, y, w, h = self.rect
         sx, sy = w / 1920.0, h / 1080.0
         bx, by, bw, bh = BTN_RECT
-        by = min(by, self.recall.cfg["y0"] - bh - 6)           # bandeau grand : les boutons remontent au-dessus
+        # bandeau grand : les boutons remontent au-dessus, y compris de la bande des points de toucher (DOT_PAD)
+        by = min(by, self.recall.cfg["y0"] - DOT_PAD - bh - 4)
         geo = (x + round(bx * sx), y + round(by * sy), round(bw * sx), round(bh * sy))
         if self.buttons.geometry().getRect() != geo:
             self.buttons.setGeometry(*geo)
