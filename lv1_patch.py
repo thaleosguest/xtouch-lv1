@@ -174,6 +174,34 @@ def zoom_out(grid, max_clicks=8):
     return grid, None
 
 
+def fix_diagonal(n=None, log=lambda m: None):
+    """Refait la diagonale (Patch > Input B ouvert) : dézoom, clics des cases fausses, relecture.
+    Rend (réussi, message). Utilisé par `diagonale --go` et par le bouton ENTER de la X-Touch (pont)."""
+    grid, why = read_grid()
+    if why:
+        return False, "impossible : " + why
+    grid, why = zoom_out(grid)
+    if why:
+        return False, "dézoom impossible : " + why
+    log("après dézoom : %d colonnes x %d lignes visibles" % (len(grid["cols"]), len(grid["rows"])))
+    add, _ = plan(grid, n)
+    for r, c in add:
+        ok, why = click_cell(grid, r, c)
+        if not ok:
+            return False, "clic refusé : " + why
+        time.sleep(0.15)
+    time.sleep(0.6)
+    grid2, why = read_grid()
+    if why:
+        return False, "relecture impossible : " + why
+    add2, _ = plan(grid2, n)
+    msg = "%d case(s) corrigée(s) ; " % len(add) + ("diagonale OK" if not add2 else
+                                                     "reste %s" % [(r + 1, c + 1) for r, c in add2])
+    if n and n > len(grid2["rows"]):
+        msg += " ; ATTENTION : %d lignes demandées, %d seulement visibles même dézoomé" % (n, len(grid2["rows"]))
+    return not add2, msg
+
+
 def show(grid):
     print("grille : %d colonnes x %d lignes visibles, pas %s, vignette sélectionnée : %s (image : %s)"
           % (len(grid["cols"]), len(grid["rows"]), grid["pitch"], grid["tile"], grid["source"]))
@@ -212,28 +240,9 @@ def main():
         if "--go" not in sys.argv:
             print("(rien n'est cliqué : ajoute --go pour le faire ; la grille sera d'abord dézoomée au maximum)")
             return 0
-        grid, why = zoom_out(grid)
-        if why:
-            print("dézoom impossible :", why)
-            return 1
-        print("après dézoom : %d colonnes x %d lignes visibles" % (len(grid["cols"]), len(grid["rows"])))
-        add, extra = plan(grid, n)
-        for r, c in add:
-            ok, why = click_cell(grid, r, c)
-            if not ok:
-                print("clic refusé :", why)
-                return 1
-            time.sleep(0.15)
-        time.sleep(0.6)
-        grid2, why = read_grid()
-        if why:
-            print("relecture impossible :", why)
-            return 1
-        add2, _ = plan(grid2, n)
-        print("après : %s" % ("diagonale OK" if not add2 else "reste %s" % [(r + 1, c + 1) for r, c in add2]))
-        if n and n > len(grid2["rows"]):
-            print("ATTENTION : %d lignes demandées, %d seulement visibles même dézoomé : les suivantes ne sont pas faites"
-                  % (n, len(grid2["rows"])))
+        ok, msg = fix_diagonal(n)
+        print(msg)
+        return 0 if ok else 1
     return 0
 
 

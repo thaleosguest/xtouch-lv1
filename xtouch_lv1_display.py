@@ -231,6 +231,7 @@ class LV1State:
         self.scenes = {}          # index -> nom (/Notify/SceneList, /Notify/Scene/Name)
         self.cur_scene = None     # index de la scène courante (/Notify/CurSceneIndex), -1 = aucune
         self.routing = {}         # canal -> {"rec": [...], "play": [...]} (pilote SoundGrid de ce PC, base LV1)
+        self.driver_size = None   # nb de canaux de lecture du pilote (diagonale B : lignes 1..n)
         self.scene_last = (None, 0.0)   # (index, instant) du dernier rappel retenu
         self.scene_events = []    # [(index, instant)] scènes rappelées sur la LV1, à transmettre à Reaper
         self.channels_at = 0.0    # instant du dernier /Channels (état complet renvoyé : connexion, Flip A/B…)
@@ -1987,6 +1988,27 @@ def build_frame(state, mixer_page, n_strips, overrides):
         return top, bot, cols, lvls, fads, layer_name, entries
 
 
+def diagonal_problems(state):
+    """Diagonale B (ligne n de la grille Input B -> canal n du pilote) : canaux dont l'entrée B n'y est pas.
+    Lignes = voies des entrées dans l'ordre (2 par canal stéréo) ; vérifiées jusqu'à la taille du pilote."""
+    bad = []
+    with state.lock:
+        size, routing = state.driver_size, state.routing
+        if not size or not routing:
+            return None                    # inconnu (base illisible, pas encore lue)
+        row = 0
+        for (g, ch), t in sorted(state.tracks.items()):
+            if g != 0:
+                continue
+            legs = 2 if t.get("stereo") else 1
+            want = [r for r in range(row, row + legs) if r < size]
+            play = routing.get(ch, {}).get("play", [])
+            if want and play[:len(want)] != want:
+                bad.append((t.get("name") or default_label(g, ch)).strip())
+            row += legs
+    return bad
+
+
 def input_list(state):
     """Entrées de la LV1 dans l'ordre : [(canal, nom, (r, g, b) 0..255 ou None, stéréo, rec, play)] (synchro des
     pistes Reaper). rec / play : canaux du pilote SoundGrid de ce PC (0-based) à enregistrer / en lecture sur
@@ -2109,7 +2131,7 @@ def main():
                          "défaut : celui du PC de la LV1")
     ap.add_argument("--dossier-reaper", default=None,
                     help="dossier d'échange avec les scripts Reaper (défaut : ./reaper ; Reaper sur un autre PC : "
-                         "dossier partagé contenant aussi les scripts .lua, ex. //PC-REAPER/lv1)")")
+                         "dossier partagé contenant aussi les scripts .lua, ex. //PC-REAPER/lv1)")
     ap.add_argument("--sans-cadre", action="store_true",
                     help="pas de bandeau ni de cadre rouge à l'écran du PC en mode sends")
     ap.add_argument("--jog-methode", choices=["message", "souris"], default="message",
@@ -2213,11 +2235,13 @@ def main():
                     try:
                         import lv1_db
                         drv, rt = lv1_db.routing(driver=a.pilote)
+                        size = lv1_db.driver_size(driver=a.pilote)
                         if rt != last:
                             last = rt
                             JOURNAL.mark("routage pilote %s : %s" % (drv, rt))
                         with state.lock:
                             state.routing = rt
+                            state.driver_size = size
                     except Exception as e:
                         JOURNAL.mark("routage illisible : %r" % e)
                     time.sleep(5.0)

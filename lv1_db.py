@@ -129,6 +129,24 @@ def devices(path=DB_PATH):
     return [(names.get((mac, gender)) or "?", gname, assign, bool(loc)) for assign, mac, gender, gname, loc in rows]
 
 
+def driver_size(path=DB_PATH, driver=None):
+    """Nombre de canaux de lecture (vers la LV1) du pilote : device.in_channel_count (LV1-PORT : 128 le 16/10)."""
+    for name, _g, assign, local in devices(path):
+        if (driver and name.lower() == driver.lower()) or (not driver and local):
+            dst = copy_db(path)
+            try:
+                db = sqlite3.connect(dst)
+                try:
+                    row = db.execute("select in_channel_count from device where assign = ? and device_gender = 1",
+                                     (assign,)).fetchone()
+                finally:
+                    db.close()
+            finally:
+                shutil.rmtree(os.path.dirname(dst), ignore_errors=True)
+            return row[0] if row and row[0] and row[0] > 0 else None
+    return None
+
+
 def routing(path=DB_PATH, driver=None):
     """Pour le pilote SoundGrid de ce PC : {canal 0-based: {"rec": [n° de canal du pilote, 0-based, L puis R],
     "play": [...]}}. rec = canaux du pilote qui reçoivent la source de l'entrée A du canal (à ENREGISTRER) ;
