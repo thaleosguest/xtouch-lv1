@@ -24,7 +24,7 @@ import time
 
 os.environ.setdefault("QT_ENABLE_HIGHDPI_SCALING", "0")     # pixels = pixels écran (comme x32-gain-recall v3)
 
-from PySide6.QtCore import QObject, QRectF, Qt, QTimer, Signal
+from PySide6.QtCore import QObject, QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QApplication, QWidget
 
@@ -237,6 +237,9 @@ RECALL_DEFAULT = {"ext": [0.0, 941.0], "xt": [941.0, 1811.0], "master": [1811.0,
 MINI_H = 140                 # bandeau moins haut que ça (px) : présentation « petit »
 CFG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "xtouch_ecran.json")
 GREEN, AMBER, WARN = QColor("#3ddc84"), QColor("#f2b63b"), QColor("#ff5b4d")
+# Couleurs de la tranche LV1 (relevées sur les captures de Joseph du 15/10)
+LV1_BG, LV1_LINE, LV1_SEL, LV1_TXT = "#111111", "#a0a0a0", "#787878", "#e7e7e7"
+LV1_KNOB, LV1_VAL_BG, LV1_BLUE, LV1_GREEN = "#525353", "#363636", "#38c9ff", "#8cff00"
 COMPACT_W = 70               # case plus étroite que ça (px) : présentation compacte (vumètres + fader par-dessus)
 FADE_STEP = 0.16             # fondu du rappel : ~0,2 s à 30 ms par tour
 # Bandeau ENTIÈREMENT OPAQUE (Joseph, 15/10 : le dégradé de transparence vers le haut a été essayé puis refusé)
@@ -341,7 +344,7 @@ class StripRecall(QWidget):
         cells = self.data.get("cells") or []
         touched = set(self.data.get("touched") or [])
         send = self.data.get("send")
-        p.fillRect(self.rect(), QColor(8, 9, 10))           # fond plein
+        p.fillRect(self.rect(), QColor(LV1_BG))             # fond plein, comme la LV1
         for i, (cx, cw) in enumerate(recall_cells(self.width(), self.cfg)):
             if i >= len(cells):
                 break
@@ -464,76 +467,155 @@ class StripRecall(QWidget):
             p.drawRoundedRect(r, 6, 6)
             self.paint_compact(p, r, c)
             return
+        self.paint_lv1(p, r, c, hot, send)
+
+    def paint_lv1(self, p, r, c, hot, send):
+        """Grande case = tranche de la LV1, au plus près (demande de Joseph du 15/10 : « exactement le même design que
+        la LV1 », fader posé sur le vumètre). Couleurs relevées sur ses captures : fond #111111, contour #a0a0a0,
+        bouton de pan #525353 (arc bleu #38c9ff), MUTE, valeur #38c9ff sur #363636, niveau du vumètre, fader sur le
+        vumètre vert #8cff00 avec l'échelle LV1 à droite, bandeau couleur + nom, bouton casque (solo).
+        Sélection : fond #787878 + contour jaune ; fader touché : contour blanc."""
         sel = bool(c and c.get("sel"))
-        p.setPen(QPen(QColor("#ffffff") if hot else (QColor(255, 242, 0) if sel else QColor(LINE2)),
-                      2.4 if (hot or sel) else 1.0))
-        p.setBrush(QColor("#1b1d20") if hot else QColor(PANEL))
-        p.drawRoundedRect(r, 10, 10)
+        H, W = r.height(), r.width()
+        p.setPen(QPen(QColor("#ffffff") if hot else (QColor(255, 242, 0) if sel else QColor(LV1_LINE)),
+                      2.0 if (hot or sel) else 1.0))
+        p.setBrush(QColor(LV1_SEL) if sel else QColor(LV1_BG))
+        p.drawRoundedRect(r, 4, 4)
         if not c:
             return
-        col = QColor(c.get("color") or LINE2)
-        path = QPainterPath()
-        path.addRoundedRect(r, 10, 10)
-        p.save()
-        p.setClipPath(path)
-        p.fillRect(QRectF(r.left(), r.top(), r.width(), 32), col)          # bandeau à la couleur du canal
-        p.restore()
-        dark = 0.299 * col.red() + 0.587 * col.green() + 0.114 * col.blue() > 150   # luminosité perçue
-        p.setPen(QColor(PANEL) if dark else QColor("#ffffff"))
-        p.setFont(self.f_name)
-        p.drawText(QRectF(r.left() + 4, r.top(), r.width() - 8, 32), Qt.AlignCenter, c.get("name", ""))
-        # pastilles d'état
-        y = r.top() + 37
-        tags = []
-        if send:
-            tags.append(("SEND > " + send, red_gradient(QRectF(0, y, 1, 18)), "#ffffff"))
-            if c.get("send_off"):
-                tags.append(("OFF", QColor("#5a5f66"), "#ffffff"))
-        if c.get("mute"):
-            tags.append(("MUTE", QColor(225, 22, 32), "#ffffff"))
-        if c.get("solo"):
-            tags.append(("SOLO", QColor(242, 182, 59), PANEL))
-        if c.get("ph"):
-            tags.append(("48V", QColor(209, 52, 59), "#ffffff"))
-        x = r.left() + 6
-        for text, fill, fg in tags:
-            w = min(r.width() - 12, 9 + 7 * len(text)) if not text.startswith("SEND") else r.width() - 12
-            if x + w > r.right() - 6:
-                x, y = r.left() + 6, y + 21
-                w = min(w, r.width() - 12)
-            self.pill(p, QRectF(x, y, w, 18), text, fill, fg)
-            x += w + 4
-        y += 22
-        # gain X32 et pan
-        info = "  ".join(t for t in (("G " + c["gain"]) if c.get("gain") else "", ("Pan " + c["pan"]) if c.get("pan") else "") if t)
-        if info:
-            p.setPen(QColor(MUT))
-            p.setFont(self.f_tag)
-            p.drawText(QRectF(r.left() + 4, y, r.width() - 8, 16), Qt.AlignCenter, info)
-        y += 18
-        # zone fader + vumètres, valeur en bas
-        bottom = r.bottom() - 34
-        fx = r.left() + r.width() * 0.32
-        top_f, bot_f = y + 6, bottom - 6
-        p.setPen(QColor(MUT))
-        p.setFont(self.f_scale)
-        for mark, lab in ((10, "+10"), (0, "0"), (-10, "-10"), (-20, "-20"), (-40, "-40"), (None, "-inf")):
-            yy = bot_f - (bot_f - top_f) * self.fader_frac(mark)
-            p.drawText(QRectF(r.left() + 2, yy - 7, fx - r.left() - 12, 14), Qt.AlignRight | Qt.AlignVCenter, lab)
-            p.drawLine(int(fx - 8), int(yy), int(fx - 4), int(yy))
+        x0, y0, cx = r.left(), r.top(), r.center().x()
+        off = bool(send and c.get("send_off"))
+        # bouton de pan (s'il est connu) : arc bleu depuis le haut jusqu'à la position
+        pv = c.get("pan_v")
+        kr = min(H * 0.062, W * 0.24)
+        ky = y0 + H * 0.085
+        if pv is not None:
+            p.setPen(QPen(QColor("#2a2a2a"), 1.5))
+            p.setBrush(QColor(LV1_KNOB))
+            p.drawEllipse(QRectF(cx - kr, ky - kr, 2 * kr, 2 * kr))
+            ang = max(-1.0, min(1.0, pv)) * 135.0
+            if abs(ang) > 0.5:
+                arc = QRectF(cx - kr - 3, ky - kr - 3, 2 * kr + 6, 2 * kr + 6)
+                p.setPen(QPen(QColor(LV1_BLUE), 3.0, Qt.SolidLine, Qt.FlatCap))
+                p.setBrush(Qt.NoBrush)
+                p.drawArc(arc, 90 * 16, int(-ang * 16))
+            a = math.radians(ang)
+            p.setPen(QPen(QColor(LV1_TXT), 2.4, Qt.SolidLine, Qt.RoundCap))
+            p.drawLine(QPointF(cx + math.sin(a) * kr * 0.25, ky - math.cos(a) * kr * 0.25),
+                       QPointF(cx + math.sin(a) * kr * 0.92, ky - math.cos(a) * kr * 0.92))
+        # MUTE (rouge si coupé)
+        mb = QRectF(x0 + W * 0.14, y0 + H * 0.185, W * 0.72, H * 0.06)
+        p.setPen(QPen(QColor(LV1_LINE), 1.0))
+        p.setBrush(QColor(225, 22, 32) if c.get("mute") else Qt.NoBrush)
+        p.drawRoundedRect(mb, 3, 3)
+        p.setPen(QColor(LV1_TXT))
+        p.setFont(self.lv1_font(H * 0.042))
+        p.drawText(mb, Qt.AlignCenter, "MUTE")
+        # valeur (fader, ou niveau d'envoi en sends on fader)
+        vb = QRectF(x0 + W * 0.14, y0 + H * 0.258, W * 0.72, H * 0.062)
         p.setPen(Qt.NoPen)
-        p.setBrush(QColor("#25282c"))
-        p.drawRoundedRect(QRectF(fx - 2, top_f, 4, bot_f - top_f), 2, 2)
+        p.setBrush(QColor(LV1_VAL_BG))
+        p.drawRect(vb)
+        p.setPen(QColor("#6b7378") if off else QColor(LV1_BLUE))
+        p.setFont(self.lv1_font(H * 0.05))
+        p.drawText(vb, Qt.AlignCenter, c.get("value", ""))
+        # niveau du vumètre (comme le petit chiffre blanc de la LV1)
+        mv = c.get("meter")
+        p.setPen(QColor(LV1_TXT))
+        p.setFont(self.lv1_font(H * 0.038))
+        p.drawText(QRectF(x0, y0 + H * 0.322, W, H * 0.04), Qt.AlignCenter,
+                   "-Inf" if mv is None or mv <= -100 else "%.1f" % mv)
+        # zone fader : vumètre(s) sous le fader, échelle LV1 à droite
+        top_f, bot_f = y0 + H * 0.385, y0 + H * 0.775
+        fx = x0 + W * 0.46
+        meters = c.get("meters") or [None]
+        bw = max(4.0, W * 0.075)
+        gap = 3.0
+        tot = bw * len(meters) + gap * (len(meters) - 1)
+        for k, db in enumerate(meters):
+            m = QRectF(fx - tot / 2 + k * (bw + gap), top_f, bw, bot_f - top_f)
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor(LV1_VAL_BG))
+            p.drawRect(m)
+            fr = self.fader_frac(db) if db is not None and db > -100 else 0.0
+            if fr > 0:
+                h = m.height() * fr
+                g = QLinearGradient(m.bottomLeft(), m.topLeft())
+                g.setColorAt(0, QColor(LV1_GREEN))
+                g.setColorAt(max(0.0, self.fader_frac(-9) - 0.001), QColor(LV1_GREEN))
+                g.setColorAt(self.fader_frac(-9), QColor(255, 210, 0))
+                g.setColorAt(max(self.fader_frac(-9), self.fader_frac(0)), QColor(255, 60, 40))
+                g.setColorAt(1, QColor(255, 60, 40))
+                p.setBrush(g)
+                p.drawRect(QRectF(m.left(), m.bottom() - h, m.width(), h))
+        p.setFont(self.lv1_font(H * 0.034))
+        sx = x0 + W * 0.66
+        for mark, lab in ((10, "10"), (0, "0"), (-10, "10"), (-20, "20"), (-30, "30"), (-50, "50"), (None, "\u221e")):
+            yy = bot_f - (bot_f - top_f) * self.fader_frac(mark)
+            p.setPen(QColor(LV1_TXT))
+            p.drawLine(QPointF(sx, yy), QPointF(sx + W * 0.05, yy))
+            p.drawText(QRectF(sx + W * 0.07, yy - 7, W * 0.27, 14), Qt.AlignLeft | Qt.AlignVCenter, lab)
+        if send:                                         # « Send Level » vertical, en vert (gris si l'envoi est coupé)
+            p.save()
+            p.translate(x0 + W * 0.13, (top_f + bot_f) / 2)
+            p.rotate(-90)
+            p.setPen(QColor("#5f6b55") if off else QColor(LV1_GREEN))
+            p.setFont(self.lv1_font(H * 0.04))
+            p.drawText(QRectF(-(bot_f - top_f) / 2, -9, bot_f - top_f, 18), Qt.AlignCenter, "Send Level")
+            p.restore()
         pos = c.get("pos")
         if pos is not None:
-            self.paint_cap(p, fx, bot_f - (bot_f - top_f) * pos, 22)
-        meters = c.get("meters") or [None]
-        mw = 11 if len(meters) < 2 else 9
-        width = mw * len(meters) + 3 * (len(meters) - 1)
-        self.paint_meters(p, QRectF(r.right() - 8 - width, top_f, width, bot_f - top_f), meters)
-        p.setPen(QColor(TXT))
-        p.setFont(self.f_val)
-        p.drawText(QRectF(r.left(), bottom, r.width(), 30), Qt.AlignCenter, c.get("value", ""))
+            cw, ch_ = max(18.0, W * 0.34), max(16.0, H * 0.075)
+            cy = bot_f - (bot_f - top_f) * pos
+            cap = QRectF(fx - cw / 2, cy - ch_ / 2, cw, ch_)
+            g = QLinearGradient(cap.topLeft(), cap.bottomLeft())
+            g.setColorAt(0, QColor("#d2d2d2"))
+            g.setColorAt(0.45, QColor("#9b9b9b"))
+            g.setColorAt(1, QColor("#6e6e6e"))
+            p.setPen(QPen(QColor("#3a3a3a"), 1.0))
+            p.setBrush(g)
+            p.drawRoundedRect(cap, 3, 3)
+            p.setPen(QPen(QColor("#2b2b2b"), 1.4))
+            p.drawLine(QPointF(cap.left() + 3, cy), QPointF(cap.right() - 3, cy))
+        # bandeau à la couleur du canal : nom (le numéro LV1 à droite)
+        col = QColor(c.get("color") or LV1_LINE)
+        bar = QRectF(x0 + 1, y0 + H * 0.815, W - 2, H * 0.075)
+        p.setPen(Qt.NoPen)
+        p.setBrush(col)
+        p.drawRect(bar)
+        dark = 0.299 * col.red() + 0.587 * col.green() + 0.114 * col.blue() > 110
+        p.setPen(QColor(LV1_BG) if dark else QColor("#ffffff"))
+        num = c.get("num") or ""
+        p.setFont(self.lv1_font(H * 0.04))
+        nw = p.fontMetrics().horizontalAdvance(num) + 6 if num else 0
+        if num:
+            p.drawText(bar.adjusted(0, 0, -4, 0), Qt.AlignRight | Qt.AlignVCenter, num)
+        name = p.fontMetrics().elidedText(c.get("name", ""), Qt.ElideRight, int(bar.width() - nw - 6))
+        p.drawText(bar.adjusted(4, 0, -nw, 0), Qt.AlignLeft | Qt.AlignVCenter, name)
+        # bouton casque = solo (jaune si actif)
+        cb = QRectF(x0 + W * 0.18, y0 + H * 0.905, W * 0.64, H * 0.07)
+        solo = bool(c.get("solo"))
+        p.setPen(QPen(QColor(LV1_LINE), 1.0))
+        p.setBrush(QColor(255, 242, 0) if solo else Qt.NoBrush)
+        p.drawRoundedRect(cb, 4, 4)
+        self.paint_headphones(p, cb.center(), cb.height() * 0.62, QColor(LV1_BG) if solo else QColor(LV1_TXT))
+
+    def paint_headphones(self, p, ctr, size, color):
+        p.setPen(QPen(color, max(1.5, size * 0.12), Qt.SolidLine, Qt.RoundCap))
+        p.setBrush(Qt.NoBrush)
+        rr = size / 2
+        p.drawArc(QRectF(ctr.x() - rr, ctr.y() - rr, 2 * rr, 2 * rr), 0, 180 * 16)
+        p.setPen(Qt.NoPen)
+        p.setBrush(color)
+        w = size * 0.2
+        for sx in (-1, 1):
+            p.drawRoundedRect(QRectF(ctr.x() + sx * rr - w / 2, ctr.y() - size * 0.05, w, size * 0.42), 1.5, 1.5)
+
+    def lv1_font(self, px):
+        f = QFont("Segoe UI")
+        f.setBold(True)
+        f.setPixelSize(max(8, int(px)))
+        return f
 
     def fader_frac(self, db):
         """Position (0..1) d'un repère dB sur le petit fader, avec la courbe du pont (points fournis)."""

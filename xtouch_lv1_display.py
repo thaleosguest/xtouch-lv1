@@ -1950,9 +1950,10 @@ def recall_payload(state, entries, sends, touched, xlink=None, gain=None):
             t = state.tracks.get(e, {})
             rgb = t.get("rgb")
             send_off = False
+            pan_v = t.get("pan")
             if aux is not None and idx < MASTER:
                 s = state.sends.get((e[0], e[1], aux), {})
-                val, send_off = s.get("fader"), s.get("on") is False
+                val, send_off, pan_v = s.get("fader"), s.get("on") is False, s.get("pan")
             else:
                 val = t.get("fader")
             meters = [state.meter(e[0], e[1], k) for k in (0, 1)]
@@ -1963,7 +1964,8 @@ def recall_payload(state, entries, sends, touched, xlink=None, gain=None):
                           "pos": round(db_to_fader(val) / 16383.0, 4) if val is not None else None,
                           "meters": meters, "meter": max([m for m in meters if m is not None], default=None),
                           "mute": bool(t.get("mute")), "solo": bool(t.get("solo")), "sel": e == sel,
-                          "send_off": send_off, "pan": pan_label(t.get("pan")).strip() if t.get("pan") is not None else None})
+                          "send_off": send_off, "pan": pan_label(pan_v).strip() if pan_v is not None else None,
+                          "pan_v": pan_v, "num": str(e[1] + 1) if e[0] == 0 else ""})
     for idx, c in enumerate(cells):                   # gain X32 / 48 V : hors verrou (lien x32-gain-recall)
         e = (list(entries[:MASTER]) + [entries[MASTER] if len(entries) > MASTER else None])[idx]
         if c is None or xlink is None or e is None:

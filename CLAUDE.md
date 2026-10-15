@@ -257,6 +257,10 @@ Messages vérifiés :
   (courbe calibrée), 1 ou 2 vumètres (stéréo), valeur en grand ; contour jaune = sélection, blanc = fader touché.
   Case de moins de 70 px (`COMPACT_W`, ex. master réglé à 36 px par Joseph) : version compacte = vumètres sur toute
   la largeur, capuchon du fader PAR-DESSUS, nom sur 3 lettres, « M » rouge si mute, valeur en petit.
+  **Grande case = tranche LV1 au plus près (15/10, demande de Joseph)** : `paint_lv1` — bouton de pan + arc bleu
+  (pan de l'envoi en sends), MUTE (rouge), valeur #38c9ff sur #363636, niveau du vumètre, fader posé SUR le vumètre
+  (#8cff00), échelle LV1 à droite, bandeau couleur + nom + n°, bouton casque = solo (jaune), « Send Level » vertical
+  en sends ; couleurs relevées sur ses captures (LV1_*). Gain X32 / 48V / pastilles retirés de la grande case.
   **Deux hauteurs mémorisées** (demande de Joseph, futur bouton « agrandir / rapetisser » de l'appli) : `taille`
   petit | grand dans `xtouch_ecran.json`, chacune avec son [y0, y1] ; `--taille petit|grand` bascule (à chaud),
   `--reglage` règle le profil en cours. Pendant le CHOIX de l'aux (SEND), l'overlay montre les aux de la page (comme les écrans X-Touch). **Boutons à l'écran** (`RecallButtons`, demande de Joseph) : ▲ LARGE / ▼ SMALL + ⚙ ADJUST,
