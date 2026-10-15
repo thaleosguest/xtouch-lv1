@@ -191,6 +191,14 @@ vumètre (deux en stéréo), valeur ; contour jaune = tranche sélectionnée, bl
 Trois blocs à l'écran : EXTENDER (8), X-TOUCH (8), MASTER (1). Glisse un bord pour l'étirer, l'intérieur pour le
 déplacer, la ligne du haut ou du bas pour la hauteur ; ENREGISTRER (ou Entrée) / ANNULER (ou Échap).
 
+**Deux tailles mémorisées** : *petit* (nom, couleur, valeur, diode de vumètre) et *grand* (tout : fader, vumètres,
+mute / solo / 48V, gain, pan). Bascule (le pont suit tout de suite) :
+
+    py xtouch_overlay_qt.py --taille petit
+    py xtouch_overlay_qt.py --taille grand
+
+Le réglage (`--reglage`) modifie la taille en cours.
+
 ## Sends on fader (SEND)
 
 1. **SEND** : les écrans affichent les aux (Fx 1-8 sur l'Extender, Mon 1-8 sur la X-Touch ; BANK = Mon 9-16).

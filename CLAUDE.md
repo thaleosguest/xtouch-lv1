@@ -143,7 +143,7 @@ Messages vérifiés :
 ## À reprendre (fin de session du 15/10/2026)
 
 - À vérifier sur le matériel : rappel de pistes avec les vrais faders (alignement réglé par Joseph : ext 0-911, xt
-  953-1867, master 1884-1920 -> master en présentation compacte), FLIP A/B (LED + pastille), PAN plus sensible,
+  953-1867, master 1884-1920 ; tailles petit / grand), FLIP A/B (LED + pastille), PAN plus sensible,
   afficheur 7 segments option C, Mon 9-16 dans les sends, faders = masters des aux pendant le choix SEND.
 - Plus tard : Reaper (OSC, transport, jog selon la page LV1), 64/32/16 ch et Mixer 2.
 - Tests : `for t in tests/test_*.py; do py $t .; done` (15 tests, tous OK au 15/10).
@@ -218,6 +218,11 @@ Messages vérifiés :
   (courbe calibrée), 1 ou 2 vumètres (stéréo), valeur en grand ; contour jaune = sélection, blanc = fader touché.
   Case de moins de 70 px (`COMPACT_W`, ex. master réglé à 36 px par Joseph) : version compacte = vumètres sur toute
   la largeur, capuchon du fader PAR-DESSUS, nom sur 3 lettres, « M » rouge si mute, valeur en petit.
+  **Deux hauteurs mémorisées** (demande de Joseph, futur bouton « agrandir / rapetisser » de l'appli) : `taille`
+  petit | grand dans `xtouch_ecran.json`, chacune avec son [y0, y1] ; `--taille petit|grand` bascule (à chaud),
+  `--reglage` règle le profil en cours. Bandeau < 140 px (`MINI_H`) = présentation « petit » : couleur + nom en haut,
+  valeur + diode(s) de vumètre (verte / ambre > -12 / rouge > -3, éteinte < -50 ; 2 en stéréo), « M » si mute.
+  Réglage de Joseph : petit = 1017-1076, grand = 745-1076, master 1884-1920 (trop étroit pour la valeur en petit).
   **Réglage à la main** : `py xtouch_overlay_qt.py --reglage` (3 blocs Extender 8 / X-Touch 8 / master 1, bords =
   étirer, intérieur = déplacer, haut/bas = hauteur ; Entrée = enregistrer, Échap = annuler) -> `xtouch_ecran.json`
   ({ext, xt, master: [x0, x1] sur 1920, y0, y1 sur 1080}), relu à chaud par le pont. `recall_payload`, `StripRecall`,

@@ -11,7 +11,7 @@
   1884.0,
   1920.0
  ],
- "y0": 745.0,
+ "y0": 1017.0,
  "y1": 1076.0,
  "_aide": "Rappel de pistes : blocs [x début, x fin] sur 1920 (Extender 8 cases, X-Touch 8, master 1), y0 / y1 = haut / bas du bandeau sur 1080. Réglage : py xtouch_overlay_qt.py --reglage"
 }

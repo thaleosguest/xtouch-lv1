@@ -13,6 +13,7 @@ rectangles arrondis, rouge 48 V en dégradé (255,120,105) -> (225,22,32), fondu
 
     py xtouch_overlay_qt.py --demo      # démo 10 s
     py xtouch_overlay_qt.py --reglage   # réglage à la main des blocs du rappel de pistes (Extender, X-Touch, master)
+    py xtouch_overlay_qt.py --taille petit|grand   # bascule entre les deux hauteurs mémorisées (sans argument : l'autre)
 """
 import json
 import math
@@ -198,7 +199,11 @@ class AbBadge(QWidget):
 # xtouch_ecran.json (fractions / pixels de référence 1920x1080), valeurs par défaut tirées de la photo de Joseph.
 # Blocs réglables à la main (`py xtouch_overlay_qt.py --reglage`) : Extender (8 cases), X-Touch (8), master (1),
 # chacun [x début, x fin] en pixels de référence 1920 ; y0 / y1 = haut / bas du bandeau (référence 1080).
-RECALL_DEFAULT = {"ext": [0.0, 941.0], "xt": [941.0, 1811.0], "master": [1811.0, 1920.0], "y0": 745.0, "y1": 1076.0}
+RECALL_DEFAULT = {"ext": [0.0, 941.0], "xt": [941.0, 1811.0], "master": [1811.0, 1920.0], "y0": 745.0, "y1": 1076.0,
+                  "taille": "grand", "petit": [1017.0, 1076.0], "grand": [745.0, 1076.0]}
+# Deux hauteurs mémorisées (demande de Joseph, 15/10) : « petit » (nom, couleur, valeur, diode) et « grand »
+# (présentation complète) ; `taille` = celle en cours, y0 / y1 = ses valeurs. Bascule : --taille petit|grand.
+MINI_H = 140                 # bandeau moins haut que ça (px) : présentation « petit »
 CFG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "xtouch_ecran.json")
 GREEN, AMBER, WARN = QColor("#3ddc84"), QColor("#f2b63b"), QColor("#ff5b4d")
 COMPACT_W = 70               # case plus étroite que ça (px) : présentation compacte (vumètres + fader par-dessus)
@@ -224,15 +229,28 @@ def load_recall_cfg():
         for k in ("y0", "y1"):
             if k in raw:
                 cfg[k] = float(raw[k])
+        for k in ("petit", "grand"):
+            if k in raw:
+                cfg[k] = [float(raw[k][0]), float(raw[k][1])]
+        if raw.get("taille") in ("petit", "grand"):
+            cfg["taille"] = raw["taille"]
+        elif "petit" not in raw and cfg["y1"] - cfg["y0"] < MINI_H:      # ancien fichier : on range au bon endroit
+            cfg["taille"] = "petit"
+        if "petit" not in raw or "grand" not in raw:
+            cfg[cfg["taille"]] = [cfg["y0"], cfg["y1"]]
+        cfg["y0"], cfg["y1"] = cfg[cfg["taille"]]
     except (TypeError, ValueError, IndexError, KeyError):
         pass
     return cfg
 
 
 def save_recall_cfg(cfg):
-    data = {k: cfg[k] for k in ("ext", "xt", "master", "y0", "y1")}
+    cfg[cfg["taille"]] = [cfg["y0"], cfg["y1"]]          # la hauteur réglée va dans le profil en cours
+    data = {k: cfg[k] for k in ("ext", "xt", "master", "y0", "y1", "taille", "petit", "grand")}
     data["_aide"] = ("Rappel de pistes : blocs [x début, x fin] sur 1920 (Extender 8 cases, X-Touch 8, master 1), "
-                     "y0 / y1 = haut / bas du bandeau sur 1080. Réglage : py xtouch_overlay_qt.py --reglage")
+                     "y0 / y1 = haut / bas du bandeau sur 1080 (profil en cours). Deux hauteurs mémorisées : "
+                     "petit / grand ; bascule : py xtouch_overlay_qt.py --taille petit|grand ; "
+                     "réglage : py xtouch_overlay_qt.py --reglage")
     with open(CFG_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=1)
 
@@ -246,6 +264,17 @@ def recall_cells(w, cfg):
         step = (x1 - x0) / n
         out += [((x0 + step * i) * k, step * k) for i in range(n)]
     return out
+
+
+def led_color(db):
+    """Diode de vumètre (bandeau « petit ») : éteinte sous -50 dB, verte, ambre au-dessus de -12, rouge au-dessus de -3."""
+    if db is None or db < -50:
+        return QColor("#2a2e33")
+    if db >= -3:
+        return WARN
+    if db >= -12:
+        return AMBER
+    return GREEN
 
 
 def meter_frac(db):
@@ -265,6 +294,8 @@ class StripRecall(QWidget):
         self.f_val = QFont("Consolas", 15, QFont.Bold)
         self.f_tag = QFont("Segoe UI", 8, QFont.Bold)
         self.f_scale = QFont("Segoe UI", 7)
+        self.f_mini = QFont("Segoe UI", 9, QFont.Bold)
+        self.f_mini_val = QFont("Consolas", 10, QFont.Bold)
 
     def set(self, data):
         self.data = data or {}
@@ -283,7 +314,8 @@ class StripRecall(QWidget):
         for i, (cx, cw) in enumerate(recall_cells(self.width(), self.cfg)):
             if i >= len(cells):
                 break
-            self.paint_cell(p, QRectF(cx + 3, 4, cw - 6, self.height() - 8), cells[i], i in touched, send)
+            mg = 2 if self.height() < MINI_H else 4
+            self.paint_cell(p, QRectF(cx + 2, mg, cw - 4, self.height() - 2 * mg), cells[i], i in touched, send)
 
     def pill(self, p, r, text, fill, fg="#ffffff"):
         p.setPen(Qt.NoPen)
@@ -352,7 +384,49 @@ class StripRecall(QWidget):
         p.setFont(self.f_tag)
         p.drawText(QRectF(r.left() - 2, bottom, r.width() + 4, 18), Qt.AlignCenter, c.get("value", ""))
 
+    def paint_mini(self, p, r, c, hot, send):
+        """Bandeau « petit » : couleur + nom en haut, valeur + diode(s) de vumètre en bas (2 en stéréo)."""
+        sel = bool(c.get("sel"))
+        p.setPen(QPen(QColor("#ffffff") if hot else (QColor(255, 242, 0) if sel else QColor(LINE2)),
+                      2.0 if (hot or sel) else 1.0))
+        p.setBrush(QColor("#1b1d20") if hot else QColor(PANEL))
+        p.drawRoundedRect(r, 6, 6)
+        col = QColor(c.get("color") or LINE2)
+        top = QRectF(r.left(), r.top(), r.width(), r.height() * 0.5)
+        path = QPainterPath()
+        path.addRoundedRect(r, 6, 6)
+        p.save()
+        p.setClipPath(path)
+        p.fillRect(top, col)
+        p.restore()
+        dark = 0.299 * col.red() + 0.587 * col.green() + 0.114 * col.blue() > 150
+        p.setPen(QColor(PANEL) if dark else QColor("#ffffff"))
+        p.setFont(self.f_mini)
+        name = c.get("name", "")
+        p.drawText(top.adjusted(3, 0, -3, 0), Qt.AlignCenter, name if r.width() >= COMPACT_W else name[:3])
+        bot = QRectF(r.left(), top.bottom(), r.width(), r.bottom() - top.bottom())
+        meters = c.get("meters") or [None]
+        d = max(6.0, min(10.0, bot.height() * 0.42))
+        lx = bot.right() - 5 - d * len(meters) - 3 * (len(meters) - 1)
+        for k, db in enumerate(meters):
+            p.setPen(Qt.NoPen)
+            p.setBrush(led_color(db))
+            p.drawEllipse(QRectF(lx + k * (d + 3), bot.center().y() - d / 2, d, d))
+        x0 = bot.left() + 4
+        if c.get("mute"):
+            p.setPen(QColor(225, 22, 32))
+            p.setFont(self.f_mini)
+            p.drawText(QRectF(x0, bot.top(), 14, bot.height()), Qt.AlignVCenter | Qt.AlignLeft, "M")
+            x0 += 14
+        p.setPen(QColor("#ff8a80") if (send and c.get("send_off")) else QColor(TXT))
+        p.setFont(self.f_mini_val)
+        p.drawText(QRectF(x0, bot.top(), lx - x0 - 2, bot.height()), Qt.AlignCenter,
+                   ("> " if send else "") + c.get("value", ""))
+
     def paint_cell(self, p, r, c, hot, send):
+        if c and self.height() < MINI_H:
+            self.paint_mini(p, r, c, hot, send)
+            return
         if c and r.width() < COMPACT_W:
             p.setPen(QPen(QColor("#ffffff") if hot else QColor(LINE2), 2.0 if hot else 1.0))
             p.setBrush(QColor("#1b1d20") if hot else QColor(PANEL))
@@ -683,6 +757,17 @@ def main():
     app.setQuitOnLastWindowClosed(False)
     demo = "--demo" in sys.argv
     mixer = 2 if "--mixer=2" in sys.argv else 1
+    if "--taille" in sys.argv:                       # bascule petit / grand (le pont la prend en compte à chaud)
+        i = sys.argv.index("--taille")
+        want = sys.argv[i + 1] if i + 1 < len(sys.argv) else ""
+        cfg = load_recall_cfg()
+        if want not in ("petit", "grand"):
+            want = "grand" if cfg["taille"] == "petit" else "petit"
+        cfg["taille"] = want
+        cfg["y0"], cfg["y1"] = cfg[want]
+        save_recall_cfg(cfg)
+        print("Rappel de pistes : taille %s (%d - %d)" % (want, cfg["y0"], cfg["y1"]))
+        return 0
     if "--reglage" in sys.argv:                      # réglage à la main des blocs du rappel de pistes
         setup = RecallSetup(lv1_rect(mixer) or (0, 0, 1920, 1080))
         setup.show()
