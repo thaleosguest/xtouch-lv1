@@ -75,6 +75,9 @@ class LV1Overlay(threading.Thread):
     def set_ab(self, ab, key):
         pass                      # pastille A/B : version Qt seulement
 
+    def set_warn(self, text):
+        pass                      # alerte « B PATCH » : version Qt seulement
+
     def set_recall(self, data):
         pass                      # rappel de pistes : version Qt seulement
 
@@ -194,6 +197,17 @@ class QtOverlay:
         self.last_ab = info
         try:
             self.proc.stdin.write((json.dumps({"ab": ab if info else None, "key": key}) + "\n").encode("utf-8"))
+            self.proc.stdin.flush()
+        except OSError:
+            pass
+
+    def set_warn(self, text):
+        """Alerte dans la barre du haut de la LV1 (ex. « B PATCH » : diagonale B cassée) ; None = rien."""
+        if text == getattr(self, "last_warn", object()):
+            return
+        self.last_warn = text
+        try:
+            self.proc.stdin.write((json.dumps({"warn": text}) + "\n").encode("utf-8"))
             self.proc.stdin.flush()
         except OSError:
             pass

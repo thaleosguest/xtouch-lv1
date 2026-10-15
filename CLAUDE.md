@@ -213,7 +213,13 @@ Messages vérifiés :
   d'échange (partage réseau contenant aussi les .lua) ; transport : `--reaper IP:8000:9000`.
   **Diagonale B** (Joseph) : patch B = LV1-PORT n pour la n-ième voie ; casse quand un canal passe mono <-> stéréo
   (les lignes de la grille se décalent, vu le 15/10 : P170 X2) -> à refaire ; automatisation par clics dans la page
-  Patch PROPOSÉE, pas commencée (aucune commande réseau de patch).
+  Patch : `lv1_patch.py` (16/10) — lit la grille Input B dans l'image de la fenêtre LV1 (PrintWindow, admin ; sinon
+  écran), lignes de grille (120,120,120), case (56,201,255), refuse si pas Patch / Input B / grille défilée (curseurs
+  d'ascenseurs (1891,230) et (131,1055) = (231,231,231)) ; DÉZOOME d'abord (loupe « − » (148,244)) ; un clic REMPLACE
+  la source de la ligne (vérifié par Joseph) -> on clique seulement les cases voulues ; `fix_diagonal()`. Vérifié le
+  16/10 (diagonale refaite). Pont : alerte « B PATCH / n OFF » (`diagonal_problems` : lignes = voies, stéréo du
+  /Channels, jusqu'à `lv1_db.driver_size`) dans la barre du haut (WarnBadge, LV1 devant) ; **ENTER (0x53, non
+  vérifié) = refait la diagonale** (page Patch > Input B ouverte).
 - **DISPLAY = bascule LV1 <-> Reaper au premier plan, SAVE selon la fenêtre active (codé le 15/10, test
   `tests/test_apps.py`, notes Mackie 0x34 / 0x50 non vérifiées)** — choix du bouton : DISPLAY (NAME/VALUE), FLIP étant
   pris par Flip A/B. `fenetres.py` (front_app, bring : AttachThreadInput + SetForegroundWindow) ; `AppControl` :

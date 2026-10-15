@@ -223,6 +223,40 @@ class AbBadge(QWidget):
         p.drawText(pill, Qt.AlignCenter, self.ab)
 
 
+# Alerte dans la barre du haut de la LV1, entre l'onglet Setup et le cadenas (zone vide, relevé du 16/10) :
+# « B PATCH » quand la diagonale B est cassée (un canal passé mono <-> stéréo) ; ENTER sur la page Patch > Input B la
+# refait. Visible seulement LV1 au premier plan, comme la pastille FLIP.
+WARN_RECT = (1290, 8, 78, 40)
+
+
+class WarnBadge(QWidget):
+    def __init__(self):
+        super().__init__(None, FLAGS)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+        self.text = ""
+        self.f = QFont("Segoe UI", 9, QFont.Bold)
+        self.f_small = QFont("Segoe UI", 7, QFont.Bold)
+
+    def set(self, text):
+        self.text = text or ""
+        self.update()
+
+    def paintEvent(self, _e):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        r = QRectF(self.rect()).adjusted(1, 1, -1, -1)
+        p.setPen(Qt.NoPen)
+        p.setBrush(red_gradient(r))
+        p.drawRoundedRect(r, 6, 6)
+        title, _, sub = self.text.partition("\n")
+        p.setPen(QColor("#ffffff"))
+        p.setFont(self.f)
+        p.drawText(QRectF(r.left(), r.top() + 3, r.width(), r.height() / 2), Qt.AlignCenter, title)
+        p.setFont(self.f_small)
+        p.drawText(QRectF(r.left(), r.center().y(), r.width(), r.height() / 2 - 3), Qt.AlignCenter, sub)
+
+
 # ─── Rappel de pistes (demande de Joseph, 15/10) ─────────────────────────────────────────────────────────────────
 # La X-Touch + Extender sont plus larges que l'écran : leurs tranches ne tombent pas sous celles de la LV1. Quand on
 # touche un fader, un bandeau occupe la zone des faders de la LV1 (bas de l'écran) avec 17 cases ALIGNÉES SUR LA
@@ -882,6 +916,7 @@ class Overlay:
         self.rect_fn = rect_fn or (lambda: lv1_rect(mixer))
         self.banner, self.frame = Banner(), Frame()
         self.badge, self.ab, self.ab_key = AbBadge(), None, None
+        self.warn, self.warn_text = WarnBadge(), None
         self.recall, self.recall_on = StripRecall(), False
         self.recall_alpha, self.cfg_mtime, self.cfg_t = 0.0, None, 0.0
         self.buttons = RecallButtons(self.set_taille, self.open_setup)
@@ -972,6 +1007,20 @@ class Overlay:
             self.recall.show()
             self.recall.raise_()
 
+    def tick_warn(self):
+        if not self.warn_text or not self.rect or not self.front:
+            if self.warn.isVisible():
+                self.warn.hide()
+            return
+        x, y, w, h = self.rect
+        sx, sy = w / 1920.0, h / 1080.0
+        geo = (x + round(WARN_RECT[0] * sx), y + round(WARN_RECT[1] * sy), round(WARN_RECT[2] * sx),
+               round(WARN_RECT[3] * sy))
+        if self.warn.geometry().getRect() != geo:
+            self.warn.setGeometry(*geo)
+        if not self.warn.isVisible():
+            self.warn.show()
+
     def tick_badge(self, now):
         if not self.ab or self.ab_key is None or not self.rect or not self.front:
             if self.badge.isVisible():
@@ -998,6 +1047,11 @@ class Overlay:
             if self.recall_on:
                 self.recall.set(m["recall"])
             return
+        if "warn" in m:                              # {"warn": "B PATCH / 3 OFF" | null} (2 lignes)
+            self.warn_text = m["warn"]
+            if self.warn_text:
+                self.warn.set(self.warn_text)
+            return
         if "ab" in m:                                # {"ab": "A" | "B" | null, "key": n° de la User Key 0..15}
             self.ab, self.ab_key = m.get("ab"), m.get("key")
             if self.ab:
@@ -1019,6 +1073,7 @@ class Overlay:
         self.front = self.pid is None or foreground_pid() in (self.pid, os.getpid())
         self.rect = self.lv1_rect
         self.tick_badge(now)
+        self.tick_warn()
         self.tick_recall()
         self.tick_buttons(now)
         if not self.state or not self.rect:

@@ -1625,6 +1625,7 @@ class TransportControl:
 # ─── Bascule LV1 <-> Reaper et SAVE (demande de Joseph, 15/10) ──────────────────────────────────────────────────────
 NOTE_DISPLAY = 0x34      # DISPLAY (NAME/VALUE, Mackie, non vérifié) : met Reaper ou la LV1 au premier plan
 NOTE_SAVE = 0x50         # SAVE (Mackie, non vérifié) : selon la fenêtre active
+NOTE_ENTER = 0x53        # ENTER (Mackie, non vérifié) : refait la diagonale B (page Patch > Input B ouverte)
 ACT_REAPER_SAVE_AS = 40022   # File: Save project as...
 
 
@@ -1636,6 +1637,7 @@ class AppControl:
     def __init__(self, state, link, reaper, mixer=1, write=True):
         self.state, self.link, self.reaper, self.mixer, self.write = state, link, reaper, mixer, write
         self.front = "autre"
+        self.fixing = False
         self.warned = set()
         threading.Thread(target=self._watch, daemon=True).start()
 
@@ -1645,6 +1647,19 @@ class AppControl:
             self.front = fenetres.front_app(self.mixer)
             time.sleep(0.4)
 
+    def _fix_diagonal(self):
+        """ENTER : refait la diagonale B par clics (lv1_patch), page Patch > Input B ouverte (sinon refusé, sans clic)."""
+        try:
+            import lv1_patch
+            ok, msg = lv1_patch.fix_diagonal(log=lambda m: JOURNAL.mark("diagonale B : " + m))
+            JOURNAL.mark("XT Enter -> diagonale B : %s" % msg)
+            print("  Diagonale B : %s" % msg)
+        except Exception as e:
+            JOURNAL.mark("XT Enter -> diagonale B : erreur %r" % e)
+            print("  Diagonale B : erreur %r" % e)
+        finally:
+            self.fixing = False
+
     def _switch(self):
         import fenetres
         target = "lv1" if fenetres.front_app(self.mixer) == "reaper" else "reaper"
@@ -1653,9 +1668,14 @@ class AppControl:
         self.front = fenetres.front_app(self.mixer)
 
     def on_midi(self, unit, status, d1, d2, t, entries, surface):
-        if (status & 0xF0) != 0x90 or d1 not in (NOTE_DISPLAY, NOTE_SAVE) or unit != surface.master_unit:
+        if (status & 0xF0) != 0x90 or d1 not in (NOTE_DISPLAY, NOTE_SAVE, NOTE_ENTER) or unit != surface.master_unit:
             return False
         if not d2:
+            return True
+        if d1 == NOTE_ENTER:
+            if not self.fixing:
+                self.fixing = True
+                threading.Thread(target=self._fix_diagonal, daemon=True).start()
             return True
         if d1 == NOTE_DISPLAY:
             threading.Thread(target=self._switch, daemon=True).start()
@@ -2331,7 +2351,8 @@ def main():
         print("  Fader master -> %s" % default_label(*master_target))
     last_layer = object()
     woke = []
-    tracks_sent = [0.0]                    # message reçu pendant l'attente de fin de tour, traité au début du suivant
+    tracks_sent = [0.0]
+    diag_t = [0.0, None]                    # message reçu pendant l'attente de fin de tour, traité au début du suivant
     recall_until, recall_sent, recall_touched = [0.0], [0.0], [None]
     t_end = time.time() + a.seconds if a.seconds else None
     try:
@@ -2421,6 +2442,17 @@ def main():
                           if on and "flip ab" in (func or "").lower()]
                     ab_now = state.on_b         # lu ici : on_b n'est défini que plus bas dans la boucle (bug du 15/10)
                 overlay.set_ab(None if ab_now is None else ("B" if ab_now else "A"), fk[0] if fk else None)
+                if now - diag_t[0] >= 1.0:                   # diagonale B cassée ? (patch relu toutes les 5 s)
+                    diag_t[0] = now
+                    bad = diagonal_problems(state)
+                    warn = ("B PATCH\n%d OFF" % len(bad)) if bad else None
+                    if warn != diag_t[1]:
+                        diag_t[1] = warn
+                        overlay.set_warn(warn)
+                        if bad:
+                            print("  Diagonale B cassée (%d canaux : %s) : page Patch > Input B, puis ENTER."
+                                  % (len(bad), ", ".join(bad[:5]) + ("…" if len(bad) > 5 else "")))
+                            JOURNAL.mark("diagonale B cassée : %s" % bad)
             surface.set_main_led(NOTE_RUDE_SOLO, any_solo and int(now * 2) % 2 == 0)   # clignote si un solo
             surface.set_main_led(NOTE_SOLO_ALL, any_solo)                                # SOLO : allumé si un solo
             with state.lock:
