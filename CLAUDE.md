@@ -282,7 +282,8 @@ Messages vérifiés :
   en sends ; couleurs relevées sur ses captures (LV1_*). Gain X32 / 48V / pastilles retirés de la grande case.
   Options d'affichage (`RECALL_OPTIONS`, interrupteurs dans le réglage ADJUST, `options` de xtouch_ecran.json) :
   bouton vert SELECT (défaut) / cadre jaune + fond gris de la LV1, capuchon transparent, POINT BLEU au-dessus de la
-  tranche touchée (bande transparente DOT_PAD au-dessus du bandeau ; les flèches ont été refusées), contour
+  tranche touchée (bande transparente DOT_PAD au-dessus du bandeau ; les flèches ont été refusées ; point et contour =
+  doigt posé SEULEMENT, `FaderControl.touch_display`, envoi immédiat au changement), contour
   blanc. Master étroit au même style (`paint_compact`, `lv1_meter`, `lv1_cap`).
   **Deux hauteurs mémorisées** (demande de Joseph, futur bouton « agrandir / rapetisser » de l'appli) : `taille`
   petit | grand dans `xtouch_ecran.json`, chacune avec son [y0, y1] ; `--taille petit|grand` bascule (à chaud),

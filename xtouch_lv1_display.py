@@ -859,6 +859,7 @@ EVENTS = queue.Queue()  # messages MIDI reçus (global : les tests peuvent en in
 FADER_TOL = 48          # écart (sur 16383) en dessous duquel on ne bouge pas le moteur
 HOLD_AFTER = 0.3        # s pendant lesquelles un fader lâché reste « tenu » (retours LV1 ignorés)
 MOTOR_BUSY = 1.5        # s après une commande moteur : un fader bougé sans toucher est le moteur, pas la main
+NAIL_SHOW = 0.15        # s : point de toucher d'un fader bougé sans toucher détecté, après son dernier mouvement
 UNTOUCHED_MIN = 80      # écart (sur 16383) qu'un fader non touché doit faire pour démarrer un geste (ongle)
 STALE_FOR = 2.0         # s après le relâchement pendant lesquelles un retour « périmé » est ignoré
 SEND_EVERY = 0.02       # envoi max d'une valeur par fader toutes les 20 ms
@@ -1833,11 +1834,19 @@ class FaderControl:
         self.last_sent = {}    # tranche -> instant du dernier envoi
         self.seen_touch = False
         self.gesture = {}      # clé -> valeurs du geste en cours (ancienne valeur + valeurs envoyées)
+        self.untouched_move = {}   # tranche -> instant du dernier mouvement SANS toucher détecté (ongle)
         # tranche, piste (ou None) -> clé réglée : (g, ch) = fader de piste, (g, ch, aux) = envoi, None = rien
         self.key_of = lambda strip, e: e
         # tranche -> True si le fader est en lecture seule (master sur LR, demande de Joseph : fader critique, sert au
         # monitoring ; toucher = rien n'est envoyé, le moteur garde la position LV1)
         self.readonly = lambda strip: False
+
+    def touch_display(self, now):
+        """Tranches à marquer « touchées » à l'écran : doigt posé, ou fader bougé SANS toucher (ongle) pendant ce geste ;
+        pas la temporisation d'après relâchement (HOLD_AFTER), qui ne sert qu'aux garde-fous."""
+        out = [s for s, v in self.touched.items() if v]
+        out += [s for s, t in self.untouched_move.items() if now - t < NAIL_SHOW and s not in out]
+        return sorted(out)
 
     def held(self, now):
         return {s for s in set(self.touched) | set(self.hold_until)
@@ -1874,6 +1883,8 @@ class FaderControl:
                 self.hold_until[strip] = t + HOLD_AFTER
                 return True
             self.hold_until[strip] = t + HOLD_AFTER
+            if not self.touched.get(strip):
+                self.untouched_move[strip] = t           # geste sans toucher détecté : point de toucher pendant qu'il bouge
             surface.note_position(strip, value)
             e = entries[strip] if strip < len(entries) else None
             key = self.key_of(strip, e)
@@ -2291,7 +2302,7 @@ def main():
     last_layer = object()
     woke = []
     tracks_sent = [0.0]                    # message reçu pendant l'attente de fin de tour, traité au début du suivant
-    recall_until, recall_sent = [0.0], [0.0]
+    recall_until, recall_sent, recall_touched = [0.0], [0.0], [None]
     t_end = time.time() + a.seconds if a.seconds else None
     try:
         while not (t_end and time.time() > t_end):
@@ -2362,12 +2373,14 @@ def main():
                 timecode = seg_codes(sends.label() or "--", 5) + timecode[5:]
             surface.push_master_display(assign, timecode)
             if overlay:
-                touched = sorted(faders.held(now))         # touché, ou bougé sans toucher (ongle)
-                if touched:
+                if faders.held(now):                       # touché, ou bougé sans toucher (ongle) : bandeau affiché
                     recall_until[0] = now + RECALL_HOLD
+                # point / contour de toucher : le doigt SEULEMENT (disparaît au relâchement, demande de Joseph du
+                # 15/10), ou un geste sans toucher détecté (ongle) tant qu'il bouge
+                touched = faders.touch_display(now)
                 if now < recall_until[0]:
-                    if now - recall_sent[0] >= RECALL_EVERY:
-                        recall_sent[0] = now
+                    if now - recall_sent[0] >= RECALL_EVERY or touched != recall_touched[0]:
+                        recall_sent[0], recall_touched[0] = now, touched
                         overlay.set_recall(recall_payload(state, entries, sends, touched, xlink, gain))
                 elif recall_sent[0]:
                     recall_sent[0] = 0.0
