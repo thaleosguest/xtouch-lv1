@@ -32,6 +32,7 @@ PROBE_YS, PROBE_XS = (700, 806, 910), (1500, 1300)      # rangées / colonnes o�
 # Grille en haut à gauche (pas défilée) : le curseur des ascenseurs touche le début de leur rail (relevé le 16/10).
 # Défilée, la 1re ligne visible n'est plus la ligne 1 : on refuse (essais de Joseph : « ligne 1 -> [42] »).
 SCROLL_THUMB = (231, 231, 231)
+ZOOM_OUT_BTN = (148, 244)          # loupe « − » au-dessus de la liste des canaux (relevé le 16/10)
 VSCROLL_TOP, HSCROLL_LEFT = (1891, 230), (131, 1055)
 
 
@@ -155,6 +156,24 @@ def click_cell(grid, r, c):
     return t.click(grid["cols"][c], grid["rows"][r]), None
 
 
+def zoom_out(grid, max_clicks=8):
+    """Dézoome la grille au maximum (loupe « − ») pour voir toutes les lignes (Joseph, 16/10 : zoomée, seule la partie
+    visible de la diagonale était refaite). S'arrête quand les cases ne rapetissent plus. Rend la grille relue."""
+    t = LC.Target(1)
+    for _ in range(max_clicks):
+        if not LC.is_admin():
+            return grid, "pas administrateur"
+        t.click(*ZOOM_OUT_BTN)
+        time.sleep(0.35)
+        g2, why = read_grid()
+        if why:
+            return grid, why
+        if g2["pitch"] >= grid["pitch"]:              # plus petit possible atteint
+            return g2, None
+        grid = g2
+    return grid, None
+
+
 def show(grid):
     print("grille : %d colonnes x %d lignes visibles, pas %s, vignette sélectionnée : %s (image : %s)"
           % (len(grid["cols"]), len(grid["rows"]), grid["pitch"], grid["tile"], grid["source"]))
@@ -191,8 +210,14 @@ def main():
         if extra:
             print("lignes après la diagonale encore patchées (non touchées) : %s" % [(r + 1, c + 1) for r, c in extra])
         if "--go" not in sys.argv:
-            print("(rien n'est cliqué : ajoute --go pour le faire)")
+            print("(rien n'est cliqué : ajoute --go pour le faire ; la grille sera d'abord dézoomée au maximum)")
             return 0
+        grid, why = zoom_out(grid)
+        if why:
+            print("dézoom impossible :", why)
+            return 1
+        print("après dézoom : %d colonnes x %d lignes visibles" % (len(grid["cols"]), len(grid["rows"])))
+        add, extra = plan(grid, n)
         for r, c in add:
             ok, why = click_cell(grid, r, c)
             if not ok:
@@ -206,6 +231,9 @@ def main():
             return 1
         add2, _ = plan(grid2, n)
         print("après : %s" % ("diagonale OK" if not add2 else "reste %s" % [(r + 1, c + 1) for r, c in add2]))
+        if n and n > len(grid2["rows"]):
+            print("ATTENTION : %d lignes demandées, %d seulement visibles même dézoomé : les suivantes ne sont pas faites"
+                  % (n, len(grid2["rows"])))
     return 0
 
 
