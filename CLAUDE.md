@@ -181,6 +181,14 @@ Messages vérifiés :
   ZOOM = 1011/1012/40111/40112, jog = 40084/40085 (SCRUB : 40104/40105 au pixel). Jog : LV1Clicker essaie le
   fader de plugin, sinon `jog_fallback` -> Reaper. LED = retours /play /record /repeat /click. `--reaper aucun`.
   Rien en --dry-run (tests) sauf `--reaper` explicite.
+- **Scènes LV1 <-> marqueurs Reaper (codé le 15/10, test `tests/test_scenes.py` côté pont ; script Lua et
+  /Set/CurSceneIndex à vérifier)** — comme « Create/Recall Scenes » de Tracks Live (manuel fourni par Joseph,
+  `Manuel Livetrack 2/`). LV1 : /Notify/SceneList i:N (i, s)×N, /Notify/CurSceneIndex i, /Notify/Scene/Name s ;
+  rappel /Set/CurSceneIndex i (module Companion). CurSceneIndex dans un état complet (< 2 s après /Channels) ne compte
+  que s'il change. `reaper_scenes.py` (SceneBridge) <-> `reaper/lv1_scenes.lua` (defer) par fichiers
+  lv1_to_reaper.txt / reaper_to_lv1.txt (« n°	index	nom ») : enregistrement = marqueur vert (couleur = signature),
+  lecture = marqueur franchi (pas de saut > 0,5 s) -> rappel par NOM, arrêt = curseur sur le marqueur. Tracks Live
+  lui-même n'est pas pilotable (ni MIDI ni OSC ; raccourcis envoyés refusés, `tracks_live.py`).
 - **Pastille FLIP visible seulement si la LV1 est au premier plan** (Joseph, 15/10 : elle restait devant les autres
   programmes ; rappel de pistes et sends on fader restent affichés LV1 en arrière-plan, choix de Joseph) : processus de la fenêtre de premier plan = celui de la LV1 (fenêtres détachées et
   boîtes de dialogue comprises) ou l'overlay lui-même (réglage).

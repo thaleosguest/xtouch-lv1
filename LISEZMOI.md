@@ -283,6 +283,19 @@ Le pont s'y connecte tout seul (autre réglage : `--reaper hôte:8000:9000`, `--
 
 Essai sans X-Touch : `py reaper_link.py play`, `py reaper_link.py stop`, `py reaper_link.py marker`.
 
+## Scènes LV1 ↔ marqueurs Reaper (comme Tracks Live)
+
+Une fois dans Reaper : Actions › Show action list › New action › **Load ReaScript…** ›
+`reaper/lv1_scenes.lua` (dans ce dossier), puis **Run**. L'action reste allumée tant que le lien tourne ; la relancer
+l'arrête. Pour qu'il démarre avec Reaper : SWS (Startup actions) ou `__startup.lua`.
+
+- **Enregistrement** : rappeler une scène sur la LV1 pose un **marqueur vert** au nom de la scène.
+- **Lecture** : quand la lecture passe sur un marqueur vert, la scène est **rappelée sur la LV1**. Sauter dans la
+  timeline ne rappelle rien.
+- **Arrêt** : rappeler une scène sur la LV1 place le curseur sur le marqueur du même nom.
+
+Ne change pas la couleur des marqueurs de scène à la main : c'est elle qui les fait reconnaître.
+
 ## Affichage à l'écran
 
 La pastille FLIP n'apparaît **que quand la LV1 est au premier plan**. Le rappel de pistes et le bandeau / cadre

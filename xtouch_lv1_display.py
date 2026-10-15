@@ -227,6 +227,9 @@ class LV1State:
         self.aux_tracks = []      # /Aux/Tracks : [(groupe, canal, nom)] dans l'ordre des index aux (Fx 1-8, Mon 1-16)
         self.user_keys = {}       # n° 0..15 -> (nom court, fonction, assignée) : /Notify/UserKeyInfo
         self.on_b = None          # entrées sur B ? (base LV1, relue après chaque Flip A/B) ; None = inconnu
+        self.scenes = {}          # index -> nom (/Notify/SceneList, /Notify/Scene/Name)
+        self.cur_scene = None     # index de la scène courante (/Notify/CurSceneIndex), -1 = aucune
+        self.scene_events = []    # [(index, instant)] scènes rappelées sur la LV1, à transmettre à Reaper
         self.channels_at = 0.0    # instant du dernier /Channels (état complet renvoyé : connexion, Flip A/B…)
         self.custom_on = {}       # vue -> bouton Custom allumé ? (/Notify/CustomButton, hypothèse)
         self.spill_on = {}        # vue -> bouton Spill allumé ? (/Notify/SpillButton, hypothèse)
@@ -389,6 +392,24 @@ def handle(state, address, args):
                     aux.append((args[k + 1][1], args[k][1], args[k + 2][1]))
             if aux:
                 state.aux_tracks = aux
+        elif address == "/Notify/SceneList" and args and args[0][0] == "i":
+            # i:N puis (i index, s nom) x N — ex. i:2 i:0 "Scene Teste A" i:1 "Scene Teste B" (module Companion)
+            scenes = {}
+            for k in range(1, len(args) - 1, 2):
+                if args[k][0] == "i" and args[k + 1][0] == "s":
+                    scenes[args[k][1]] = args[k + 1][1]
+            state.scenes = scenes
+        elif address == "/Notify/Scene/Name" and args and args[0][0] == "s":
+            if state.cur_scene is not None and state.cur_scene >= 0:
+                state.scenes[state.cur_scene] = args[0][1]
+        elif address == "/Notify/CurSceneIndex" and args and args[0][0] == "i":
+            # Scène rappelée. La LV1 renvoie aussi la scène courante dans chaque état complet (connexion, Flip A/B) :
+            # là, seul un CHANGEMENT d'index compte ; sinon tout rappel compte (même scène rappelée à nouveau).
+            idx, prev = args[0][1], state.cur_scene
+            dump = time.time() - state.channels_at < 2.0
+            state.cur_scene = idx
+            if prev is not None and idx >= 0 and (idx != prev or not dump):
+                state.scene_events.append((idx, time.time()))
         elif address == "/Notify/UserKeyInfo" and len(args) >= 4 and args[0][0] == "i":
             # ,issi [n°, nom court, fonction, assignée] ; ex. i:0 "Mon 1" "Flip Sends: MX1: Mon 1" i:1
             state.user_keys[args[0][1]] = (args[1][1], args[2][1], bool(args[3][1]))
@@ -1849,6 +1870,33 @@ def build_frame(state, mixer_page, n_strips, overrides):
         return top, bot, cols, lvls, fads, layer_name, entries
 
 
+SCENE_DELAY = 0.2        # s : on attend un peu le nom de la scène (/Notify/Scene/Name) avant de la transmettre
+
+
+def scene_relay(state, bridge, link, now, write=True):
+    """Scènes : LV1 -> Reaper (marqueur / curseur) et Reaper -> LV1 (marqueur franchi en lecture = rappel)."""
+    import reaper_scenes
+    with state.lock:
+        ready = [(i, t) for i, t in state.scene_events if now - t >= SCENE_DELAY]
+        state.scene_events = [e for e in state.scene_events if now - e[1] < SCENE_DELAY]
+        names = {i: state.scenes.get(i) for i, _t in ready}
+        scenes = dict(state.scenes)
+    for idx, _t in ready:
+        JOURNAL.mark("scène LV1 rappelée : %d « %s »" % (idx, names[idx]))
+        bridge.scene_recalled(idx, names[idx] or "Scene %d" % (idx + 1))
+    while True:
+        try:
+            name = bridge.requests.get_nowait()
+        except queue.Empty:
+            break
+        idx = reaper_scenes.scene_index(scenes, name)
+        if idx is None:
+            JOURNAL.mark("Reaper demande la scène « %s » : inconnue sur la LV1" % name)
+        elif write:
+            link.send("/Set/CurSceneIndex", [("i", idx)])
+            JOURNAL.mark("-> LV1 /Set/CurSceneIndex %d (« %s », marqueur Reaper)" % (idx, name))
+
+
 RECALL_HOLD = 0.5        # s : le rappel de pistes reste affiché après le relâchement du dernier fader
 RECALL_EVERY = 0.05      # s : rafraîchissement du rappel (vumètres) pendant qu'il est affiché
 
@@ -2011,6 +2059,11 @@ def main():
         reaper = reaper_link.ReaperLink(*target, journal=lambda m: JOURNAL.mark(m))
         print("  Reaper (OSC %s:%d, retours sur %d) : transport, marqueurs, zoom, jog hors plugin LV1." % target)
     transport = TransportControl(reaper)
+    scene_bridge = None
+    if reaper:                       # scènes LV1 <-> marqueurs Reaper (script reaper/lv1_scenes.lua dans Reaper)
+        import reaper_scenes
+        scene_bridge = reaper_scenes.SceneBridge(journal=lambda m: JOURNAL.mark(m))
+        print("  Scènes LV1 <-> marqueurs Reaper : charger reaper/lv1_scenes.lua dans Reaper (Actions > Load ReaScript).")
     buttons.transport = transport
     overlay = OVERLAY_FACTORY(a.mixer) if OVERLAY_FACTORY else None     # tests : faux affichage d'écran
     if overlay is None and not a.dry_run and not a.sans_cadre and sys.platform == "win32":
@@ -2134,6 +2187,8 @@ def main():
             surface.set_main_led(NOTE_TRACK, gain.mode)
             surface.set_main_led(NOTE_PAN, gain.pan_mode)
             surface.set_main_led(NOTE_SEND, sends.aux is not None or (sends.picking and int(now * 3) % 2 == 0))
+            if scene_bridge:
+                scene_relay(state, scene_bridge, link, now, write=not a.lecture_seule)
             if reaper:
                 for note, on in transport.leds().items():
                     surface.set_main_led(note, on)

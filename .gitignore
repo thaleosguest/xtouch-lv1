@@ -6,3 +6,5 @@ xtouch_probe_report_*.json
 *.etl
 *.pcapng
 *.pcap
+reaper/lv1_to_reaper.txt*
+reaper/reaper_to_lv1.txt
