@@ -176,7 +176,8 @@ Messages vérifiés :
 - **Transport -> Reaper (codé le 15/10, test `tests/test_reaper.py`, à vérifier avec Reaper)** : `reaper_link.py`
   (OSC UDP, envoi 127.0.0.1:8000, retours écoutés sur 9000, pattern Default.ReaperOSC : /play /stop /record /repeat
   /click déclencheurs, /rewind /forward tenus 1/0, /action i:n) ; `TransportControl` (notes Mackie 0x54-0x65, non
-  vérifiées sur la X-Touch) : MARKER seul = action 40157, flèches = marqueurs 40172/40173 et pistes 40286/40285,
+  vérifiées sur la X-Touch) ; Reaper n'envoie son état qu'aux changements -> action 41743 (Refresh all surfaces)
+  au démarrage et toutes les 5 s sans réponse (vérifié le 15/10 : état complet reçu) ; MARKER seul = action 40157, flèches = marqueurs 40172/40173 et pistes 40286/40285,
   ZOOM = 1011/1012/40111/40112, jog = 40084/40085 (SCRUB : 40104/40105 au pixel). Jog : LV1Clicker essaie le
   fader de plugin, sinon `jog_fallback` -> Reaper. LED = retours /play /record /repeat /click. `--reaper aucun`.
   Rien en --dry-run (tests) sauf `--reaper` explicite.

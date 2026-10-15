@@ -71,6 +71,7 @@ sys.argv = ["x", "--dry-run", "--no-journal", "--x32", "aucun", "--host", "127.0
 with contextlib.redirect_stdout(io.StringIO()):
     D.main()
 print("Reçu par Reaper :", got)
+got = [g for g in got if g != ("/action", [R.ACT_REFRESH])]          # demande d'état au démarrage
 acts = [v[0] for a, v in got if a == "/action"]
 ok = [a for a, _ in got[:5]] == ["/play", "/stop", "/record", "/repeat", "/click"]
 ok = ok and ("/rewind", [1.0]) in got and ("/rewind", [0.0]) in got

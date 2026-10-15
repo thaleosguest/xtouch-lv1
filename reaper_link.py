@@ -37,6 +37,7 @@ ACT_PREV_TRACK = 40286         # Track: Go to previous track
 ACT_NEXT_TRACK = 40285         # Track: Go to next track
 ACT_SCRUB_BACK = 40104         # View: Move cursor left one pixel  (SCRUB : pas fin)
 ACT_SCRUB_FWD = 40105          # View: Move cursor right one pixel
+ACT_REFRESH = 41743            # Control surface: Refresh all surfaces (Reaper renvoie tout son état)
 
 
 def parse_target(text):
@@ -67,6 +68,9 @@ class ReaperLink:
             except OSError as e:
                 print("  Reaper : port d'écoute %d indisponible (%s) : pas de LED de transport." % (recv_port, e))
                 self.rx = None
+        # Reaper n'envoie son état QU'AUX CHANGEMENTS (essai de Joseph du 15/10 : « ecoute » ne reçoit rien) :
+        # on lui demande de tout renvoyer au démarrage, puis toutes les 5 s tant qu'il ne répond pas.
+        threading.Thread(target=self._refresh, daemon=True).start()
 
     def send(self, address, args=()):
         try:
@@ -83,6 +87,12 @@ class ReaperLink:
 
     def action(self, n):
         self.send("/action", [("i", int(n))])
+
+    def _refresh(self):
+        while True:
+            if not self.connected():
+                self.action(ACT_REFRESH)
+            time.sleep(5.0)
 
     def connected(self):
         return time.time() - self.seen < 5.0
