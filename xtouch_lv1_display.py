@@ -1730,6 +1730,9 @@ def build_frame(state, mixer_page, n_strips, overrides):
         return top, bot, cols, lvls, fads, layer_name, entries
 
 
+OVERLAY_FACTORY = None   # tests : fabrique d'un faux affichage d'écran (sinon Qt / tkinter hors --dry-run)
+
+
 def main():
     ap = argparse.ArgumentParser(description="LV1 sur X-Touch + Extender : affichage + faders (étape 1).")
     ap.add_argument("--mixer", type=int, choices=[1, 2], default=1, help="vue suivie : Mixer 1 ou 2 (1)")
@@ -1828,8 +1831,8 @@ def main():
         print("  Gain X32 via X/M32 Gain Recall (%s) : TRACK = encodeurs sur le gain, Rec tenu 1 s = 48 V." % a.x32)
     gain = GainControl(state, xlink, write=not a.lecture_seule, lv1=link)
     sends = SendControl(state, link, write=not a.lecture_seule, gain=gain)
-    overlay = None
-    if not a.dry_run and not a.sans_cadre and sys.platform == "win32":
+    overlay = OVERLAY_FACTORY(a.mixer) if OVERLAY_FACTORY else None     # tests : faux affichage d'écran
+    if overlay is None and not a.dry_run and not a.sans_cadre and sys.platform == "win32":
         import xtouch_overlay
         overlay = xtouch_overlay.make_overlay(a.mixer)    # Qt (style Gain Recall v3) si PySide6, sinon tkinter
     faders.key_of = sends.key_of
@@ -1962,7 +1965,8 @@ def main():
                 with state.lock:
                     fk = [k for k, (_s, func, on) in sorted(state.user_keys.items())
                           if on and "flip ab" in (func or "").lower()]
-                overlay.set_ab(None if on_b is None else ("B" if on_b else "A"), fk[0] if fk else None)
+                    ab_now = state.on_b         # lu ici : on_b n'est défini que plus bas dans la boucle (bug du 15/10)
+                overlay.set_ab(None if ab_now is None else ("B" if ab_now else "A"), fk[0] if fk else None)
             surface.set_main_led(NOTE_RUDE_SOLO, any_solo and int(now * 2) % 2 == 0)   # clignote si un solo
             surface.set_main_led(NOTE_SOLO_ALL, any_solo)                                # SOLO : allumé si un solo
             with state.lock:

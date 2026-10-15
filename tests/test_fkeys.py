@@ -98,6 +98,13 @@ def inject():
     put(3.9, 1, 0x90, 0x32, 127); put(3.95, 1, 0x90, 0x32, 0)    # FLIP -> User Key 16 « Flip AB Input channel »
 threading.Thread(target=inject, daemon=True).start()
 
+CALLS = []
+class FakeOverlay:                  # la boucle principale doit appeler l'affichage d'écran sans erreur
+    def set_info(self, *a): CALLS.append(("info",) + a)
+    def set_ab(self, *a): CALLS.append(("ab",) + a)
+    def stop(self): CALLS.append(("stop",))
+D.OVERLAY_FACTORY = lambda mixer: FakeOverlay()
+
 sys.argv = ["x", "--dry-run", "--no-journal", "--host", "127.0.0.1", "--port", str(srv.getsockname()[1]),
             "--x32", "aucun", "--seconds", "4.3"]
 with contextlib.redirect_stdout(io.StringIO()):
@@ -113,5 +120,7 @@ ok = ok and gains[0] == ("/Set/Aux/Send/Gain", [0, 0, 1]) and gains[-1][0] == "/
 ok = ok and any(a == "/Set/Aux/Send/Gain" for a, v in gains[1:-1]) and not any(a == "/Set/Track/Out/Gain" for a, v in gains[:-1])
 on = [v for t, d, v in LEDS if d == 0x36]
 ok = ok and 127 in on and on[-1] == 0
+ok = ok and ("stop",) in CALLS and any(c[0] == "info" and c[1] for c in CALLS) and any(c[0] == "ab" for c in CALLS)
+print("Affichage d'écran :", sorted({c[0] for c in CALLS}), [c for c in CALLS if c[0] == "info" and c[1]][:1])
 print("OK" if ok else "ÉCHEC")
 sys.exit(0 if ok else 1)
