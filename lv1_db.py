@@ -112,16 +112,39 @@ def input_ab(path=DB_PATH):
 CL_CHANNEL, CL_INPUTS, CL_OUTPUTS = 0, 10, 11
 
 
-def routing(path=DB_PATH):
-    """Pour le pilote SoundGrid de ce PC : {canal 0-based: {"rec": [n° de canal du pilote, 0-based, L puis R],
-    "play": [...]}}. rec = canaux du pilote qui reçoivent la source de l'entrée A du canal (à ENREGISTRER) ;
-    play = canaux de lecture du pilote branchés sur l'entrée B (virtual soundcheck). Rend aussi le nom du pilote."""
+def devices(path=DB_PATH):
+    """Appareils de l'inventaire : [(nom, genre « DAW » / « IOBox » / …, assign, local)]."""
     dst = copy_db(path)
     try:
         db = sqlite3.connect(dst)
         try:
-            local = db.execute("select d.assign, d.mac from device d join device_daw w on w.id = d.id "
-                               "where w.is_local = 1").fetchone()
+            rows = db.execute("select d.assign, d.mac, d.device_gender, g.name, "
+                              "(select is_local from device_daw w where w.id = d.id) from device d "
+                              "left join device_gender g on g.id = d.device_gender").fetchall()
+            names = {(m, gd): n for m, gd, n in db.execute("select mac, gender, name from device_name")}
+        finally:
+            db.close()
+    finally:
+        shutil.rmtree(os.path.dirname(dst), ignore_errors=True)
+    return [(names.get((mac, gender)) or "?", gname, assign, bool(loc)) for assign, mac, gender, gname, loc in rows]
+
+
+def routing(path=DB_PATH, driver=None):
+    """Pour le pilote SoundGrid de ce PC : {canal 0-based: {"rec": [n° de canal du pilote, 0-based, L puis R],
+    "play": [...]}}. rec = canaux du pilote qui reçoivent la source de l'entrée A du canal (à ENREGISTRER) ;
+    play = canaux de lecture du pilote branchés sur l'entrée B (virtual soundcheck). Rend aussi le nom du pilote.
+    driver : nom du pilote SoundGrid à utiliser (ex. « TracksLive-FL » : Reaper sur un AUTRE PC, remarque de Joseph
+    du 15/10) ; par défaut, celui du PC où tourne la LV1 (device_daw.is_local)."""
+    dst = copy_db(path)
+    try:
+        db = sqlite3.connect(dst)
+        try:
+            if driver:
+                local = db.execute("select d.assign, d.mac from device d join device_name n on n.mac = d.mac "
+                                   "and n.gender = d.device_gender where lower(n.name) = lower(?)", (driver,)).fetchone()
+            else:
+                local = db.execute("select d.assign, d.mac from device d join device_daw w on w.id = d.id "
+                                   "where w.is_local = 1").fetchone()
             if not local:
                 return None, {}
             assign, mac = local

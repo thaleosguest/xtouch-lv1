@@ -304,6 +304,11 @@ Le **routage** suit aussi (lu dans la base de la LV1 toutes les 5 s) : sur chaqu
 vers les canaux de lecture branchés sur l'**entrée B** (virtual soundcheck). Ça suppose que Reaper utilise ce pilote
 comme carte son. Les autres envois de la piste ne sont pas touchés ; le routage ne change que Reaper à l'arrêt.
 
+**Reaper sur un autre ordinateur** : `--pilote NOM` (le pilote SoundGrid de cet ordinateur, tel qu'il est nommé dans
+l'inventaire de la LV1, ex. `--pilote TracksLive-FL`), `--reaper IP-DU-PC:8000:9000` pour le transport, et
+`--dossier-reaper //PC-REAPER/lv1` : un dossier partagé où tu copies aussi les scripts `reaper/*.lua`, chargés dans
+Reaper depuis ce dossier.
+
 Charger aussi `reaper/lv1_sync_tracks.lua` (Load ReaScript…) et le lancer à chaque synchro : il propose **OUI** =
 toutes les entrées, **NON** = seulement celles renommées (pas « Channel N »), puis crée / met à jour une piste par
 entrée, dans l'ordre de la LV1, avec son nom et sa couleur. Il ne touche jamais à tes autres pistes et ne supprime

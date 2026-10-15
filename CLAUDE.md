@@ -208,6 +208,12 @@ Messages vérifiés :
   A, play = lecture du pilote sur l'entrée B ; relu toutes les 5 s (copie 10 ms), ajouté à lv1_tracks.txt ;
   `reaper/lv1_common.lua` (module commun) règle I_RECINPUT (1024+n = paire) et une sortie matérielle marquée
   P_EXT:lv1 (I_DSTCHAN, 1024 = mono), à l'ARRÊT seulement. Test `tests/test_routage.py`.
+  **Autre PC pour Reaper (remarque de Joseph du 15/10)** : `--pilote NOM` (nom du pilote dans l'inventaire LV1, ex.
+  TracksLive-FL ; `lv1_db.devices()` les liste) au lieu du pilote du PC de la LV1 ; `--dossier-reaper` = dossier
+  d'échange (partage réseau contenant aussi les .lua) ; transport : `--reaper IP:8000:9000`.
+  **Diagonale B** (Joseph) : patch B = LV1-PORT n pour la n-ième voie ; casse quand un canal passe mono <-> stéréo
+  (les lignes de la grille se décalent, vu le 15/10 : P170 X2) -> à refaire ; automatisation par clics dans la page
+  Patch PROPOSÉE, pas commencée (aucune commande réseau de patch).
 - **DISPLAY = bascule LV1 <-> Reaper au premier plan, SAVE selon la fenêtre active (codé le 15/10, test
   `tests/test_apps.py`, notes Mackie 0x34 / 0x50 non vérifiées)** — choix du bouton : DISPLAY (NAME/VALUE), FLIP étant
   pris par Flip A/B. `fenetres.py` (front_app, bring : AttachThreadInput + SetForegroundWindow) ; `AppControl` :

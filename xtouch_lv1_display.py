@@ -2104,6 +2104,12 @@ def main():
                     help="adresse de X/M32 Gain Recall pour le gain / 48 V X32 ('aucun' pour désactiver)")
     ap.add_argument("--reaper", default=None,
                     help="Reaper OSC hôte:port d'envoi:port des retours (transport de la X-Touch) ; 'aucun' pour désactiver")
+    ap.add_argument("--pilote", default=None,
+                    help="pilote SoundGrid de Reaper (nom dans l'inventaire LV1, ex. TracksLive-FL) ; "
+                         "défaut : celui du PC de la LV1")
+    ap.add_argument("--dossier-reaper", default=None,
+                    help="dossier d'échange avec les scripts Reaper (défaut : ./reaper ; Reaper sur un autre PC : "
+                         "dossier partagé contenant aussi les scripts .lua, ex. //PC-REAPER/lv1)")")
     ap.add_argument("--sans-cadre", action="store_true",
                     help="pas de bandeau ni de cadre rouge à l'écran du PC en mode sends")
     ap.add_argument("--jog-methode", choices=["message", "souris"], default="message",
@@ -2199,14 +2205,14 @@ def main():
     scene_bridge = None
     if reaper:                       # scènes LV1 <-> marqueurs Reaper (script reaper/lv1_scenes.lua dans Reaper)
         import reaper_scenes
-        scene_bridge = reaper_scenes.SceneBridge(journal=lambda m: JOURNAL.mark(m))
+        scene_bridge = reaper_scenes.SceneBridge(folder=a.dossier_reaper, journal=lambda m: JOURNAL.mark(m))
         if not a.dry_run:
             def watch_routing():          # patch vers le pilote SoundGrid : la LV1 ne l'annonce pas, on relit la base
                 last = None
                 while True:
                     try:
                         import lv1_db
-                        drv, rt = lv1_db.routing()
+                        drv, rt = lv1_db.routing(driver=a.pilote)
                         if rt != last:
                             last = rt
                             JOURNAL.mark("routage pilote %s : %s" % (drv, rt))
