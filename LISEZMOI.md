@@ -13,7 +13,8 @@ Les deux écrivent un rapport `.json` dans ce dossier : c'est ce fichier qu'il f
   transport en haut, barre de vumètres, règle en minutes:secondes, table de mixage et master cachés, scènes <->
   marqueurs, synchro des pistes, surface OSC du transport, pas de plugins (tout passe par la LV1), carte son reprise de
   ton REAPER, projets dans `Documents\REAPER LV1 Projects` (jamais effacés). Raccourci à icône rouge. **XTouch-LV1 le
-  lance tout seul** (sauf `--sans-reaper-lv1`). Il a besoin de XTouch-LV1 (le cocher coche XTouch-LV1). REAPER est un
+  lance tout seul** (sauf `--sans-reaper-lv1`), ainsi que X/M32 Gain Recall s'il le trouve (installé par le pack, dans
+  `%LOCALAPPDATA%\Programs`, à côté de XTouch-LV1 ou via « Lancer avec Windows » ; sauf `--sans-gain-recall`). Il a besoin de XTouch-LV1 (le cocher coche XTouch-LV1). REAPER est un
   logiciel Cockos : essai 60 jours, puis licence REAPER (Help > About REAPER pour entrer sa clé) ;
 - **X32 Gain Recall** v3.0.0 (release GitHub).
 

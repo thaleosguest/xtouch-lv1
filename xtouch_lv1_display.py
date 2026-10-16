@@ -2286,7 +2286,8 @@ def recall_payload(state, entries, sends, touched, xlink=None, gain=None):
     return {"cells": cells, "touched": touched, "send": info[0], "curve": curve}   # aux : « FX 1 »…
 
 
-SUITE_FILE = os.path.join(HERE, "suite.json")    # écrit par l'installeur Total Control for LV1 : {"reaper": chemin de reaper.exe}
+SUITE_FILE = os.path.join(HERE, "suite.json")    # écrit par l'installeur Total Control for LV1 :
+#                                                  {"reaper": chemin de reaper.exe, "gainrecall": chemin de Gain Recall}
 
 
 def start_reaper_lv1():
@@ -2314,6 +2315,65 @@ def start_reaper_lv1():
         return
     subprocess.Popen(["explorer.exe", exe], creationflags=no_window)
     print("  REAPER LV1 : lancé (%s)" % exe)
+
+
+GR_EXE = "XM32_Gain_Recall_LV1.exe"
+GR_RUN_KEY, GR_RUN_NAME = r"Software\Microsoft\Windows\CurrentVersion\Run", "XM32 Gain Recall LV1"
+
+
+def find_gain_recall(here=HERE, suite_file=None, env=None, run_value=None):
+    """Chemin de X/M32 Gain Recall, quelle que soit l'installation (demande de Joseph du 16/10 : lancement auto « sur
+    toutes les options ») : suite.json de l'installeur, dossier voisin (pack), %LOCALAPPDATA%\\Programs, à côté du
+    pont (zip), puis la clé « Lancer avec Windows » de Gain Recall. None si introuvable."""
+    env = os.environ if env is None else env
+    cands = []
+    try:
+        with open(suite_file or SUITE_FILE, encoding="utf-8") as f:
+            cands.append(json.load(f).get("gainrecall"))
+    except (OSError, ValueError):
+        pass
+    cands.append(os.path.join(os.path.dirname(here), "X32 Gain Recall", GR_EXE))
+    if env.get("LOCALAPPDATA"):
+        cands.append(os.path.join(env["LOCALAPPDATA"], "Programs", "X32 Gain Recall", GR_EXE))
+    cands.append(os.path.join(here, GR_EXE))
+    if run_value is None and sys.platform == "win32":
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, GR_RUN_KEY) as k:
+                run_value = winreg.QueryValueEx(k, GR_RUN_NAME)[0]
+        except OSError:
+            run_value = None
+    if run_value:
+        cands.append(run_value.split('"')[1] if run_value.startswith('"') else run_value.split(" --")[0])
+    for c in cands:
+        if c and os.path.isfile(c):
+            return c
+    return None
+
+
+def start_gain_recall():
+    """Lance X/M32 Gain Recall s'il est trouvé et pas déjà ouvert (n'importe quelle copie : une 2e instance ouvrirait
+    sa page dans le navigateur). Option --at-login de Gain Recall : pas de navigateur, float caché tant que la LV1
+    n'est pas là. Lancé détaché : il continue si on ferme le pont (il hérite de ses droits administrateur)."""
+    if sys.platform != "win32":
+        return
+    exe = find_gain_recall()
+    if not exe:
+        print("  X/M32 Gain Recall : introuvable, pas lancé (gain X32 sur TRACK indisponible)")
+        return
+    import subprocess
+    no_window = 0x08000000
+    try:
+        out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq %s" % GR_EXE, "/NH"], capture_output=True, text=True,
+                             timeout=15, creationflags=no_window).stdout
+    except (OSError, subprocess.SubprocessError):
+        out = ""
+    if GR_EXE.lower() in out.lower():
+        print("  X/M32 Gain Recall : déjà ouvert")
+        return
+    subprocess.Popen([exe, "--at-login"], cwd=os.path.dirname(exe), close_fds=True,
+                     creationflags=0x00000008 | 0x00000200)      # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+    print("  X/M32 Gain Recall : lancé (%s)" % exe)
 
 
 OVERLAY_FACTORY = None   # tests : fabrique d'un faux affichage d'écran (sinon Qt / tkinter hors --dry-run)
@@ -2353,6 +2413,8 @@ def main():
                     help="piste LV1 du fader master, groupe:canal (3:0 = LR, défaut ; 'aucun' pour désactiver)")
     ap.add_argument("--sans-reaper-lv1", action="store_true",
                     help="ne pas lancer REAPER LV1 (installé par Total Control for LV1) avec le pont")
+    ap.add_argument("--sans-gain-recall", action="store_true",
+                    help="ne pas lancer X/M32 Gain Recall avec le pont")
     ap.add_argument("--attendre", action="store_true",
                     help="attendre que les X-Touch soient branchées (défaut de l'exe compilé)")
     argv = sys.argv[1:]
@@ -2362,6 +2424,8 @@ def main():
     print("  XTouch-LV1 v%s" % VERSION)
     if not a.dry_run and not a.sans_reaper_lv1:
         threading.Thread(target=start_reaper_lv1, daemon=True).start()
+    if not a.dry_run and not a.sans_gain_recall and a.x32.lower() not in ("aucun", "none", "off"):
+        threading.Thread(target=start_gain_recall, daemon=True).start()
 
     global JOURNAL
     if not a.no_journal:

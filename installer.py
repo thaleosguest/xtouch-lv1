@@ -503,15 +503,33 @@ def reaper_portable_config(rdir, xt_dir, personal, log, icon_src=None):
     suite_link(xt_dir, os.path.join(rdir, "reaper.exe"))
 
 
-def suite_link(xt_dir, reaper_exe):
-    """suite.json du pont : XTouch-LV1 lance REAPER LV1 au démarrage (None = plus de REAPER LV1)."""
+def suite_link(xt_dir, reaper_exe, key="reaper"):
+    """suite.json du pont : programmes que XTouch-LV1 lance au démarrage, "reaper" (REAPER LV1) et "gainrecall"
+    (X/M32 Gain Recall, demande de Joseph du 16/10). None = retire la clé ; fichier effacé s'il ne reste rien."""
     path = os.path.join(xt_dir, "suite.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        data = {}
     if reaper_exe:
+        data[key] = reaper_exe
+    else:
+        data.pop(key, None)
+    if data:
         os.makedirs(xt_dir, exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
-            json.dump({"reaper": reaper_exe}, f, indent=1)
+            json.dump(data, f, indent=1)
     elif os.path.exists(path):
         os.remove(path)
+
+
+def gainrecall_link(root):
+    """suite.json : chemin de Gain Recall tant que XTouch-LV1 et Gain Recall sont installés tous les deux."""
+    have = installed(root)
+    if XT in have:
+        exe = os.path.join(app_dir(root, GR), APPS[GR]["exe"]) if GR in have else None
+        suite_link(app_dir(root, XT), exe, "gainrecall")
 
 
 # ---------------------------------------------------------------- étapes
@@ -550,6 +568,7 @@ def install(sources, root, apps, reaper, log, do_shortcuts=True, reaper_setup=No
             copy_gainrecall(src, target, log)
         versions[key] = source_version(key, src)
     save_installed(root, versions)
+    gainrecall_link(root)                                  # XTouch-LV1 lance aussi Gain Recall
     drop_old_suites(root)
     if getattr(sys, "frozen", False):                      # même exe = désinstalleur
         shutil.copy2(sys.executable, os.path.join(suite_dir(root), "Uninstall %s.exe" % SUITE))
@@ -589,6 +608,7 @@ def uninstall(root, apps, reaper, log, keep_settings, do_shortcuts=True):
                   "X32 Gain Recall retiré (scènes et réglages gardés dans %APPDATA%\\X32 Gain Recall)"))
         versions.pop(key, None)
     left = installed(root)
+    gainrecall_link(root)
     if do_shortcuts:
         shortcuts(root, log)
     if left:

@@ -110,7 +110,11 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   d'actions SANS tenir compte de la casse : « Transport: Show transport docked to top of main window ») : mixage et
   master cachés, transport en haut, règle minutes:secondes. Vérifié le 16/10 sur un REAPER portable (capture). Le pont
   lance REAPER LV1 (`suite.json` écrit par l'installeur, `start_reaper_lv1` par explorer.exe = droits normaux, pas si
-  déjà ouvert, `--sans-reaper-lv1`). Icône rouge `assets/reaper_lv1.ico` (on ne modifie pas reaper.exe : licence).
+  déjà ouvert, `--sans-reaper-lv1`). **Gain Recall lancé aussi (16/10, « sur toutes les options »)** : `find_gain_recall`
+  (suite.json "gainrecall" écrit par `installer.gainrecall_link`, dossier voisin, %LOCALAPPDATA%\Programs, à côté du pont,
+  clé Run de Gain Recall), `start_gain_recall` : rien si une copie tourne (tasklist ; une 2e instance ouvrirait le
+  navigateur), sinon `--at-login` détaché (hérite des droits admin du pont) ; `--sans-gain-recall`, ou `--x32 aucun`.
+  Test `tests/test_lancer_gain_recall.py`. Icône rouge `assets/reaper_lv1.ico` (on ne modifie pas reaper.exe : licence).
   Barre de vumètres : bouton SYNC TRACKS (dofile de lv1_sync_tracks.lua, à côté ; vérifié le 16/10 dans le REAPER
   portable : 9 pistes créées). Liste des plugins (reaper-vstplugins64.ini, vstshells, clap) reprise du REAPER habituel
   : REAPER rajoute de lui-même les dossiers VST3 standards à vstpath64 (vu le 16/10), la liste évite le scan.

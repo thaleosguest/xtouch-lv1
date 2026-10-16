@@ -3,7 +3,7 @@ REAPER portable est simulée : pas de téléchargement).
 - XTouch-LV1 seul : programme copié, rien d'autre ; installation sous l'ancien nom « LV1 Suite » reprise puis retirée ; REAPER LV1 sans XTouch-LV1 : refusé ;
 - XTouch-LV1 + REAPER LV1 + Gain Recall (2 fois, idempotent) : REAPER portable préréglé (scripts déclarés, __startup.lua
   avec lv1_firstrun, OSC, docker du haut, projet type, chemins de plugins vides, vumètres ancrés, carte son reprise du
-  REAPER habituel), suite.json du pont ; REAPER habituel : anciennes lignes lv1_* retirées, le reste gardé ;
+  REAPER habituel), suite.json du pont (REAPER LV1 + Gain Recall) ; REAPER habituel : anciennes lignes lv1_* retirées, le reste gardé ;
   réglages XTouch-LV1 jamais écrasés ;
 - désinstallation de XTouch-LV1 (réglages gardés) : REAPER LV1 retiré aussi ; Gain Recall reste ; puis Gain Recall."""
 import os, sys, tempfile
@@ -82,6 +82,10 @@ check("REAPER habituel nettoyé", "lv1_" not in pk and "lyrics" in pk and I.BEGI
 check("réglage gardé", get(os.path.join(xt_dir, "xtouch_ecran.json")) == "MINE")
 check("crlf", "\n" not in kb.replace("\r\n", ""))
 check("installed", I.installed(progs) == {I.XT: "0.1", I.RP: I.REAPER_VERSION, I.GR: "3.0.0"})
+import json
+sj = json.loads(get(os.path.join(xt_dir, "suite.json")))
+check("suite.json Gain Recall", sj.get("gainrecall") == os.path.join(progs, "X32 Gain Recall", "XM32_Gain_Recall_LV1.exe")
+      and sj.get("reaper") == os.path.join(rdir, "reaper.exe"))
 
 I.uninstall(progs, [I.XT], rp, out.append, keep_settings=True, do_shortcuts=False)
 check("désinst. XT -> RP retiré", not os.path.exists(rdir) and not os.path.exists(os.path.join(xt_dir, "suite.json")))
