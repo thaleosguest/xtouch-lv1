@@ -21,7 +21,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 NAME = "XTouch-LV1"
 DIST = os.path.join(HERE, "dist")
 WORK = os.path.join(HERE, "build")
-SHARED = ["LISEZMOI.md", "xtouch_couleurs.exemple.json"]
+SHARED = ["LISEZMOI.md", "MODE_EMPLOI.html", "xtouch_couleurs.exemple.json"]
 
 
 def version():

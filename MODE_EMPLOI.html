@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XTouch-LV1 Mode d'emploi</title>
+<style>
+:root {
+  --bg: #f4f5f7; --card: #ffffff; --text: #1b1d20; --dim: #5c636b; --line: #d9dde2;
+  --blue: #0f8fc4; --red: #d9362b; --green: #2f9e4f; --yellow: #b8860b; --key-bg: #2a2d31; --key-fg: #f2f4f6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111213; --card: #1b1d20; --text: #e9edf0; --dim: #9aa0a6; --line: #33373c;
+    --blue: #38c9ff; --red: #ff5a4a; --green: #8cff00; --yellow: #ffd23f; --key-bg: #3a3e43; --key-fg: #f2f4f6;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111213; --card: #1b1d20; --text: #e9edf0; --dim: #9aa0a6; --line: #33373c;
+  --blue: #38c9ff; --red: #ff5a4a; --green: #8cff00; --yellow: #ffd23f; --key-bg: #3a3e43; --key-fg: #f2f4f6;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 "Segoe UI", system-ui, sans-serif; }
+main { max-width: 980px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { font-size: 28px; margin: 0 0 4px; }
+h2 { font-size: 20px; margin: 36px 0 10px; padding-bottom: 6px; border-bottom: 2px solid var(--line); }
+h3 { font-size: 16px; margin: 20px 0 6px; }
+p.lead { color: var(--dim); margin: 0 0 16px; }
+nav { display: flex; flex-wrap: wrap; gap: 6px; margin: 16px 0 8px; }
+nav a { color: var(--text); background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px;
+        text-decoration: none; font-size: 13px; }
+nav a:hover { border-color: var(--blue); }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin: 10px 0; }
+table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+        overflow: hidden; margin: 8px 0; }
+th, td { text-align: left; vertical-align: top; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--dim); }
+tr:last-child td { border-bottom: 0; }
+td:first-child { white-space: nowrap; width: 1%; }
+.k { display: inline-block; background: var(--key-bg); color: var(--key-fg); border-radius: 4px; padding: 1px 7px;
+     font: 600 12px/1.6 "Segoe UI", sans-serif; letter-spacing: .03em; margin: 1px 0; }
+.tag { display: inline-block; font-size: 11px; border: 1px solid var(--yellow); color: var(--yellow); border-radius: 10px;
+       padding: 0 7px; margin-left: 4px; white-space: nowrap; }
+.warn { border-left: 4px solid var(--red); }
+.tip { border-left: 4px solid var(--blue); }
+.surface { display: grid; grid-template-columns: 1fr 1fr 70px; gap: 8px; margin: 10px 0; }
+.unit { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px; text-align: center; }
+.unit b { display: block; }
+.unit small { color: var(--dim); }
+ol, ul { padding-left: 22px; }
+li { margin: 3px 0; }
+code { font-family: Consolas, monospace; font-size: 13px; background: var(--card); border: 1px solid var(--line);
+       border-radius: 4px; padding: 0 4px; }
+@media (max-width: 640px) {
+  td:first-child { white-space: normal; }
+  .surface { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<main>
+<h1>XTouch-LV1 — mode d'emploi</h1>
+<p class="lead">Behringer X-Touch + X-Touch Extender pour Waves eMotion LV1, avec Reaper (enregistrement, virtual
+soundcheck). Version 0.1. Les fonctions marquées <span class="tag">à confirmer</span> sont programmées mais pas encore
+essayées sur la X-Touch.</p>
+
+<nav>
+  <a href="#demarrer">Démarrer</a><a href="#surface">La surface</a><a href="#tranche">Une tranche</a>
+  <a href="#master">Master</a><a href="#nav">Couches et sélection</a><a href="#encodeurs">Encodeurs</a>
+  <a href="#sends">Sends on fader</a><a href="#fkeys">F1–F8</a><a href="#flip">FLIP A/B</a>
+  <a href="#afficheur">Afficheur</a><a href="#transport">Transport Reaper</a><a href="#apps">DISPLAY / SAVE / ENTER</a>
+  <a href="#jog">Jog</a><a href="#ecran">À l'écran</a><a href="#reaper">Reaper</a><a href="#depannage">Dépannage</a>
+</nav>
+
+<h2 id="demarrer">1. Démarrer</h2>
+<ol>
+  <li><b>Une seule fois</b> : installer avec <code>XTouch_LV1_Install.exe</code> (REAPER fermé). Dans la LV1, retirer le
+      contrôleur <b>Mackie</b> de System Inventory (sinon la LV1 garde les ports MIDI des X-Touch).</li>
+  <li>Brancher la X-Touch et l'Extender en <b>USB</b>, en mode <b>Mackie Control</b>. L'Extender se pose <b>à gauche</b>
+      de la X-Touch.</li>
+  <li>Lancer le raccourci <b>XTouch-LV1</b> et accepter les droits administrateur. La fenêtre noire montre ce qui se passe ;
+      la fermer arrête tout. Les X-Touch peuvent être branchées après : il les attend. La LV1 est trouvée toute seule
+      sur le réseau, et retrouvée si elle redémarre.</li>
+  <li>REAPER (facultatif) : l'ouvrir ; la barre de vumètres et le lien des scènes démarrent tout seuls.</li>
+</ol>
+<div class="card tip">Gain et 48 V des préamplis <b>X32</b> : il faut que <b>X/M32 Gain Recall</b> tourne sur le même PC.
+Sans lui, tout le reste marche.</div>
+
+<h2 id="surface">2. La surface</h2>
+<div class="surface">
+  <div class="unit"><b>Extender</b><small>tranches 1 à 8 de la couche</small></div>
+  <div class="unit"><b>X-Touch</b><small>tranches 9 à 16 + section de droite</small></div>
+  <div class="unit"><b>Master</b><small>LR</small></div>
+</div>
+<p>Les 16 tranches suivent la <b>couche affichée sur la LV1</b> (usine, Custom, Spill…, Mixer 1). Écrans : couleur du
+canal, nom en haut, valeur en bas. Vumètres = ceux de la LV1 (post-fader).</p>
+
+<h2 id="tranche">3. Une tranche</h2>
+<table>
+  <tr><th>Commande</th><th>Action</th></tr>
+  <tr><td>Fader</td><td>Niveau du canal (motorisé, suit la LV1). Toucher le fader affiche les tranches à l'écran du PC
+      (<a href="#ecran">rappel de pistes</a>). Marche aussi poussé à l'ongle.</td></tr>
+  <tr><td><span class="k">MUTE</span></td><td>Mute du canal, LED synchronisée avec la LV1.</td></tr>
+  <tr><td><span class="k">SOLO</span></td><td>Solo du canal.</td></tr>
+  <tr><td><span class="k">SELECT</span></td><td>Sélectionne le canal ; la LV1 le sélectionne aussi (clic simulé). Une
+      sélection faite sur l'écran de la LV1 allume aussi la LED.</td></tr>
+  <tr><td><span class="k">REC</span> tenu 1 s</td><td><b>48 V du préampli X32</b> on/off (un appui bref ne fait rien :
+      protection des micros à ruban). LED REC = 48 V réellement allumé. Canal stéréo : agit sur le côté choisi (L ou R).</td></tr>
+  <tr><td>Encodeur</td><td>Selon le mode : <a href="#encodeurs">gain X32, pan, ou pan d'envoi</a>.</td></tr>
+</table>
+
+<h2 id="master">4. Fader master</h2>
+<table>
+  <tr><td>Normal</td><td>Montre le <b>LR</b> en <b>lecture seule</b> (monitoring) : le bouger ne change rien sur la LV1,
+      il revient à sa place quand on le lâche.</td></tr>
+  <tr><td>Sends on fader</td><td>Devient le <b>master de l'aux</b> choisi, et là il <b>agit</b>.</td></tr>
+</table>
+
+<h2 id="nav">5. Couches et sélection</h2>
+<table>
+  <tr><td><span class="k">◄ BANK</span> <span class="k">BANK ►</span></td><td>Couche précédente / suivante (les couches
+      vides sont sautées) ; la LV1 suit. Bloqué pendant qu'un fader est touché.</td></tr>
+  <tr><td><span class="k">◄ CHANNEL</span> <span class="k">CHANNEL ►</span></td><td>Sélectionne le canal précédent /
+      suivant ; change de couche au bout.</td></tr>
+  <tr><td><span class="k">SOLO</span> (section droite)</td><td>Allumé si un solo est actif ; appui = efface tous les solos
+      <span class="tag">à confirmer</span></td></tr>
+</table>
+
+<h2 id="encodeurs">6. Encodeurs : TRACK et PAN</h2>
+<table>
+  <tr><th>Mode</th><th>Encodeur tourné</th><th>Encodeur appuyé</th></tr>
+  <tr><td><span class="k">TRACK</span></td><td><b>Gain du préampli X32</b> (pas de 0,5 dB). Écran du bas : « L+12.0 ».</td>
+      <td>Canal stéréo : bascule <b>L ↔ R</b> (jamais les deux en même temps).</td></tr>
+  <tr><td><span class="k">PAN</span></td><td><b>Pan</b> LV1 (L45 … C … R45), plus rapide si on tourne vite.</td>
+      <td>Pan au centre.</td></tr>
+  <tr><td>aucun</td><td>Rien.</td><td>—</td></tr>
+</table>
+<p>TRACK et PAN s'excluent : appuyer à nouveau sur le bouton allumé revient au mode normal.</p>
+
+<h2 id="sends">7. Sends on fader <span class="tag">bouton SEND à confirmer</span></h2>
+<ol>
+  <li><span class="k">SEND</span> : les écrans montrent les aux (Fx 1-8 sur l'Extender, Mon 1-8 sur la X-Touch ;
+      <span class="k">BANK ►</span> = Mon 9-16). Les faders montrent les masters des aux. L'écran du PC montre la même liste.</li>
+  <li><span class="k">SELECT</span> sous l'aux voulu.</li>
+  <li>Les faders deviennent les <b>niveaux d'envoi</b> de chaque canal vers cet aux ; <span class="k">MUTE</span> = envoi
+      on/off (LED allumée = envoi coupé) ; encodeur = <b>pan de l'envoi</b> ; fader master = master de l'aux.
+      Un bandeau « SEND ON FADER » et un cadre rouge autour de la LV1 le rappellent.</li>
+  <li><span class="k">SEND</span> à nouveau : retour aux canaux.</li>
+</ol>
+<p>Afficheur : « SE » + « SEL » pendant le choix, puis le nom de l'aux et son niveau. Monter un envoi coupé l'allume
+(comportement de la LV1).</p>
+
+<h2 id="fkeys">8. F1 à F8 = User Keys 1 à 8 de la LV1</h2>
+<p>Chaque touche F appuie sur la User Key correspondante de la LV1. Si cette User Key est un <b>« Flip Sends »</b> vers un
+aux, la X-Touch passe <b>aussi</b> en sends on fader vers cet aux (LED de la touche F allumée) ; un 2e appui revient
+en arrière. <span class="tag">notes F à confirmer</span></p>
+
+<h2 id="flip">9. FLIP = Flip A/B</h2>
+<p><span class="k">FLIP</span> appuie sur la User Key « Flip AB » de la LV1 (la LV1 demande de confirmer à l'écran).
+LED FLIP allumée = entrées sur <b>B</b> (lecture Reaper = virtual soundcheck). Sur l'écran de la LV1, une pastille
+recouvre la touche FlipAB : <b style="color:var(--blue)">A</b> bleu / <b style="color:var(--red)">B</b> rouge.</p>
+<div class="card warn"><b>« FLIP ! » encadré de rouge</b> = la diagonale du patch B n'est plus alignée (souvent après un
+passage mono ↔ stéréo d'un canal). Réparer : page <b>Patch &gt; Input B</b> de la LV1, clic maintenu sur la première case
+et glisser jusqu'en bas à droite. L'alerte disparaît dans les 5 s. (<span class="k">ENTER</span> peut aussi la refaire
+tout seul, page Patch ouverte.)</div>
+
+<h2 id="afficheur">10. Afficheur 7 segments <span class="tag">à confirmer</span></h2>
+<table>
+  <tr><td>ASSIGNMENT</td><td>Canal sélectionné (n° ; lettre pour les autres types : D1, G3…).</td></tr>
+  <tr><td>Timecode</td><td>Gain X32 du canal sélectionné (côté L/R si stéréo) + niveau du fader LR.</td></tr>
+  <tr><td>En sends</td><td>« SE » + aux et niveau du master de l'aux.</td></tr>
+</table>
+
+<h2 id="transport">11. Transport → Reaper <span class="tag">notes à confirmer</span></h2>
+<table>
+  <tr><td><span class="k">◄◄</span> <span class="k">►►</span></td><td>Retour / avance rapide tant qu'on appuie.</td></tr>
+  <tr><td><span class="k">■</span> <span class="k">►</span> <span class="k">●</span></td><td>Stop, Play, Record (LED = état de Reaper).</td></tr>
+  <tr><td><span class="k">CYCLE</span></td><td>Boucle on/off.</td></tr>
+  <tr><td><span class="k">DROP</span> / <span class="k">REPLACE</span></td><td><b>In</b> / <b>Out</b> de la boucle, à la
+      position de lecture.</td></tr>
+  <tr><td><span class="k">CLICK</span></td><td>Métronome on/off.</td></tr>
+  <tr><td><span class="k">MARKER</span> seul</td><td>Pose un marqueur.</td></tr>
+  <tr><td>Flèches ◄ ►</td><td>Marqueur précédent / suivant (<span class="k">ZOOM</span> allumé : zoom horizontal).</td></tr>
+  <tr><td>Flèches ▲ ▼</td><td>Piste précédente / suivante (<span class="k">ZOOM</span> allumé : zoom vertical).</td></tr>
+  <tr><td><span class="k">ZOOM</span></td><td>Les flèches zooment (LED allumée).</td></tr>
+  <tr><td><span class="k">SCRUB</span></td><td>La molette fait un scrub fin.</td></tr>
+</table>
+
+<h2 id="apps">12. DISPLAY, SAVE, ENTER</h2>
+<table>
+  <tr><td><span class="k">DISPLAY</span></td><td>Met au premier plan <b>LV1 ↔ Reaper</b>. LED allumée = Reaper devant.</td></tr>
+  <tr><td><span class="k">SAVE</span></td><td>Reaper devant : <b>Save as</b> du projet. LV1 devant : <b>Store New Scene</b>
+      (User Key « Store »).</td></tr>
+  <tr><td><span class="k">ENTER</span></td><td>Refait la diagonale du patch B (page Patch &gt; Input B ouverte).
+      <span class="tag">à confirmer</span></td></tr>
+</table>
+
+<h2 id="jog">13. Molette (jog)</h2>
+<p>Page <b>Channel</b> de la LV1 avec un potard de plugin touché (réglage affiché en bas de l'écran) : la molette règle ce
+potard. Sinon : la molette déplace la lecture de Reaper (<span class="k">SCRUB</span> allumé = pas fin).</p>
+
+<h2 id="ecran">14. À l'écran du PC</h2>
+<table>
+  <tr><td>Rappel de pistes</td><td>Toucher un fader affiche, sur le bas de l'écran LV1, les 17 tranches alignées sur la
+      surface (style LV1 : pan, MUTE, valeur, vumètre, fader). Point bleu + contour blanc = fader sous le doigt ;
+      bouton vert SELECT = canal sélectionné. Disparaît 0,5 s après avoir lâché.</td></tr>
+  <tr><td><span class="k">▲ LARGE</span> / <span class="k">▼ SMALL</span></td><td>En bas à gauche, pendant le rappel
+      (tenir un fader et toucher l'écran) : grande ou petite hauteur.</td></tr>
+  <tr><td><span class="k">⚙ ADJUST</span></td><td>Régler la place des blocs et les options d'affichage (bouton SELECT ou cadre
+      jaune, fader transparent, point bleu, contour).</td></tr>
+  <tr><td>Pastille FLIP</td><td>A bleu / B rouge, seulement quand la LV1 est au premier plan.</td></tr>
+  <tr><td>Sends on fader</td><td>Bandeau « SEND ON FADER » puis cadre rouge autour de la LV1.</td></tr>
+</table>
+
+<h2 id="reaper">15. Reaper</h2>
+<h3>Barre de vumètres (comme Tracks Live 2)</h3>
+<ul>
+  <li>Une colonne par piste : n° du canal LV1, couleur, nom, vumètre (2 barres si stéréo), crête, voyant d'écrêtage
+      (toucher le haut de la colonne pour l'effacer). Case <b>R</b> en bas = armer la piste.</li>
+  <li><b>ARM ALL</b> : arme / désarme toutes les pistes. <b>MON</b> : monitoring de toutes les pistes OFF → ON → AUTO.</li>
+  <li><b>WAVE − / WAVE +</b> : hauteur des formes d'onde (affichage seulement). <b>FIT</b> : toutes les colonnes visibles.</li>
+  <li><b>MENU</b> : afficher / cacher la table de mixage et la piste master (vue « pistes seulement »), hauteur des pistes,
+      pistes LV1 seulement, ancrer la fenêtre. Pour la mettre en haut : clic droit sur l'onglet du docker &gt;
+      Attach docker to: Top.</li>
+  <li>Tout se fait au doigt (écran tactile) ; glisser sur les vumètres pour défiler.</li>
+</ul>
+<h3>Scènes LV1 ↔ marqueurs</h3>
+<ul>
+  <li><b>En enregistrement</b> : rappeler une scène sur la LV1 pose un marqueur <b style="color:var(--green)">vert</b> à son nom.</li>
+  <li><b>En lecture</b> : passer un marqueur vert rappelle la scène sur la LV1 (virtual soundcheck).</li>
+  <li><b>À l'arrêt</b> : rappeler une scène place le curseur sur son marqueur.</li>
+</ul>
+<h3>Pistes = canaux LV1</h3>
+<p>Action <b>lv1_sync_tracks</b> : crée les pistes avec les noms, couleurs et le routage de la LV1 (OUI = seulement les
+canaux enregistrés, NON = tous). Ensuite noms et couleurs suivent en direct ; les nouvelles pistes arrivent à l'arrêt.
+Nouvelles pistes : désarmées, monitoring OFF.</p>
+
+<h2 id="depannage">16. Dépannage</h2>
+<table>
+  <tr><td>La X-Touch ne répond plus (reçoit mais n'envoie rien)</td><td>Débrancher / rebrancher son USB.</td></tr>
+  <tr><td>« not enough memory » au lancement</td><td>Un autre programme (ou une 2e copie de XTouch-LV1) tient les ports :
+      le fermer.</td></tr>
+  <tr><td>Plus de couleurs ni de couches après un redémarrage de la LV1</td><td>Attendre 10 s : reconnexion automatique.</td></tr>
+  <tr><td>BANK / sélection ne suivent pas sur la LV1</td><td>XTouch-LV1 doit être lancé en administrateur (raccourci).</td></tr>
+  <tr><td>Rien ne bouge dans Reaper</td><td>REAPER : Preferences &gt; Control/OSC/web, surface OSC 8000 / 9000 présente.</td></tr>
+  <tr><td>Signaler un problème</td><td>Envoyer le dernier <code>xtouch_journal_*.txt</code> du dossier du programme.</td></tr>
+</table>
+</main>
+</body>
+</html>

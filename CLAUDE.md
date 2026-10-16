@@ -69,7 +69,9 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
 - `tests/` : tests contre une **fausse LV1** et une X-Touch simulée (voir « Tester »).
 - `lv1_capture.py` : décode une capture pcap/pcapng (pktmon) du trafic MyFOH <-> LV1 en messages OSC
   (réassemblage TCP, doublons pktmon). Test : `py tests/test_capture.py .`.
-- `LISEZMOI.md` : mode d'emploi utilisateur (français).
+- `LISEZMOI.md` : notes d'installation et de test (français). `MODE_EMPLOI.html` : mode d'emploi de la surface
+  (toutes les fonctions, « à confirmer » = non vérifié), livré par l'installeur (raccourci « XTouch-LV1 Manual ») —
+  à tenir à jour à chaque nouvelle fonction.
 
 ## API réseau LV1 (LV1 V17, ServiceVersion v.17.6.26.456)
 

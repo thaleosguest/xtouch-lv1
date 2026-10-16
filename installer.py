@@ -119,7 +119,8 @@ def shortcuts(target, log, remove=False):
         return
     os.makedirs(menu, exist_ok=True)
     links = [("$p", EXE), ("'%s'" % os.path.join(menu, NAME + ".lnk"), EXE),
-             ("'%s'" % os.path.join(menu, "Uninstall %s.lnk" % NAME), "Uninstall %s.exe" % NAME)]
+             ("'%s'" % os.path.join(menu, "Uninstall %s.lnk" % NAME), "Uninstall %s.exe" % NAME),
+             ("'%s'" % os.path.join(menu, "%s Manual.lnk" % NAME), "MODE_EMPLOI.html")]   # mode d'emploi
     for lnk, exe in links:
         if not os.path.exists(os.path.join(target, exe)):
             continue
@@ -215,7 +216,7 @@ def install(src, target, reaper, log, do_shortcuts=True):
         reaper_osc(reaper, log)
     else:
         log("REAPER not found (%s): skipped" % reaper)
-    log("Done. Start %s from the Desktop shortcut." % NAME)
+    log("Done. Start %s from the Desktop shortcut (manual: Start menu > %s Manual)." % (NAME, NAME))
 
 
 def uninstall(target, reaper, log, keep_settings, do_shortcuts=True):

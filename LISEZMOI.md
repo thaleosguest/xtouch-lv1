@@ -10,7 +10,8 @@ Les deux écrivent un rapport `.json` dans ce dossier : c'est ce fichier qu'il f
 L'installeur :
 - copie le programme dans `%LOCALAPPDATA%\Programs\XTouch-LV1` (une réinstallation garde la calibration des faders, le
   réglage de l'écran et les journaux) ;
-- crée les raccourcis **XTouch-LV1** (Bureau + menu Démarrer) et **Uninstall XTouch-LV1** (menu Démarrer) ;
+- crée les raccourcis **XTouch-LV1** (Bureau + menu Démarrer), **XTouch-LV1 Manual** (mode d'emploi, `MODE_EMPLOI.html`)
+  et **Uninstall XTouch-LV1** (menu Démarrer) ;
 - REAPER : déclare les 3 scripts (scènes, synchro des pistes, barre de vumètres ; les anciens chemins sont remplacés),
   lance les scènes et la barre de vumètres **au démarrage de REAPER**, ajoute la surface OSC 8000/9000 si elle manque ;
 - reprend les réglages (`xtouch_courbe_fader.json`, `xtouch_ecran.json`) posés à côté de lui s'il n'en a pas encore.
