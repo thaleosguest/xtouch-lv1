@@ -20,6 +20,7 @@ BG = "#2B2E33"      # anthracite (fond du float)
 X32 = "#454A52"     # bloc X/M32
 LV1 = "#38C9FF"     # bloc de droite : bleu LV1 (Gain Recall : ambre #F2B63B)
 LITE = "#E9EDF0"    # lien + potard
+REC = "#FF5A4A"     # REAPER for LV1 (enregistrement)
 SMALL = 24          # en dessous : version simplifiée
 
 # (type, couleur, paramètres) dans l'ordre de peinture.
@@ -144,7 +145,13 @@ def main():
         f.write(svg() + "\n")
     with open(os.path.join(ROOT, "assets", "icon.ico"), "wb") as f:
         f.write(ico([16, 20, 24, 32, 48, 64, 128, 256]))
-    print("assets/logo.svg, assets/icon.ico écrits")
+    # REAPER for LV1 (raccourci du REAPER portable, demande de Joseph : le distinguer d'un REAPER normal) : rouge REC
+    global FULL, SIMPLE
+    FULL = [(k, REC if c == LV1 else c, p) for k, c, p in FULL]
+    SIMPLE = [(k, REC if c == LV1 else c, p) for k, c, p in SIMPLE]
+    with open(os.path.join(ROOT, "assets", "reaper_lv1.ico"), "wb") as f:
+        f.write(ico([16, 20, 24, 32, 48, 64, 128, 256]))
+    print("assets/logo.svg, assets/icon.ico, assets/reaper_lv1.ico écrits")
 
 
 if __name__ == "__main__":

@@ -8,8 +8,13 @@ Les deux écrivent un rapport `.json` dans ce dossier : c'est ce fichier qu'il f
 
 **`LV1_Suite_Install.exe`** installe, au choix (cases à cocher) :
 - **XTouch-LV1** v0.1 : le pont X-Touch + Extender <-> LV1 ;
-- **REAPER LV1** : l'intégration REAPER (scènes <-> marqueurs, synchro des pistes, barre de vumètres, surface OSC du
-  transport) ; elle a besoin de XTouch-LV1 (la cocher coche XTouch-LV1) ;
+- **REAPER LV1** : un REAPER 7.82 **portable à part** (ton REAPER habituel n'est pas touché), téléchargé sur reaper.fm
+  pendant l'installation (installeur officiel Cockos vérifié : empreinte + signature), réglé façon Tracks Live :
+  transport en haut, barre de vumètres, règle en minutes:secondes, table de mixage et master cachés, scènes <->
+  marqueurs, synchro des pistes, surface OSC du transport, pas de plugins (tout passe par la LV1), carte son reprise de
+  ton REAPER, projets dans `Documents\REAPER LV1 Projects` (jamais effacés). Raccourci à icône rouge. **XTouch-LV1 le
+  lance tout seul** (sauf `--sans-reaper-lv1`). Il a besoin de XTouch-LV1 (le cocher coche XTouch-LV1). REAPER est un
+  logiciel Cockos : essai 60 jours, puis licence REAPER (Help > About REAPER pour entrer sa clé) ;
 - **X32 Gain Recall** v3.0.0 (release GitHub).
 
 Fermer REAPER (et les programmes à mettre à jour), double-clic, cocher, choisir le dossier si besoin (**Browse…** ;

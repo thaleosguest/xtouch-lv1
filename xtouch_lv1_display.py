@@ -2127,6 +2127,36 @@ def recall_payload(state, entries, sends, touched, xlink=None, gain=None):
     return {"cells": cells, "touched": touched, "send": info[0], "curve": curve}   # aux : « FX 1 »…
 
 
+SUITE_FILE = os.path.join(HERE, "suite.json")    # écrit par l'installeur LV1 Suite : {"reaper": chemin de reaper.exe}
+
+
+def start_reaper_lv1():
+    """Lance REAPER LV1 (REAPER portable de LV1 Suite) s'il est installé et pas déjà ouvert (demande de Joseph du 16/10 :
+    XTouch-LV1 lance aussi REAPER LV1). Le pont tourne en administrateur : REAPER est lancé par explorer.exe, donc
+    avec les droits normaux de l'utilisateur (glisser-déposer depuis l'Explorateur possible)."""
+    try:
+        with open(SUITE_FILE, encoding="utf-8") as f:
+            exe = json.load(f).get("reaper")
+    except (OSError, ValueError):
+        return
+    if not exe or not os.path.exists(exe) or sys.platform != "win32":
+        return
+    import subprocess
+    no_window = 0x08000000
+    ps = ("(Get-Process reaper -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq '%s' }) -ne $null"
+          % exe.replace("'", "''"))
+    try:
+        out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True,
+                             timeout=15, creationflags=no_window).stdout
+    except (OSError, subprocess.SubprocessError):
+        out = ""
+    if "True" in out:
+        print("  REAPER LV1 : déjà ouvert")
+        return
+    subprocess.Popen(["explorer.exe", exe], creationflags=no_window)
+    print("  REAPER LV1 : lancé (%s)" % exe)
+
+
 OVERLAY_FACTORY = None   # tests : fabrique d'un faux affichage d'écran (sinon Qt / tkinter hors --dry-run)
 
 
@@ -2162,6 +2192,8 @@ def main():
                     help="la LV1 suit BANK et la sélection par clics simulés (pont lancé en administrateur)")
     ap.add_argument("--master", default="3:0",
                     help="piste LV1 du fader master, groupe:canal (3:0 = LR, défaut ; 'aucun' pour désactiver)")
+    ap.add_argument("--sans-reaper-lv1", action="store_true",
+                    help="ne pas lancer REAPER LV1 (installé par LV1 Suite) avec le pont")
     ap.add_argument("--attendre", action="store_true",
                     help="attendre que les X-Touch soient branchées (défaut de l'exe compilé)")
     argv = sys.argv[1:]
@@ -2169,6 +2201,8 @@ def main():
         argv = ["--clic-lv1", "--attendre"]
     a = ap.parse_args(argv)
     print("  XTouch-LV1 v%s" % VERSION)
+    if not a.dry_run and not a.sans_reaper_lv1:
+        threading.Thread(target=start_reaper_lv1, daemon=True).start()
 
     global JOURNAL
     if not a.no_journal:

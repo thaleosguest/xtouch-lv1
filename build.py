@@ -215,7 +215,9 @@ def main():
 
     pyinstaller(["--onefile", "--windowed", "--icon", icon, "--name", INSTALLER, "--distpath", DIST,
                  "--add-data", "%s%s." % (stage_root, os.pathsep),
-                 "--add-data", "%s%sassets" % (icon, os.pathsep), os.path.join(HERE, "installer.py")])
+                 "--add-data", "%s%sassets" % (icon, os.pathsep),
+                 "--add-data", "%s%sassets" % (os.path.join(HERE, "assets", "reaper_lv1.ico"), os.pathsep),
+                 os.path.join(HERE, "installer.py")])
     old = os.path.join(DIST, "XTouch_LV1_Install.exe")    # ancien nom (installeur XTouch-LV1 seul)
     if os.path.exists(old):
         os.remove(old)

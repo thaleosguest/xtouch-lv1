@@ -38,13 +38,23 @@ XT, RP, GR = "xtouch", "reaper", "gainrecall"
 APPS = {
     XT: {"name": "XTouch-LV1", "exe": "XTouch-LV1.exe", "manual": "MODE_EMPLOI.html",
          "about": ("X-Touch + Extender for Waves eMotion LV1", "X-Touch + Extender pour Waves eMotion LV1")},
-    RP: {"name": "REAPER LV1", "exe": None, "manual": None,
-         "about": ("REAPER integration: LV1 scenes <-> markers, track sync, meter bridge (needs XTouch-LV1)",
-                   "Intégration REAPER : scènes LV1 <-> marqueurs, synchro des pistes, vumètres (avec XTouch-LV1)")},
+    RP: {"name": "REAPER LV1", "exe": "reaper.exe", "manual": None, "icon": "reaper_lv1.ico",
+         "about": ("REAPER 7.82 portable, downloaded from reaper.fm, set up like Tracks Live: LV1 scenes <-> markers,\n"
+                   "track sync, meter bridge (needs XTouch-LV1; REAPER: 60-day evaluation, then a Cockos license)",
+                   "REAPER 7.82 portable, téléchargé sur reaper.fm, réglé façon Tracks Live : scènes LV1 <-> marqueurs,\n"
+                   "synchro des pistes, vumètres (avec XTouch-LV1 ; REAPER : essai 60 jours, puis licence Cockos)")},
     GR: {"name": "X32 Gain Recall", "exe": "XM32_Gain_Recall_LV1.exe", "manual": "MODE_EMPLOI.html",
          "about": ("X32 / M32 preamp gain recall for eMotion LV1", "Rappel des gains des préamplis X32 / M32 pour eMotion LV1")},
 }
 PERSONAL = ["xtouch_courbe_fader.json", "xtouch_ecran.json", "xtouch_couleurs.json"]
+# REAPER portable (demande de Joseph : « un vrai pack ») : TÉLÉCHARGÉ sur le site de Cockos au moment de l'installation
+# (la licence de REAPER ne permet de le redistribuer qu'avec un accord de distribution), installé en portable
+# (/S /PORTABLE /D=), empreinte SHA-256 relevée le 16/10/2026 + signature Authenticode de Cockos vérifiées.
+REAPER_VERSION = "7.82"
+REAPER_URL = "https://www.reaper.fm/files/7.x/reaper782_x64-install.exe"
+REAPER_SHA256 = "ae86dd8396673318a85275175dc8c1c9b0b8e090bf305f9cec920358e9d1e18f"
+REAPER_EULA = "https://www.reaper.fm/purchase.php"
+TEMPLATE = "LV1 Multitrack.RPP"
 SCRIPTS = ["lv1_scenes.lua", "lv1_sync_tracks.lua", "lv1_meter_bridge.lua"]        # actions déclarées
 STARTUP = ["lv1_scenes.lua", "lv1_meter_bridge.lua"]                              # lancées avec Reaper
 BEGIN, END = "-- XTouch-LV1 begin (installer, do not edit)", "-- XTouch-LV1 end"
@@ -77,7 +87,7 @@ def default_reaper():
 
 
 def app_dir(root, key):
-    return os.path.join(root, APPS[XT if key == RP else key]["name"])
+    return os.path.join(root, APPS[key]["name"])
 
 
 def suite_dir(root):
@@ -94,13 +104,15 @@ def bundled_sources():
         if os.path.exists(os.path.join(d, APPS[key]["exe"])):
             out[key] = d
     if XT in out and os.path.isdir(os.path.join(out[XT], "reaper")):
-        out[RP] = out[XT]                                  # scripts REAPER livrés avec XTouch-LV1
+        out[RP] = out[XT]                                  # REAPER : téléchargé ; scripts livrés avec XTouch-LV1
     return dict((k, out[k]) for k in APPS if k in out)    # dans l'ordre d'APPS (XTouch-LV1 avant REAPER LV1)
 
 
 def source_version(key, src):
-    if key in (XT, RP):
+    if key == XT:
         return VERSION
+    if key == RP:
+        return REAPER_VERSION
     try:
         with open(os.path.join(src, "version.txt"), encoding="utf-8") as f:
             return f.read().strip()
@@ -115,10 +127,7 @@ def installed(root):
             versions = json.load(f)
     except (OSError, ValueError):
         versions = {}
-    have = {k: versions.get(k, "?") for k in (XT, GR) if os.path.exists(os.path.join(app_dir(root, k), APPS[k]["exe"]))}
-    if XT in have and RP in versions:                      # REAPER LV1 : noté à l'installation
-        have[RP] = versions[RP]
-    return dict((k, have[k]) for k in APPS if k in have)
+    return {k: versions.get(k, "?") for k in APPS if os.path.exists(os.path.join(app_dir(root, k), APPS[k]["exe"]))}
 
 
 def save_installed(root, versions):
@@ -214,7 +223,7 @@ def gainrecall_autostart(target, log):
 
 def shortcuts(root, log):
     """Raccourcis selon ce qui est installé : dossier « LV1 Suite » du menu Démarrer refait, un raccourci Bureau par appli
-    installée (retiré pour les autres)."""
+    installée (retiré pour les autres). REAPER LV1 : icône rouge à lui (le distinguer d'un REAPER normal)."""
     if sys.platform != "win32":
         return
     progs = os.path.join(os.environ["APPDATA"], "Microsoft", "Windows", "Start Menu", "Programs")
@@ -224,26 +233,30 @@ def shortcuts(root, log):
     have = installed(root)
     uninst = os.path.join(suite_dir(root), "Uninstall %s.exe" % SUITE)
     ps = "$d=[Environment]::GetFolderPath('Desktop');$w=New-Object -ComObject WScript.Shell;"
-    links = []
+    links = []                                             # (raccourci, cible, dossier, icône)
     for key, app in APPS.items():
-        if not app["exe"]:                                 # REAPER LV1 : pas de programme à lancer
-            continue
         desk = "(Join-Path $d '%s.lnk')" % app["name"]
         if key not in have:
             ps += "Remove-Item -LiteralPath %s -ErrorAction SilentlyContinue;" % desk
             continue
         d = app_dir(root, key)
-        links += [(desk, os.path.join(d, app["exe"]), d),
-                  ("'%s'" % os.path.join(menu, app["name"] + ".lnk"), os.path.join(d, app["exe"]), d),
-                  ("'%s'" % os.path.join(menu, app["name"] + " Manual.lnk"), os.path.join(d, app["manual"]), d)]
+        icon = os.path.join(d, app["icon"]) if app.get("icon") else None
+        links += [(desk, os.path.join(d, app["exe"]), d, icon),
+                  ("'%s'" % os.path.join(menu, app["name"] + ".lnk"), os.path.join(d, app["exe"]), d, icon)]
+        if app["manual"]:
+            links.append(("'%s'" % os.path.join(menu, app["name"] + " Manual.lnk"), os.path.join(d, app["manual"]), d,
+                          None))
     if have and os.path.exists(uninst):
-        links.append(("'%s'" % os.path.join(menu, "Uninstall %s.lnk" % SUITE), uninst, suite_dir(root)))
+        links.append(("'%s'" % os.path.join(menu, "Uninstall %s.lnk" % SUITE), uninst, suite_dir(root), None))
     if have:
         os.makedirs(menu, exist_ok=True)
-    for lnk, path, wd in links:
+    q = lambda s: s.replace("'", "''")
+    for lnk, path, wd, icon in links:
         if os.path.exists(path):
-            ps += ("$s=$w.CreateShortcut(%s);$s.TargetPath='%s';$s.WorkingDirectory='%s';$s.Save();"
-                   % (lnk, path.replace("'", "''"), wd.replace("'", "''")))
+            ps += "$s=$w.CreateShortcut(%s);$s.TargetPath='%s';$s.WorkingDirectory='%s';" % (lnk, q(path), q(wd))
+            if icon and os.path.exists(icon):
+                ps += "$s.IconLocation='%s,0';" % q(icon)
+            ps += "$s.Save();"
     subprocess.run(["powershell", "-NoProfile", "-Command", ps], creationflags=NO_WINDOW)
     log(_("Shortcuts updated (Desktop, Start menu > %s)", "Raccourcis mis à jour (Bureau, menu Démarrer > %s)") % SUITE)
 
@@ -255,6 +268,7 @@ def command_id(path):
 
 
 def reaper_actions(reaper, target, log, remove=False):
+    """Déclare les scripts (dans <XTouch-LV1>\\reaper : le pont y échange ses fichiers) dans reaper-kb.ini de `reaper`."""
     kb = os.path.join(reaper, "reaper-kb.ini")
     lines = [l for l in read_lines(kb) if not re.search(r'"Custom: lv1_[a-z_]+\.lua"', l)]
     ids = {}
@@ -263,13 +277,14 @@ def reaper_actions(reaper, target, log, remove=False):
             path = os.path.join(target, "reaper", s)
             ids[s] = command_id(path)
             lines.append('SCR 4 0 %s "Custom: %s" %s' % (ids[s], s, ('"%s"' % path) if " " in path else path))
-    write_lines(kb, lines)
+    if lines or os.path.exists(kb):
+        write_lines(kb, lines)
     log(_("REAPER actions removed", "Actions REAPER retirées") if remove else
         _("REAPER actions registered: ", "Actions REAPER déclarées : ") + ", ".join(SCRIPTS))
     return ids
 
 
-def reaper_startup(reaper, ids, log, remove=False):
+def reaper_startup(reaper, ids, log, remove=False, firstrun=None):
     path = os.path.join(reaper, "Scripts", "__startup.lua")
     lines, skip = [], False
     for l in read_lines(path):                             # on retire notre ancien bloc, on garde le reste
@@ -281,6 +296,8 @@ def reaper_startup(reaper, ids, log, remove=False):
             lines.append(l)
     if not remove:
         lines += [BEGIN]
+        if firstrun:                                       # présentation façon Tracks Live (une seule fois)
+            lines.append("dofile([[%s]])" % firstrun)
         for s in STARTUP:
             lines.append('do local c = reaper.NamedCommandLookup("_%s") if c ~= 0 then reaper.Main_OnCommand(c, 0) end'
                          ' end  -- %s' % (ids[s], s))
@@ -295,39 +312,194 @@ def reaper_startup(reaper, ids, log, remove=False):
           "Démarrage de REAPER : lien des scènes + vumètres lancés avec REAPER"))
 
 
-def reaper_osc(reaper, log):
-    ini = os.path.join(reaper, "REAPER.ini")
-    lines = read_lines(ini)
-    if not lines:
-        log(_("REAPER.ini not found: OSC not configured", "REAPER.ini introuvable : OSC non configuré"))
+def ini_set(lines, section, key, value):
+    """Fixe key=value dans [section] (nom de section sans tenir compte de la casse ; créée au besoin)."""
+    head = None
+    for i, l in enumerate(lines):
+        if l.strip().lower() == "[%s]" % section.lower():
+            head = i
+            break
+    if head is None:
+        lines += ["[%s]" % section, "%s=%s" % (key, value)]
         return
-    surf = [l for l in lines if re.match(r"csurf_\d+=", l)]
+    end = next((j for j in range(head + 1, len(lines)) if lines[j].startswith("[")), len(lines))
+    for j in range(head + 1, end):
+        if lines[j].split("=", 1)[0] == key:
+            lines[j] = "%s=%s" % (key, value)
+            return
+    while end > head + 1 and not lines[end - 1].strip():      # à la fin de la section (avant les lignes vides)
+        end -= 1
+    lines.insert(end, "%s=%s" % (key, value))
+
+
+def ini_section(lines, section):
+    """Lignes clé=valeur de [section] ([] si absente)."""
+    out, inside = [], False
+    for l in lines:
+        if l.startswith("["):
+            inside = l.strip().lower() == "[%s]" % section.lower()
+        elif inside and "=" in l:
+            out.append(l)
+    return out
+
+
+def reaper_osc(lines, log):
+    """Surface OSC du transport X-Touch (réception 8000, envoi 127.0.0.1:9000) si aucune n'écoute sur 8000."""
+    surf = [l for l in ini_section(lines, "reaper") if re.match(r"csurf_\d+=", l)]
     if any(l.split("=", 1)[1].startswith("OSC ") and " 8000 " in l for l in surf):
         log(_("REAPER OSC (port 8000): already configured", "OSC de REAPER (port 8000) : déjà configuré"))
         return
-    n = 0
-    for i, l in enumerate(lines):
-        if l.startswith("csurf_cnt="):
-            n = int(l.split("=", 1)[1] or 0)
-            lines[i] = "csurf_cnt=%d" % (n + 1)
-            break
-    else:
-        sec = lines.index("[reaper]") if "[reaper]" in lines else -1
-        if sec < 0:
-            lines[:0] = ["[reaper]"]
-            sec = 0
-        lines.insert(sec + 1, "csurf_cnt=1")
-    at = max(i for i, l in enumerate(lines) if l.startswith("csurf_cnt="))
-    lines.insert(at + 1, 'csurf_%d=OSC "XTouch-LV1" 3 8000 "127.0.0.1" 9000 1024 10 ""' % n)
-    write_lines(ini, lines)
+    n = len(surf)
+    ini_set(lines, "reaper", "csurf_%d" % n, 'OSC "XTouch-LV1" 3 8000 "127.0.0.1" 9000 1024 10 ""')
+    ini_set(lines, "reaper", "csurf_cnt", str(n + 1))
     log(_("REAPER OSC surface added (receive 8000, send 127.0.0.1:9000)",
           "Surface OSC ajoutée dans REAPER (réception 8000, envoi 127.0.0.1:9000)"))
 
 
+def documents_dir():
+    try:
+        import ctypes
+        buf = ctypes.create_unicode_buffer(260)
+        if ctypes.windll.shell32.SHGetFolderPathW(None, 5, None, 0, buf) == 0:     # CSIDL_PERSONAL
+            return buf.value
+    except (AttributeError, OSError):
+        pass
+    return os.path.join(os.path.expanduser("~"), "Documents")
+
+
+def download_reaper(dest, log, setup=None):
+    """Installeur officiel de REAPER : téléchargé sur reaper.fm (ou `setup` local), empreinte et signature vérifiées."""
+    if setup:
+        setup = os.path.abspath(setup)
+    else:
+        import urllib.request
+        setup = os.path.join(dest, "reaper_setup.exe")
+        log(_("Downloading REAPER %s from reaper.fm...", "Téléchargement de REAPER %s sur reaper.fm...") % REAPER_VERSION)
+        req = urllib.request.Request(REAPER_URL, headers={"User-Agent": "LV1-Suite-Installer"})
+        with urllib.request.urlopen(req, timeout=60) as r, open(setup, "wb") as f:
+            total, got, step = int(r.headers.get("Content-Length") or 0), 0, 25
+            while True:
+                block = r.read(1 << 16)
+                if not block:
+                    break
+                f.write(block)
+                got += len(block)
+                if total and got * 100 // total >= step:
+                    log("  %d %%" % step)
+                    step += 25
+    h = hashlib.sha256()
+    with open(setup, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    if h.hexdigest() != REAPER_SHA256:
+        raise RuntimeError(_("REAPER installer: unexpected file (checksum), installation stopped",
+                             "Installeur de REAPER : fichier inattendu (empreinte), installation arrêtée"))
+    if sys.platform == "win32":
+        ps = ("$s=Get-AuthenticodeSignature -LiteralPath '%s';"
+              "if($s.Status -eq 'Valid' -and $s.SignerCertificate.Subject -like '*Cockos Incorporated*'){'ok'}"
+              % setup.replace("'", "''"))
+        out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True,
+                             creationflags=NO_WINDOW).stdout
+        if "ok" not in out:
+            raise RuntimeError(_("REAPER installer: invalid Cockos signature, installation stopped",
+                                 "Installeur de REAPER : signature Cockos invalide, installation arrêtée"))
+    log(_("REAPER installer verified (checksum + Cockos signature)",
+          "Installeur de REAPER vérifié (empreinte + signature Cockos)"))
+    return setup
+
+
+def install_reaper_binaries(target, log, setup=None):
+    """REAPER portable dans `target` (/S /PORTABLE /D=). Sa configuration (reaper.ini…) est gardée d'une réinstallation
+    à l'autre : sauvegardée avant, remise après (l'installeur de REAPER peut réécrire reaper.ini)."""
+    target = os.path.normpath(os.path.abspath(target))      # /D= de NSIS : chemin complet, barres Windows
+    os.makedirs(target, exist_ok=True)
+    keep = {}
+    for f in ("reaper.ini", "reaper-kb.ini", "reaper-extstate.ini"):
+        p = os.path.join(target, f)
+        if os.path.exists(p):
+            with open(p, "rb") as fh:
+                keep[f] = fh.read()
+    import tempfile
+    tmp = tempfile.mkdtemp(prefix="lv1suite_")
+    try:
+        exe = download_reaper(tmp, log, setup)
+        log(_("Installing REAPER %s (portable) in %s...", "Installation de REAPER %s (portable) dans %s...")
+            % (REAPER_VERSION, target))
+        # NSIS : /D= en DERNIER et SANS guillemets, même avec des espaces (liste Python = guillemets ajoutés -> ignoré)
+        r = subprocess.run('"%s" /S /PORTABLE /D=%s' % (exe, target), creationflags=NO_WINDOW)
+        if r.returncode or not os.path.exists(os.path.join(target, "reaper.exe")):
+            raise RuntimeError(_("REAPER installation failed (code %d)", "Échec de l'installation de REAPER (code %d)")
+                               % r.returncode)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    for f, data in keep.items():
+        if len(data) > 64:                                 # pas le petit reaper.ini « portable » de départ
+            with open(os.path.join(target, f), "wb") as fh:
+                fh.write(data)
+
+
+def reaper_portable_config(rdir, xt_dir, personal, log, icon_src=None):
+    """Préréglage du REAPER portable, façon Tracks Live 2 (le reste est fait au 1er démarrage par lv1_firstrun.lua) :
+    scripts LV1 déclarés et lancés au démarrage, barre de vumètres ancrée dans le docker du HAUT, surface OSC, projets
+    dans Documents\\REAPER LV1 Projects (jamais effacés), carte son reprise du REAPER habituel (`personal`) s'il existe."""
+    ids = reaper_actions(rdir, xt_dir, log)
+    reaper_startup(rdir, ids, log, firstrun=os.path.join(xt_dir, "reaper", "lv1_firstrun.lua"))
+    ini = os.path.join(rdir, "reaper.ini")
+    lines = read_lines(ini) or ["[REAPER]"]
+    reaper_osc(lines, log)
+    projects = os.path.join(documents_dir(), "REAPER LV1 Projects")
+    os.makedirs(projects, exist_ok=True)
+    noplug = os.path.join(rdir, "NoPlugins")
+    os.makedirs(noplug, exist_ok=True)
+    tmpl = os.path.join(rdir, "ProjectTemplates", TEMPLATE)
+    if not os.path.exists(tmpl):                           # projet type (Joseph pourra le retoucher : jamais écrasé)
+        os.makedirs(os.path.dirname(tmpl), exist_ok=True)
+        write_lines(tmpl, ['<REAPER_PROJECT 0.1 "%s/win64" 0' % REAPER_VERSION, '  RECORD_PATH "Audio" ""', ">"])
+    for k, v in (("mixwnd_vis", "0"), ("dockermode1", "2"), ("dockheight_t", "190"), ("defsavepath", projects),
+                 ("newprojtmpl", tmpl),
+                 # pas de plugins (Joseph : tout le traitement est dans la LV1) : chemins vides, pas de recherche
+                 # (vides : REAPER scanne ses chemins par défaut, essai du 16/10) -> un dossier vide à lui
+                 ("vstpath64", noplug), ("clap_path_win64", noplug), ("lv2path_win64", noplug)):
+        ini_set(lines, "reaper", k, v)
+    ini_set(lines, "REAPERdockpref", "lv1_meter_bridge.lua", "0.50000000 1")
+    mine = read_lines(os.path.join(personal, "REAPER.ini")) if personal else []
+    if mine and not ini_section(lines, "audioconfig"):    # carte son (ASIO SoundGrid…) du REAPER habituel
+        for sec in ("audioconfig", "asiochan"):
+            for l in ini_section(mine, sec):
+                k, v = l.split("=", 1)
+                ini_set(lines, sec, k, v)
+        log(_("Audio device settings copied from your REAPER", "Réglages de la carte son repris de votre REAPER"))
+    write_lines(ini, lines)
+    ext = os.path.join(rdir, "reaper-extstate.ini")
+    el = read_lines(ext)
+    if not ini_section(el, "lv1_meter_bridge"):           # vumètres : docker 1 (en haut), toutes les colonnes visibles
+        ini_set(el, "lv1_meter_bridge", "dock", "257")
+        ini_set(el, "lv1_meter_bridge", "fit", "1")
+        write_lines(ext, el)
+    if icon_src and os.path.exists(icon_src):
+        shutil.copy2(icon_src, os.path.join(rdir, APPS[RP]["icon"]))
+    log(_("REAPER LV1 set up like Tracks Live (projects in %s)", "REAPER LV1 réglé façon Tracks Live (projets dans %s)")
+        % projects)
+    suite_link(xt_dir, os.path.join(rdir, "reaper.exe"))
+
+
+def suite_link(xt_dir, reaper_exe):
+    """suite.json du pont : XTouch-LV1 lance REAPER LV1 au démarrage (None = plus de REAPER LV1)."""
+    path = os.path.join(xt_dir, "suite.json")
+    if reaper_exe:
+        os.makedirs(xt_dir, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"reaper": reaper_exe}, f, indent=1)
+    elif os.path.exists(path):
+        os.remove(path)
+
+
 # ---------------------------------------------------------------- étapes
 
-def install(sources, root, apps, reaper, log, do_shortcuts=True):
-    """sources : {appli: dossier source} ; apps : applis cochées."""
+def install(sources, root, apps, reaper, log, do_shortcuts=True, reaper_setup=None):
+    """sources : {appli: dossier source} ; apps : applis cochées ; reaper : REAPER habituel (%APPDATA%\\REAPER : carte
+    son reprise, anciens réglages LV1 retirés) ; reaper_setup : installeur de REAPER local (sinon téléchargé)."""
+    root = os.path.normpath(os.path.abspath(root))
     versions = installed(root)
     apps = [k for k in APPS if k in apps]                  # XTouch-LV1 avant REAPER LV1
     if RP in apps and XT not in apps and XT not in versions:
@@ -340,13 +512,20 @@ def install(sources, root, apps, reaper, log, do_shortcuts=True):
         if key == XT:
             copy_xtouch(src, target, log)
         elif key == RP:
-            if not os.path.isdir(reaper):
-                log(_("REAPER LV1: REAPER settings not found (%s): skipped",
-                      "REAPER LV1 : réglages de REAPER introuvables (%s) : ignoré") % reaper)
-                continue
-            ids = reaper_actions(reaper, target, log)
-            reaper_startup(reaper, ids, log)
-            reaper_osc(reaper, log)
+            if versions.get(RP) != REAPER_VERSION or not os.path.exists(os.path.join(target, "reaper.exe")):
+                install_reaper_binaries(target, log, reaper_setup)
+            else:
+                log(_("REAPER %s already installed: settings updated only", "REAPER %s déjà installé : réglages seulement")
+                    % REAPER_VERSION)
+            icon = os.path.join(getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__))), "assets",
+                                APPS[RP]["icon"])
+            reaper_portable_config(target, app_dir(root, XT), reaper if os.path.isdir(reaper) else None, log, icon)
+            if os.path.isdir(reaper) and read_lines(os.path.join(reaper, "reaper-kb.ini")) and \
+                    any("lv1_" in l for l in read_lines(os.path.join(reaper, "reaper-kb.ini"))):
+                reaper_actions(reaper, target, lambda m: None, remove=True)   # ancienne version : REAPER habituel
+                reaper_startup(reaper, {}, lambda m: None, remove=True)
+                log(_("Your usual REAPER: LV1 scripts removed (they now live in REAPER LV1)",
+                      "Votre REAPER habituel : scripts LV1 retirés (ils sont maintenant dans REAPER LV1)"))
         else:
             copy_gainrecall(src, target, log)
         versions[key] = source_version(key, src)
@@ -360,16 +539,18 @@ def install(sources, root, apps, reaper, log, do_shortcuts=True):
 
 
 def uninstall(root, apps, reaper, log, keep_settings, do_shortcuts=True):
+    root = os.path.normpath(os.path.abspath(root))
     versions = installed(root)
     if XT in apps and RP not in apps and RP in versions:
-        apps = list(apps) + [RP]                           # sans XTouch-LV1, les scripts REAPER n'existent plus
+        apps = list(apps) + [RP]                           # sans XTouch-LV1, les scripts de REAPER LV1 n'existent plus
     apps = [k for k in APPS if k in apps]
     for key in apps:
         target = app_dir(root, key)
         if key == RP:
-            if os.path.isdir(reaper):
-                reaper_actions(reaper, target, log, remove=True)
-                reaper_startup(reaper, {}, log, remove=True)   # la surface OSC reste (elle peut servir à autre chose)
+            shutil.rmtree(target, ignore_errors=True)
+            suite_link(app_dir(root, XT), None)
+            log(_("REAPER LV1 removed (your projects stay in %s)", "REAPER LV1 retiré (vos projets restent dans %s)")
+                % os.path.join(documents_dir(), "REAPER LV1 Projects"))
         elif key == XT:
             if keep_settings:
                 for name in os.listdir(target) if os.path.isdir(target) else []:
@@ -441,10 +622,11 @@ def gui(a, sources):
         for k in apps:
             name, d = APPS[k]["name"], app_dir(r, k)
             if removing and k == RP:
-                lines += ["%d. " % n + _("REAPER LV1 (close REAPER first): remove the LV1 scripts from the action list",
-                                         "REAPER LV1 (fermez REAPER avant) : retirer les scripts LV1 de la liste d'actions"),
-                          _("   and from REAPER startup (the OSC surface stays)",
-                            "   et du démarrage de REAPER (la surface OSC reste)")]
+                lines += ["%d. " % n + _("REAPER LV1 (close it first): delete %s", "REAPER LV1 (fermez-le avant) : supprimer %s")
+                          % d,
+                          _("   - your projects and recordings in Documents\\REAPER LV1 Projects are KEPT",
+                            "   - vos projets et enregistrements dans Documents\\REAPER LV1 Projects sont GARDÉS"),
+                          _("   - your usual REAPER (if any) is not touched", "   - votre REAPER habituel (s'il y en a un) n'est pas touché")]
             elif removing:
                 lines.append("%d. " % n + _("%s: delete %s", "%s : supprimer %s") % (name, d))
                 if k == XT:
@@ -461,14 +643,20 @@ def gui(a, sources):
                             "   - le programme demande les droits administrateur à chaque lancement (pour que la"),
                           _("     LV1 follows BANK and selection)", "     LV1 suive BANK et la sélection)")]
             elif k == RP:
-                lines += ["%d. " % n + _("REAPER LV1 -> REAPER settings %s (close REAPER first)",
-                                         "REAPER LV1 -> réglages de REAPER %s (fermez REAPER avant)") % a.reaper,
-                          _("   - add the LV1 scripts to the action list: scenes <-> markers, track sync, meter bridge",
-                            "   - ajouter les scripts LV1 aux actions : scènes <-> marqueurs, synchro des pistes, vumètres"),
-                          _("   - start the scenes link and the meter bridge automatically with REAPER",
-                            "   - lancer le lien des scènes et les vumètres automatiquement avec REAPER"),
-                          _("   - add the OSC surface (receive 8000, send 9000) if missing, for the X-Touch transport",
-                            "   - ajouter la surface OSC (réception 8000, envoi 9000) si elle manque, pour le transport X-Touch")]
+                lines += ["%d. REAPER LV1 -> %s" % (n, d),
+                          _("   - download REAPER %s from reaper.fm (17 MB, official Cockos installer, checked) and",
+                            "   - télécharger REAPER %s sur reaper.fm (17 Mo, installeur officiel Cockos, vérifié) et")
+                          % REAPER_VERSION,
+                          _("     install it as a separate PORTABLE copy: your usual REAPER is not changed",
+                            "     l'installer en copie PORTABLE séparée : votre REAPER habituel n'est pas modifié"),
+                          _("   - set it up like Tracks Live: tracks + meter bridge on top, mixer and master hidden,",
+                            "   - le régler façon Tracks Live : pistes + vumètres en haut, mixage et master cachés,"),
+                          _("     transport on top, LV1 scenes <-> markers, track sync, OSC for the X-Touch transport",
+                            "     transport en haut, scènes LV1 <-> marqueurs, synchro des pistes, OSC du transport X-Touch"),
+                          _("   - projects saved in Documents\\REAPER LV1 Projects; audio device copied from your REAPER",
+                            "   - projets dans Documents\\REAPER LV1 Projects ; carte son reprise de votre REAPER"),
+                          _("   - REAPER is Cockos software: 60-day evaluation, then a REAPER license is needed",
+                            "   - REAPER est un logiciel Cockos : essai de 60 jours, puis une licence REAPER est nécessaire")]
             else:
                 lines += ["%d. X32 Gain Recall -> %s" % (n, d),
                           _("   - your scenes and settings stay in %APPDATA%\\X32 Gain Recall",
@@ -522,7 +710,7 @@ def gui(a, sources):
             if removing:
                 uninstall(r, apps, a.reaper, log, keep, not a.no_shortcuts)
             else:
-                install(sources, r, apps, a.reaper, log, not a.no_shortcuts)
+                install(sources, r, apps, a.reaper, log, not a.no_shortcuts, a.reaper_setup)
         except Exception as e:                             # message lisible plutôt qu'une fenêtre qui disparaît
             log(_("ERROR: %s", "ERREUR : %s") % e)
         root.after(0, lambda: state["go"].config(state="normal", text=_("Close", "Fermer"), command=root.destroy))
@@ -550,6 +738,15 @@ def gui(a, sources):
                                                 "one: %s).",
                                                 "Impossible d'écrire dans %s.\nChoisissez un autre dossier (par exemple "
                                                 "celui par défaut : %s).") % (r, default_root()))
+                return
+        if not removing and RP in apps:                    # licence de REAPER (son installeur est lancé en silencieux)
+            if not messagebox.askyesno(SUITE, _(
+                    "REAPER is downloaded from reaper.fm and installed silently.\n\nREAPER is commercial software by "
+                    "Cockos: you may evaluate it for 60 days, then you need a REAPER license (reaper.fm). Its license "
+                    "(EULA.txt) will be in the REAPER LV1 folder.\n\nDo you accept the REAPER license terms?",
+                    "REAPER est téléchargé sur reaper.fm et installé sans fenêtre.\n\nREAPER est un logiciel commercial "
+                    "de Cockos : essai de 60 jours, ensuite une licence REAPER est nécessaire (reaper.fm). Sa licence "
+                    "(EULA.txt) sera dans le dossier REAPER LV1.\n\nAcceptez-vous la licence de REAPER ?")):
                 return
         keep = True
         if removing and XT in apps:
@@ -636,6 +833,7 @@ def main():
     ap.add_argument("--no-shortcuts", action="store_true")
     ap.add_argument("--langue", choices=["en", "fr"], help="langue de l'installeur (défaut : celle de Windows)")
     ap.add_argument("--silencieux", action="store_true", help="sans fenêtre (tests)")
+    ap.add_argument("--reaper-setup", help="installeur de REAPER local (sinon téléchargé sur reaper.fm)")
     ap.add_argument("--garder-reglages", action="store_true", help="désinstallation silencieuse : garder les réglages")
     a = ap.parse_args()
     if os.path.basename(sys.executable).lower().startswith("uninstall"):
@@ -650,7 +848,7 @@ def main():
         if a.uninstall:
             uninstall(a.root, apps, a.reaper, print, a.garder_reglages, not a.no_shortcuts)
         else:
-            install(sources, a.root, apps, a.reaper, print, not a.no_shortcuts)
+            install(sources, a.root, apps, a.reaper, print, not a.no_shortcuts, a.reaper_setup)
         return 0
     gui(a, sources)
     return 0

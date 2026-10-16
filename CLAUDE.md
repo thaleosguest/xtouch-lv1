@@ -63,6 +63,21 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   Gain Recall (%APPDATA%) jamais touchées ; sa clé Run retirée à la désinstallation si elle vise l'exe installé.
   Test `tests/test_installer.py` ; essai de l'exe : `--silencieux --no-shortcuts --root DIR --reaper DIR [--apps]`.
   Essai du pont sans élévation : `__COMPAT_LAYER=RunAsInvoker`.
+- **REAPER LV1 = REAPER portable (16/10, Joseph : « un vrai pack »)** : l'installeur TÉLÉCHARGE
+  reaper782_x64-install.exe (REAPER_URL, SHA-256 épinglé + signature Authenticode « Cockos Incorporated » vérifiés ;
+  la licence de REAPER n'autorise la redistribution qu'avec un accord de distribution) et l'installe `/S /PORTABLE
+  /D=<dossier>\REAPER LV1` (NSIS : /D= en dernier, SANS guillemets ; reaper.ini/kb/extstate sauvegardés et remis lors
+  d'une mise à jour). `reaper_portable_config` : kb + __startup.lua (dofile lv1_firstrun.lua puis scènes + vumètres),
+  OSC, dockermode1=2 (docker du haut) + extstate dock=257, newprojtmpl = ProjectTemplates\LV1 Multitrack.RPP (écrit
+  par l'installeur : un modèle absent = erreur au démarrage), defsavepath = Documents\REAPER LV1 Projects,
+  vstpath64/clap/lv2 = dossier vide NoPlugins (Joseph : pas de plugins ; vides = REAPER scanne quand même), carte son
+  ([audioconfig], [asiochan]) reprise du REAPER habituel ; anciennes lignes lv1_* retirées du REAPER habituel.
+  `reaper/lv1_firstrun.lua` (une fois, ExtState lv1_suite/firstrun, ~30 cycles defer après le démarrage, noms
+  d'actions SANS tenir compte de la casse : « Transport: Show transport docked to top of main window ») : mixage et
+  master cachés, transport en haut, règle minutes:secondes. Vérifié le 16/10 sur un REAPER portable (capture). Le pont
+  lance REAPER LV1 (`suite.json` écrit par l'installeur, `start_reaper_lv1` par explorer.exe = droits normaux, pas si
+  déjà ouvert, `--sans-reaper-lv1`). Icône rouge `assets/reaper_lv1.ico` (on ne modifie pas reaper.exe : licence).
+  Restent : rappel « About » de la version d'évaluation, scan VST3 du dossier commun de Windows au 1er démarrage.
 - **Logo (16/10, Joseph : le même que X/M32 Gain Recall, autre couleur)** : `tools/make_icon.py` (repris de
   x32-gain-recall-workspace, bloc de droite bleu LV1 #38C9FF au lieu de l'ambre) -> `assets/logo.svg`, `assets/icon.ico`
   (exe du pont, installeur et sa fenêtre, MODE_EMPLOI.html). Relancer après toute retouche : `py tools/make_icon.py`.

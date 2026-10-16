@@ -67,3 +67,5 @@ Chaque ligne correspond à un ou plusieurs commits git (`git log` pour le détai
   administrateur, attend les X-Touch), zip à donner `dist/XTouch-LV1-v0.1.zip`.
 - Installeur **LV1 Suite** (`dist/LV1_Suite_Install.exe`) : XTouch-LV1, REAPER LV1 et X32 Gain Recall v3.0.0 au
   choix, dossier au choix, étapes expliquées, désinstalleur ; mode d'emploi de la surface (`MODE_EMPLOI.html`).
+- REAPER LV1 : REAPER portable téléchargé sur reaper.fm par l'installeur, réglé façon Tracks Live, lancé par
+  XTouch-LV1 ; icône rouge ; installeur bilingue.
