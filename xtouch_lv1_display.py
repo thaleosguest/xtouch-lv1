@@ -2127,11 +2127,11 @@ def recall_payload(state, entries, sends, touched, xlink=None, gain=None):
     return {"cells": cells, "touched": touched, "send": info[0], "curve": curve}   # aux : « FX 1 »…
 
 
-SUITE_FILE = os.path.join(HERE, "suite.json")    # écrit par l'installeur LV1 Suite : {"reaper": chemin de reaper.exe}
+SUITE_FILE = os.path.join(HERE, "suite.json")    # écrit par l'installeur Total Control for LV1 : {"reaper": chemin de reaper.exe}
 
 
 def start_reaper_lv1():
-    """Lance REAPER LV1 (REAPER portable de LV1 Suite) s'il est installé et pas déjà ouvert (demande de Joseph du 16/10 :
+    """Lance REAPER LV1 (REAPER portable de Total Control for LV1) s'il est installé et pas déjà ouvert (demande de Joseph du 16/10 :
     XTouch-LV1 lance aussi REAPER LV1). Le pont tourne en administrateur : REAPER est lancé par explorer.exe, donc
     avec les droits normaux de l'utilisateur (glisser-déposer depuis l'Explorateur possible)."""
     try:
@@ -2193,7 +2193,7 @@ def main():
     ap.add_argument("--master", default="3:0",
                     help="piste LV1 du fader master, groupe:canal (3:0 = LR, défaut ; 'aucun' pour désactiver)")
     ap.add_argument("--sans-reaper-lv1", action="store_true",
-                    help="ne pas lancer REAPER LV1 (installé par LV1 Suite) avec le pont")
+                    help="ne pas lancer REAPER LV1 (installé par Total Control for LV1) avec le pont")
     ap.add_argument("--attendre", action="store_true",
                     help="attendre que les X-Touch soient branchées (défaut de l'exe compilé)")
     argv = sys.argv[1:]

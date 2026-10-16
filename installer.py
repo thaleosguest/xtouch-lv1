@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Installeur « LV1 Suite » (demande de Joseph du 16/10/2026) : XTouch-LV1 et/ou X32 Gain Recall, au choix (cases à
+"""Installeur « Total Control for LV1 » (ex « LV1 Suite », demande de Joseph du 16/10/2026) : XTouch-LV1 et/ou X32 Gain Recall, au choix (cases à
 cocher), un clic installe tout.
 
 Compilé par build.py (PyInstaller onefile, les programmes sont embarqués dans l'exe). Fenêtre tkinter, textes en ANGLAIS.
-Dossiers : %LOCALAPPDATA%\\Programs\\<appli>, et %LOCALAPPDATA%\\Programs\\LV1 Suite (désinstalleur = copie de cet exe,
-installed.json = versions installées). Menu Démarrer : dossier « LV1 Suite » (applis, modes d'emploi, désinstalleur) ;
+Dossiers : %LOCALAPPDATA%\\Programs\\<appli>, et %LOCALAPPDATA%\\Programs\\Total Control for LV1 (désinstalleur = copie de cet exe,
+installed.json = versions installées). Menu Démarrer : dossier « Total Control for LV1 » (applis, modes d'emploi, désinstalleur) ;
 Bureau : un raccourci par appli.
 XTouch-LV1 :
   - copie du programme (réglages et journaux déjà là : jamais écrasés ; réglages posés à côté de l'installeur, ou dans
@@ -30,7 +30,8 @@ import subprocess
 import sys
 import threading
 
-SUITE = "LV1 Suite"
+SUITE = "Total Control for LV1"                    # nom du pack (choisi par Joseph le 16/10/2026)
+OLD_SUITES = ["LV1 Suite"]                         # anciens noms : dossier et menu Démarrer remplacés à l'installation
 VERSION = "0.1"                                   # version de XTouch-LV1 (= xtouch_lv1_display.VERSION, build.py vérifie)
 XT, RP, GR = "xtouch", "reaper", "gainrecall"
 # RP (« REAPER LV1 », demande de Joseph) = intégration REAPER, sans dossier à elle : scripts dans <XTouch-LV1>\reaper,
@@ -121,13 +122,22 @@ def source_version(key, src):
 
 
 def installed(root):
-    """{appli: version} des applis installées (présentes sur le disque)."""
-    try:
-        with open(os.path.join(suite_dir(root), "installed.json"), encoding="utf-8") as f:
-            versions = json.load(f)
-    except (OSError, ValueError):
-        versions = {}
+    """{appli: version} des applis installées (présentes sur le disque) ; installed.json relu aussi sous un ancien nom."""
+    versions = {}
+    for d in [suite_dir(root)] + [os.path.join(root, o) for o in OLD_SUITES]:
+        try:
+            with open(os.path.join(d, "installed.json"), encoding="utf-8") as f:
+                versions = json.load(f)
+            break
+        except (OSError, ValueError):
+            pass
     return {k: versions.get(k, "?") for k in APPS if os.path.exists(os.path.join(app_dir(root, k), APPS[k]["exe"]))}
+
+
+def drop_old_suites(root):
+    """Dossiers des anciens noms du pack (désinstalleur + installed.json, déjà relu) : retirés."""
+    for o in OLD_SUITES:
+        shutil.rmtree(os.path.join(root, o), ignore_errors=True)
 
 
 def save_installed(root, versions):
@@ -222,7 +232,7 @@ def gainrecall_autostart(target, log):
 
 
 def shortcuts(root, log):
-    """Raccourcis selon ce qui est installé : dossier « LV1 Suite » du menu Démarrer refait, un raccourci Bureau par appli
+    """Raccourcis selon ce qui est installé : dossier SUITE du menu Démarrer refait, un raccourci Bureau par appli
     installée (retiré pour les autres). REAPER LV1 : icône rouge à lui (le distinguer d'un REAPER normal)."""
     if sys.platform != "win32":
         return
@@ -230,6 +240,8 @@ def shortcuts(root, log):
     menu = os.path.join(progs, SUITE)
     shutil.rmtree(menu, ignore_errors=True)
     shutil.rmtree(os.path.join(progs, "XTouch-LV1"), ignore_errors=True)     # ancien dossier (1re version)
+    for o in OLD_SUITES:                                                      # anciens noms du pack
+        shutil.rmtree(os.path.join(progs, o), ignore_errors=True)
     have = installed(root)
     uninst = os.path.join(suite_dir(root), "Uninstall %s.exe" % SUITE)
     ps = "$d=[Environment]::GetFolderPath('Desktop');$w=New-Object -ComObject WScript.Shell;"
@@ -375,7 +387,7 @@ def download_reaper(dest, log, setup=None):
         import urllib.request
         setup = os.path.join(dest, "reaper_setup.exe")
         log(_("Downloading REAPER %s from reaper.fm...", "Téléchargement de REAPER %s sur reaper.fm...") % REAPER_VERSION)
-        req = urllib.request.Request(REAPER_URL, headers={"User-Agent": "LV1-Suite-Installer"})
+        req = urllib.request.Request(REAPER_URL, headers={"User-Agent": "Total-Control-LV1-Installer"})
         with urllib.request.urlopen(req, timeout=60) as r, open(setup, "wb") as f:
             total, got, step = int(r.headers.get("Content-Length") or 0), 0, 25
             while True:
@@ -420,7 +432,7 @@ def install_reaper_binaries(target, log, setup=None):
             with open(p, "rb") as fh:
                 keep[f] = fh.read()
     import tempfile
-    tmp = tempfile.mkdtemp(prefix="lv1suite_")
+    tmp = tempfile.mkdtemp(prefix="totalcontrol_")
     try:
         exe = download_reaper(tmp, log, setup)
         log(_("Installing REAPER %s (portable) in %s...", "Installation de REAPER %s (portable) dans %s...")
@@ -538,6 +550,7 @@ def install(sources, root, apps, reaper, log, do_shortcuts=True, reaper_setup=No
             copy_gainrecall(src, target, log)
         versions[key] = source_version(key, src)
     save_installed(root, versions)
+    drop_old_suites(root)
     if getattr(sys, "frozen", False):                      # même exe = désinstalleur
         shutil.copy2(sys.executable, os.path.join(suite_dir(root), "Uninstall %s.exe" % SUITE))
     if do_shortcuts:
@@ -738,7 +751,7 @@ def gui(a, sources):
         if not removing:
             try:                                           # dossier inscriptible ? (Program Files : non, sans admin)
                 os.makedirs(r, exist_ok=True)
-                probe = os.path.join(r, ".lv1suite_write_test")
+                probe = os.path.join(r, ".totalcontrol_write_test")
                 open(probe, "w").close()
                 os.remove(probe)
             except OSError:
@@ -833,7 +846,7 @@ def gui(a, sources):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Installeur LV1 Suite (XTouch-LV1, X32 Gain Recall)")
+    ap = argparse.ArgumentParser(description="Installeur Total Control for LV1 (XTouch-LV1, REAPER LV1, X32 Gain Recall)")
     ap.add_argument("--uninstall", action="store_true")
     ap.add_argument("--root", default=default_root(), help="dossier des programmes (défaut %%LOCALAPPDATA%%\\Programs)")
     ap.add_argument("--reaper", default=default_reaper())
@@ -845,7 +858,7 @@ def main():
     ap.add_argument("--garder-reglages", action="store_true", help="désinstallation silencieuse : garder les réglages")
     a = ap.parse_args()
     if os.path.basename(sys.executable).lower().startswith("uninstall"):
-        # désinstalleur = <dossier choisi>\LV1 Suite\Uninstall LV1 Suite.exe : le dossier des programmes est au-dessus
+        # désinstalleur = <dossier choisi>\<SUITE>\Uninstall <SUITE>.exe : le dossier des programmes est au-dessus
         a.uninstall = True
         a.root = os.path.dirname(os.path.dirname(sys.executable))
     sources = bundled_sources()

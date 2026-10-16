@@ -1,6 +1,6 @@
-"""Test : installeur LV1 Suite sur des dossiers temporaires (faux programmes, faux REAPER habituel ; l'installation du
+"""Test : installeur Total Control for LV1 sur des dossiers temporaires (faux programmes, faux REAPER habituel ; l'installation du
 REAPER portable est simulée : pas de téléchargement).
-- XTouch-LV1 seul : programme copié, rien d'autre ; REAPER LV1 sans XTouch-LV1 : refusé ;
+- XTouch-LV1 seul : programme copié, rien d'autre ; installation sous l'ancien nom « LV1 Suite » reprise puis retirée ; REAPER LV1 sans XTouch-LV1 : refusé ;
 - XTouch-LV1 + REAPER LV1 + Gain Recall (2 fois, idempotent) : REAPER portable préréglé (scripts déclarés, __startup.lua
   avec lv1_firstrun, OSC, docker du haut, projet type, chemins de plugins vides, vumètres ancrés, carte son reprise du
   REAPER habituel), suite.json du pont ; REAPER habituel : anciennes lignes lv1_* retirées, le reste gardé ;
@@ -57,8 +57,12 @@ except RuntimeError:
     pass
 I.install(src, progs, [I.XT], rp, out.append, do_shortcuts=False)
 check("XT seul", I.installed(progs) == {I.XT: "0.1"} and not os.path.exists(rdir) and "RSbbb" in get(os.path.join(rp, "reaper-kb.ini")))
+old = os.path.join(progs, I.OLD_SUITES[0])                # installation faite sous l'ancien nom « LV1 Suite »
+os.rename(I.suite_dir(progs), old)
+check("ancien nom relu", I.installed(progs) == {I.XT: "0.1"})
 for _ in range(2):
     I.install(src, progs, [I.XT, I.RP, I.GR], rp, out.append, do_shortcuts=False)
+check("ancien dossier retiré", not os.path.exists(old) and os.path.isfile(os.path.join(I.suite_dir(progs), "installed.json")))
 check("REAPER installé une fois", len(runs) == 1)
 kb = get(os.path.join(rdir, "reaper-kb.ini"))
 ini = get(os.path.join(rdir, "reaper.ini"))

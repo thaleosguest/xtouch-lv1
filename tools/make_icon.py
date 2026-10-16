@@ -4,7 +4,7 @@ x32-gain-recall-workspace/tools/make_icon.py ; seule la couleur du bloc de droit
 
   assets/logo.svg   logo vectoriel (README, réutilisation)
   assets/icon.ico   icône de l'exe (PyInstaller --icon), 16 à 256 px
-  (les deux servent aussi à l'installeur LV1 Suite, build.py)
+  (les deux servent aussi à l'installeur Total Control for LV1, build.py)
 
 Relancer après toute retouche du logo :  py tools/make_icon.py
 Repère : carré de 120 x 120. En dessous de SMALL px, version simplifiée (deux blocs + lien), les

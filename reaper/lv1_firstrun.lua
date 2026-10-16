@@ -1,4 +1,4 @@
--- Premier démarrage du REAPER LV1 (portable, installé par LV1 Suite) — xtouch-lv1-bridge, 16/10/2026.
+-- Premier démarrage du REAPER LV1 (portable, installé par Total Control for LV1) — xtouch-lv1-bridge, 16/10/2026.
 -- Lancé par __startup.lua ; ne fait son travail QU'UNE fois (ExtState lv1_suite/firstrun), ensuite rien : Joseph
 -- peaufine la présentation à la main et ses réglages sont gardés.
 -- Vue façon Tracks Live 2 : pistes seulement (table de mixage et piste master cachées), barre de transport en haut,

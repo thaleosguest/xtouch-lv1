@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compilation de l'installeur « LV1 Suite » : dist/LV1_Suite_Install.exe (XTouch-LV1 et/ou X32 Gain Recall, au choix).
+"""Compilation de l'installeur « Total Control for LV1 » : dist/Total_Control_LV1_Install.exe (XTouch-LV1 et/ou X32 Gain Recall, au choix).
 
     py build.py                          # Gain Recall = release GitHub GR_TAG (téléchargée une fois, empreinte vérifiée)
     py build.py --gain-recall CHEMIN.exe # ou un exe local de Gain Recall
@@ -29,7 +29,7 @@ NAME = "XTouch-LV1"
 DIST = os.path.join(HERE, "dist")
 WORK = os.path.join(HERE, "build")
 SHARED = ["LISEZMOI.md", "MODE_EMPLOI.html", "xtouch_couleurs.exemple.json"]
-INSTALLER = "LV1_Suite_Install"
+INSTALLER = "Total_Control_LV1_Install"
 GR_REPO, GR_TAG, GR_EXE = "thaleosguest/x32-gain-recall", "v3.0.0", "XM32_Gain_Recall_LV1.exe"
 GR_WORKSPACE = os.path.join(os.path.dirname(HERE), "x32-gain-recall-workspace")
 
@@ -58,7 +58,7 @@ def gain_recall_release():
     """Exe de la release GR_TAG : en cache dans build/gainrecall/<tag>, sinon téléchargé ; empreinte SHA-256 comparée
     à celle que GitHub publie pour le fichier (champ digest de l'API)."""
     api = "https://api.github.com/repos/%s/releases/tags/%s" % (GR_REPO, GR_TAG)
-    with urllib.request.urlopen(urllib.request.Request(api, headers={"User-Agent": "lv1-suite-build"}), timeout=20) as r:
+    with urllib.request.urlopen(urllib.request.Request(api, headers={"User-Agent": "total-control-lv1-build"}), timeout=20) as r:
         rel = json.loads(r.read())
     asset = next(a for a in rel["assets"] if a["name"] == GR_EXE)
     want = (asset.get("digest") or "").split(":")[-1]
@@ -180,7 +180,7 @@ def stage_gain_recall(stage, exe, tag):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Compilation de l'installeur LV1 Suite")
+    ap = argparse.ArgumentParser(description="Compilation de l'installeur Total Control for LV1")
     ap.add_argument("--gain-recall", help="exe local de X32 Gain Recall (sinon la release %s)" % GR_TAG)
     ap.add_argument("--gain-recall-tag", default=GR_TAG, help="tag du mode d'emploi avec --gain-recall")
     ap.add_argument("--sans-gain-recall", action="store_true")

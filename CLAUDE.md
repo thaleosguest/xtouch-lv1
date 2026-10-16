@@ -46,7 +46,9 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
 
 ## Fichiers
 
-- **V0.1 = installeur « LV1 Suite » (16/10/2026)** : `py build.py` -> `dist/LV1_Suite_Install.exe` (installer.py en
+- **V0.1 = installeur « Total Control for LV1 » (16/10/2026, ex « LV1 Suite » : nom choisi par Joseph ; « Total Control »
+  seul écarté = contrôleur Numark ; « for LV1 » = usage descriptif de la marque Waves, mention « non affilié »)** :
+  `py build.py` -> `dist/Total_Control_LV1_Install.exe` (installer.py en
   onefile qui embarque build/stage/{xtouch,gainrecall}). Cases à cocher (demande de Joseph) : XTouch-LV1, REAPER LV1
   (intégration REAPER, sans dossier propre, dépend de XTouch-LV1 : cocher l'un coche l'autre, désinstaller XTouch-LV1
   la retire), X32 Gain Recall (release GitHub GR_TAG v3.0.0 téléchargée par build.py dans build/gainrecall, SHA-256
@@ -56,9 +58,9 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   Un seul exe pour le pont : `--overlay` = processus overlay Qt (xtouch_overlay.py lance `sys.executable --overlay` si
   `sys.frozen`). Fichiers de Joseph à côté de l'exe (HERE / CFG_FILE / FOLDER = dossier de sys.executable si compilé).
   Sans argument : `--clic-lv1 --attendre` (attend les ports USB). `VERSION` dans xtouch_lv1_display.py ET installer.py
-  (build.py vérifie). Installé : <dossier>/XTouch-LV1, <dossier>/X32 Gain Recall, <dossier>/LV1 Suite (Uninstall LV1
-  Suite.exe = copie de l'installeur, racine = dossier parent ; installed.json). Raccourcis : Bureau + menu Démarrer
-  « LV1 Suite » (PowerShell WScript.Shell). REAPER fermé obligatoire : reaper-kb.ini (lignes « Custom: lv1_*.lua »
+  (build.py vérifie). Installé : <dossier>/XTouch-LV1, <dossier>/X32 Gain Recall, <dossier>/Total Control for LV1
+  (Uninstall Total Control for LV1.exe = copie de l'installeur, racine = dossier parent ; installed.json). Raccourcis : Bureau + menu Démarrer
+  « Total Control for LV1 » (anciens dossier et menu « LV1 Suite » retirés à l'installation : `OLD_SUITES`) (PowerShell WScript.Shell). REAPER fermé obligatoire : reaper-kb.ini (lignes « Custom: lv1_*.lua »
   remplacées, id RS+sha1(chemin)), Scripts/__startup.lua (bloc marqué), surface OSC 8000/9000 si absente. Données de
   Gain Recall (%APPDATA%) jamais touchées ; sa clé Run retirée à la désinstallation si elle vise l'exe installé.
   Test `tests/test_installer.py` ; essai de l'exe : `--silencieux --no-shortcuts --root DIR --reaper DIR [--apps]`.
@@ -72,7 +74,7 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   par l'installeur : un modèle absent = erreur au démarrage), defsavepath = Documents\REAPER LV1 Projects,
   vstpath64/clap/lv2 = dossier vide NoPlugins (Joseph : pas de plugins ; vides = REAPER scanne quand même), carte son
   ([audioconfig], [asiochan]) reprise du REAPER habituel ; anciennes lignes lv1_* retirées du REAPER habituel.
-  `reaper/lv1_firstrun.lua` (une fois, ExtState lv1_suite/firstrun, ~30 cycles defer après le démarrage, noms
+  `reaper/lv1_firstrun.lua` (une fois, ExtState lv1_suite/firstrun — clé gardée malgré le nouveau nom, ~30 cycles defer après le démarrage, noms
   d'actions SANS tenir compte de la casse : « Transport: Show transport docked to top of main window ») : mixage et
   master cachés, transport en haut, règle minutes:secondes. Vérifié le 16/10 sur un REAPER portable (capture). Le pont
   lance REAPER LV1 (`suite.json` écrit par l'installeur, `start_reaper_lv1` par explorer.exe = droits normaux, pas si

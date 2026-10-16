@@ -69,3 +69,5 @@ Chaque ligne correspond à un ou plusieurs commits git (`git log` pour le détai
   choix, dossier au choix, étapes expliquées, désinstalleur ; mode d'emploi de la surface (`MODE_EMPLOI.html`).
 - REAPER LV1 : REAPER portable téléchargé sur reaper.fm par l'installeur, réglé façon Tracks Live, lancé par
   XTouch-LV1 ; icône rouge ; installeur bilingue.
+- Pack renommé **Total Control for LV1** (`dist/Total_Control_LV1_Install.exe`) ; une installation « LV1 Suite »
+  est reprise (versions installées) et son dossier / menu Démarrer retirés.

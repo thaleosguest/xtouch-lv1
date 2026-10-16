@@ -4,9 +4,9 @@ Deux tests indépendants, Python 3 standard (rien à installer), à lancer sur l
 Les deux écrivent un rapport `.json` dans ce dossier : c'est ce fichier qu'il faut m'envoyer.
 
 
-## Installation : LV1 Suite (V0.1, plug and play)
+## Installation : Total Control for LV1 (V0.1, plug and play)
 
-**`LV1_Suite_Install.exe`** installe, au choix (cases à cocher) :
+**`Total_Control_LV1_Install.exe`** installe, au choix (cases à cocher) :
 - **XTouch-LV1** v0.1 : le pont X-Touch + Extender <-> LV1 ;
 - **REAPER LV1** : un REAPER 7.82 **portable à part** (ton REAPER habituel n'est pas touché), téléchargé sur reaper.fm
   pendant l'installation (installeur officiel Cockos vérifié : empreinte + signature), réglé façon Tracks Live :
@@ -25,8 +25,8 @@ défaut `%LOCALAPPDATA%\Programs`), lire les étapes affichées, **Install**.
   surface OSC 8000/9000 ajoutée si elle manque.
 - X32 Gain Recall : ses scènes et réglages restent dans `%APPDATA%\X32 Gain Recall` (jamais touchés). Si « Lancer avec
   Windows » était coché avec une autre copie de l'exe, le recocher dans l'appli.
-- Raccourcis : Bureau (un par programme) et menu Démarrer > **LV1 Suite** (programmes, modes d'emploi, désinstalleur).
-- **Désinstaller** : menu Démarrer > LV1 Suite > Uninstall LV1 Suite (cases à cocher aussi).
+- Raccourcis : Bureau (un par programme) et menu Démarrer > **Total Control for LV1** (programmes, modes d'emploi, désinstalleur).
+- **Désinstaller** : menu Démarrer > Total Control for LV1 > Uninstall Total Control for LV1 (cases à cocher aussi).
 
 **Lancer XTouch-LV1** : raccourci XTouch-LV1. Windows demande les droits administrateur (pour que la LV1 suive BANK et
 la sélection). La fenêtre noire montre ce qui se passe ; la fermer = arrêter. Les X-Touch peuvent être branchées après :
@@ -37,7 +37,7 @@ Options : sans argument = `--clic-lv1 --attendre` ; les options de `xtouch_lv1_d
 raccourci (ex. `XTouch-LV1.exe --clic-lv1 --attendre --pilote TracksLive-FL`). Réglage du rappel de pistes : bouton
 ADJUST à l'écran, ou `XTouch-LV1.exe --overlay --reglage`.
 
-**Fabriquer l'installeur** (développement) : `py build.py` -> `dist\LV1_Suite_Install.exe` (PyInstaller + PySide6 ;
+**Fabriquer l'installeur** (développement) : `py build.py` -> `dist\Total_Control_LV1_Install.exe` (PyInstaller + PySide6 ;
 Gain Recall = release GitHub v3.0.0, téléchargée une fois dans `build\gainrecall`, empreinte vérifiée ;
 `--gain-recall CHEMIN.exe` = un exe local ; `--sans-gain-recall`).
 
