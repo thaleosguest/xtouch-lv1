@@ -103,6 +103,8 @@ class FakeOverlay:                  # la boucle principale doit appeler l'affich
     def set_info(self, *a): CALLS.append(("info",) + a)
     def set_ab(self, *a): CALLS.append(("ab",) + a)
     def set_recall(self, d): CALLS.append(("recall", d))
+    def set_warn(self, t): CALLS.append(("warn", t))
+    def set_layer(self, *a): CALLS.append(("layer",) + a)
     def stop(self): CALLS.append(("stop",))
 D.OVERLAY_FACTORY = lambda mixer: FakeOverlay()
 
@@ -128,6 +130,9 @@ print("Rappel de pistes :", len(shown), "envois ; ex. case 1 :", shown[0]["cells
       "; touchés :", shown[0]["touched"] if shown else None, "; send :", sorted({d["send"] for d in shown}, key=str))
 ok = ok and shown and recalls[-1] is None and len(shown[0]["cells"]) == 17 and 0 in shown[0]["touched"]
 ok = ok and "FX 2" in {d["send"] for d in shown}
+layers = [c for c in CALLS if c[0] == "layer"]
+print("Notifications de couche :", layers[:3])
+ok = ok and layers and all(c[1] and "(" not in c[1] for c in layers)   # nom propre, jamais « (par défaut) »
 print("Affichage d'écran :", sorted({c[0] for c in CALLS}), [c for c in CALLS if c[0] == "info" and c[1]][:1])
 print("OK" if ok else "ÉCHEC")
 sys.exit(0 if ok else 1)

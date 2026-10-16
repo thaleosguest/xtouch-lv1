@@ -81,6 +81,9 @@ class LV1Overlay(threading.Thread):
     def set_recall(self, data):
         pass                      # rappel de pistes : version Qt seulement
 
+    def set_layer(self, name, sub=None):
+        pass                      # notification de couche : version Qt seulement
+
     def set(self, text):
         """Texte à afficher (None = mode normal). Un changement relance le bandeau."""
         with self.lock:
@@ -220,6 +223,14 @@ class QtOverlay:
         """Rappel de pistes (bandeau aligné sur la surface) : dict, ou None pour le cacher."""
         try:
             self.proc.stdin.write((json.dumps({"recall": data}) + "\n").encode("utf-8"))
+            self.proc.stdin.flush()
+        except OSError:
+            pass
+
+    def set_layer(self, name, sub=None):
+        """Notification « LAYER  Ch 17-32 » en bas à droite de la LV1 (quelques secondes)."""
+        try:
+            self.proc.stdin.write((json.dumps({"layer": {"name": name, "sub": sub}}) + "\n").encode("utf-8"))
             self.proc.stdin.flush()
         except OSError:
             pass

@@ -951,6 +951,36 @@ def master_display(selected, gain_db, side, stereo, lr_db):
     return seg_codes(num[-2:], 2), left + right
 
 
+def time_display(seconds, clock):
+    """Afficheur 7 segments hors mode sends (demande de Joseph du 16/10/2026, remplace le canal sélectionné / gain / LR :
+    « assez d'indices avec l'écran ») : (2 car. assignment, 10 car. timecode), groupes 3-2-2-3 de la X-Touch.
+    seconds = position de REAPER LV1 (/time) -> heures.minutes.secondes.millièmes ; None -> heure du PC (`clock`,
+    struct_time : la même que l'horloge de la LV1, qui tourne sur ce PC) en heures.minutes.secondes."""
+    if seconds is not None:
+        ms = int(round(max(0.0, seconds) * 1000))
+        h, ms = divmod(ms, 3600000)
+        m, ms = divmod(ms, 60000)
+        s, ms = divmod(ms, 1000)
+        text = "%3d.%02d.%02d.%03d" % (h % 1000, m, s, ms)
+    else:
+        text = "%3d.%02d.%02d   " % (clock.tm_hour, clock.tm_min, clock.tm_sec)
+    return seg_codes("", 2), seg_codes(text, 10)
+
+
+def layer_toast(layer_name, mixer=1):
+    """Nom de couche du pont -> (nom, sous-titre) de la notification de l'overlay, ou None (couche pas encore connue)."""
+    if not layer_name or layer_name.endswith("(par défaut)"):
+        return None
+    tags = []
+    for suffix, tag in ((" (banque X-Touch)", "X-Touch bank"), (" (vide)", "empty")):
+        if layer_name.endswith(suffix):
+            layer_name = layer_name[:-len(suffix)]
+            tags.insert(0, tag)
+    if mixer == 2:
+        tags.insert(0, "Mixer 2")
+    return layer_name, "  ·  ".join(tags) or None
+
+
 # Pan côté réseau LV1 : -45 (L45) .. +45 (R45), comme l'écran et la base (bug du 15/10 : envoyé en -1..+1, « tout à
 # gauche » donnait L1 sur la LV1 ; ses /Notify/Track/Pan vont bien de -45 à +45). En interne : -1..+1.
 # Pan d'envoi aux : même échelle supposée (non vérifié : seule la valeur 0 a été vue).
@@ -2439,6 +2469,9 @@ def main():
                 if layer_name:
                     print("  Couche affichée : %s" % layer_name)
                     JOURNAL.mark("affiché : %s" % layer_name)
+                    toast = layer_toast(layer_name, a.mixer)
+                    if overlay and toast:
+                        overlay.set_layer(*toast)
                 last_layer = layer_name
             rings, recs = gain.frame(entries[:surface.strips], bot)
             surface.push(top, bot, cols, lvls, fads, now, held, master_fv)
@@ -2463,16 +2496,19 @@ def main():
                 sel = state.selected
                 any_solo = any(t.get("solo") for t in state.tracks.values())
                 lr_db = state.tracks.get(master_now, {}).get("fader") if master_now else None
-            side = gain.side.get(sel, 0)
-            g_sel = xlink.gain(sel, side) if (xlink and sel) else None
-            stereo = bool(xlink and sel and len(xlink.preamps(sel)) == 2)
-            assign, timecode = master_display(sel, g_sel, side, stereo, lr_db)
             if sends.picking:                                # choix de l'aux : « SE » + « SEL »
                 assign = seg_codes("SE", 2)
                 timecode = seg_codes("SEL", 5) + seg_codes("", 5)
             elif sends.aux is not None:                      # envois : « SE » + aux + niveau du master de l'aux
+                side = gain.side.get(sel, 0)
+                g_sel = xlink.gain(sel, side) if (xlink and sel) else None
+                stereo = bool(xlink and sel and len(xlink.preamps(sel)) == 2)
+                assign, timecode = master_display(sel, g_sel, side, stereo, lr_db)
                 assign = seg_codes("SE", 2)
                 timecode = seg_codes(sends.label() or "--", 5) + timecode[5:]
+            else:                                            # position de REAPER LV1, sinon heure (Joseph, 16/10)
+                assign, timecode = time_display(reaper.time if reaper and reaper.alive() else None,
+                                                time.localtime())
             surface.push_master_display(assign, timecode)
             if overlay:
                 if faders.held(now):                       # touché, ou bougé sans toucher (ongle) : bandeau affiché

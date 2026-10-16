@@ -12,7 +12,7 @@ Messages (fichier Default.ReaperOSC, non vérifiés sur la machine de Joseph) :
     /play /stop /record /repeat /click   (t = déclencheur : valeur 1)
     /rewind /forward                     (b = tenu : 1 à l'appui, 0 au relâchement)
     /action i:n                          (action Reaper par son numéro)
-Retours : /play /stop /record /repeat /click f:0|1.
+Retours : /play /stop /record /repeat /click f:0|1 ; /time f:secondes (position, afficheur 7 segments).
 """
 import os
 import socket
@@ -59,6 +59,7 @@ class ReaperLink:
         self.addr = (host, send_port)
         self.mark = journal or (lambda _s: None)
         self.state = {}                   # "play" / "record" / "repeat" / "click" / "stop" -> bool
+        self.time = None                  # position de lecture en secondes (/time f), pour l'afficheur 7 segments
         self.seen = 0.0                   # instant du dernier message reçu de Reaper
         self.tx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.rx = None
@@ -100,6 +101,11 @@ class ReaperLink:
     def connected(self):
         return time.time() - self.seen < 5.0
 
+    def alive(self):
+        """REAPER répond (afficheur 7 segments). Plus large que connected() : à l'arrêt REAPER n'envoie rien, la
+        demande de rafraîchissement (toutes les 5 s une fois connected() faux) le fait répondre avant 12 s."""
+        return time.time() - self.seen < 12.0
+
     def _listen(self):
         while True:
             try:
@@ -111,7 +117,9 @@ class ReaperLink:
             for addr, args in self._messages(data):
                 self.seen = time.time()
                 key = addr.strip("/")
-                if key in ("play", "stop", "record", "repeat", "click", "pause") and args:
+                if key == "time" and args and args[0][0] == "f":
+                    self.time = float(args[0][1])
+                elif key in ("play", "stop", "record", "repeat", "click", "pause") and args:
                     try:
                         self.state[key] = float(args[0][1]) > 0.5
                     except (TypeError, ValueError):

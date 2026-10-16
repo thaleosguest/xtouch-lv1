@@ -71,3 +71,9 @@ Chaque ligne correspond à un ou plusieurs commits git (`git log` pour le détai
   XTouch-LV1 ; icône rouge ; installeur bilingue.
 - Pack renommé **Total Control for LV1** (`dist/Total_Control_LV1_Install.exe`) ; une installation « LV1 Suite »
   est reprise (versions installées) et son dossier / menu Démarrer retirés.
+
+## 16/10/2026 (suite)
+
+- Afficheur 7 segments : position de REAPER LV1, sinon l'heure (plus le canal sélectionné).
+- Notification « LAYER » en bas à droite de la LV1 à chaque changement de couche.
+- Boutons Input / Mix / Factory / Custom / Spill de la LV1 relevés (80 et 64 canaux).

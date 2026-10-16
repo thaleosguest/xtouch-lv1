@@ -52,6 +52,20 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   Test `tests/test_clic_lv1.py`.
 - État mute/solo **initial** lu dans `/Channels` (test `tests/test_etat_initial.py`, LED au démarrage à vérifier sur le matériel).
 
+- **Afficheur 7 segments (16/10, Joseph : « assez d'indices avec l'écran »)** : `time_display` remplace l'option C
+  (canal sélectionné / gain / LR) : position de REAPER LV1 (`/time f`, `ReaperLink.time`, `alive()` = réponse < 12 s,
+  car à l'arrêt REAPER ne répond qu'à la demande de rafraîchissement) en h.mm.ss.mmm, sinon heure du PC (= horloge LV1).
+  Modes sends inchangés (« SE »). Test `tests/test_heure_couche.py`.
+- **Notification de couche (16/10)** : `layer_toast` -> `overlay.set_layer(nom, sous-titre)` -> `LayerToast` (Qt) en bas à
+  droite de la LV1 (`TOAST_*`, à gauche de la colonne des couches, 2,5 s, traversée par les clics). Couche « par défaut »
+  ignorée ; « X-Touch bank » / « empty » / « Mixer 2 » en sous-titre. tk : rien.
+- **Boutons de mode de couche (relevés le 16/10, captures 1920x1080, page Mixer)** : 80 canaux : Input (1814, 442),
+  Mix (1881, 442) ; 16/32/64 : un seul bouton Factory (1847, 442) ; partout : Custom (1814, 479), Spill (1881, 479).
+  Actif = bleu clair. Colonne des couches IDENTIQUE en 64 et 80 (Ch 1-16 à y 515..567, `LAYER_Y0` 537 bon). Mode lisible
+  dans `CurrentLV1.dat` (prop 12, `ovv_track_mapping_type` : 0 Factory, 1 CustomL, 3 SpillMd, 4 InptChn, 5 BussChn ;
+  `config_info` track_type 0 = nb de canaux). Aucune commande réseau de mode (seul `/Set/SpillButton`, non essayé) :
+  changer de mode = clic simulé. Pas encore câblé sur la X-Touch (touches à choisir avec Joseph).
+
 ## Fichiers
 
 - **V0.1 = installeur « Total Control for LV1 » (16/10/2026, ex « LV1 Suite » : nom choisi par Joseph ; « Total Control »
