@@ -101,6 +101,42 @@ def input_ab(path=DB_PATH):
     return {(0, idx): float(vals.get(oid, 0.0)) >= 0.5 for oid, idx in objs}
 
 
+# Mode de couche (boutons Input / Mix / Factory / Custom / Spill de la colonne de droite, voyants des touches View de
+# la X-Touch, demande de Joseph du 16/10/2026) : surface_property_int, surface 2 = Mixer 1 / 3 = Mixer 2, propriété 12
+# (eProp_LayersMode) = ovv_track_mapping_type (écrit aussitôt par la LV1, cf. x32-gain-recall lv1/layers.py) ;
+# config_info track_type 0 = nombre de canaux d'entrée configuré (16 / 32 / 64 / 80).
+MODE_FACTORY, MODE_CUSTOM, MODE_SPILL, MODE_INPUTS, MODE_BUSSES = 0, 1, 3, 4, 5
+PROP_LAYERS_MODE = 12
+
+
+def layer_mode(mixer=1, path=DB_PATH):
+    """(mode de couche, nombre de canaux d'entrée) du Mixer 1 ou 2 ; None pour ce qui manque."""
+    dst = copy_db(path)
+    try:
+        db = sqlite3.connect(dst)
+        try:
+            row = db.execute("select value from surface_property_int where surface = ? and property = ?",
+                             (1 + mixer, PROP_LAYERS_MODE)).fetchone()
+            n = db.execute("select num_tracks from config_info where track_type = 0").fetchone()
+        finally:
+            db.close()
+    finally:
+        shutil.rmtree(os.path.dirname(dst), ignore_errors=True)
+    return (row[0] if row else None), (n[0] if n else None)
+
+
+def db_stamp(path=DB_PATH):
+    """Repère de changement de la base (dates et tailles du fichier et du -wal) : relire seulement s'il change."""
+    out = []
+    for p in (path, path + "-wal"):
+        try:
+            st = os.stat(p)
+            out.append((st.st_mtime_ns, st.st_size))
+        except OSError:
+            out.append(None)
+    return tuple(out)
+
+
 # Routage (relevé le 15/10/2026 sur la session de Joseph) : table `routes`, une ligne par liaison du patch.
 #   source  (src_cluster_type, src_cluster_type_index, src_channel_index)
 #   dest.   (dst_cluster_type, dst_cluster_type_index, dst_section_index, dst_channel_index)

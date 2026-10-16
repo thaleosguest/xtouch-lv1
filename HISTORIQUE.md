@@ -77,3 +77,4 @@ Chaque ligne correspond à un ou plusieurs commits git (`git log` pour le détai
 - Afficheur 7 segments : position de REAPER LV1, sinon l'heure (plus le canal sélectionné).
 - Notification « LAYER » en bas à droite de la LV1 à chaque changement de couche.
 - Boutons Input / Mix / Factory / Custom / Spill de la LV1 relevés (80 et 64 canaux).
+- Touches INPUTS / BUSES / USER / GLOBAL VIEW = Input (Factory) / Mix / Custom / Spill de la LV1, voyants selon le mode.

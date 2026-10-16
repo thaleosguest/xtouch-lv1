@@ -239,6 +239,8 @@ class LV1State:
         self.channels_at = 0.0    # instant du dernier /Channels (état complet renvoyé : connexion, Flip A/B…)
         self.custom_on = {}       # vue -> bouton Custom allumé ? (/Notify/CustomButton, hypothèse)
         self.spill_on = {}        # vue -> bouton Spill allumé ? (/Notify/SpillButton, hypothèse)
+        self.layer_mode = {}      # vue -> mode de couche lu dans la base (lv1_db.MODE_* ; touches View de la X-Touch)
+        self.n_inputs = None      # canaux d'entrée configurés (16 / 32 / 64 / 80), base LV1
         self.version = ""
         self.held_tracks = set()  # (g, ch) dont le fader X-Touch est sous le doigt : retours LV1 ignorés
         # (g, ch) -> (valeurs « périmées » en dB arrondi, instant de fin) : après le relâchement, un retour
@@ -783,6 +785,8 @@ class Surface:
                     self.midi.short(h, 0x90, NOTE_SEND, 0)
                     self.midi.short(h, 0x90, NOTE_SOLO_ALL, 0)
                     self.midi.short(h, 0x90, NOTE_FLIP, 0)
+                    for note in (NOTE_INPUTS, NOTE_BUSES, NOTE_USER, NOTE_GLOBAL_VIEW):
+                        self.midi.short(h, 0x90, note, 0)
                     for k in range(8):
                         self.midi.short(h, 0x90, NOTE_F1 + k, 0)
                     for cc in list(range(CC_TIMECODE, CC_TIMECODE + 10)) + [CC_ASSIGN_L, CC_ASSIGN_R]:
@@ -880,7 +884,11 @@ NOTE_CHANNEL_LEFT, NOTE_CHANNEL_RIGHT = 0x30, 0x31
 # Page Channel : il règle le potard de plugin sélectionné (fader horizontal du bas) par crans de molette.
 CC_JOG = 0x3C
 NOTE_FLIP = 0x32                  # FLIP (vérifié le 14/10) -> User Key « Flip AB Input channel » de la LV1
-NOTE_SOLO_ALL = 0x5A              # bouton SOLO (groupe Marker..Click..Solo, Mackie, à confirmer) : allumé si un solo
+# Touches View (norme Mackie ; 0x33 et 0x3F vues dans les journaux de Joseph, 0x43 et 0x45 par la suite de la norme)
+# -> boutons de mode de couche de la LV1 (demande de Joseph du 16/10) : INPUTS = Input (Factory en 16/32/64),
+# BUSES = Mix (80 canaux), USER = Custom, GLOBAL VIEW = Spill. Voyants = mode lu dans la base.
+NOTE_GLOBAL_VIEW, NOTE_INPUTS, NOTE_BUSES, NOTE_USER = 0x33, 0x3F, 0x43, 0x45
+NOTE_SOLO_ALL = 0x5A             # bouton SOLO (groupe Marker..Click..Solo, Mackie, à confirmer) : allumé si un solo
                                   # est actif dans la LV1 ; appui = /ClearAllSolo (demande de Joseph, 15/10)
 # Assignation des encodeurs (norme Mackie, à confirmer) : TRACK 0x28. Encodeurs : CC 0x10-0x17 relatifs
 # (bit 6 = sens, bits 0-3 = vitesse), couronnes : CC 0x30-0x37.
@@ -1421,16 +1429,19 @@ class LV1Clicker(threading.Thread):
     que si la LV1 affiche la couche qui la contient (sinon le clic sélectionnerait un autre canal)."""
     WAIT_LAYER = 1.0     # s d'attente de /Notify/CurrentLayer après un clic de couche
 
-    def __init__(self, state, page, click_layer=None, click_strip=None, jog=None, jog_method="message"):
+    def __init__(self, state, page, click_layer=None, click_strip=None, jog=None, jog_method="message",
+                 click_mode=None):
         # click_strip(i, mixer, rgb=...) : couleur du canal (0..255) pour trouver la bande du nom à l'écran.
         # Bug du 15/10 : passée en 3e position, elle tombait dans « method » -> aucune sélection cliquée.
+        # click_mode(nom, n_inputs, mixer) : bouton Input / Mix / Factory / Custom / Spill (touches View).
         super().__init__(daemon=True)
         self.state, self.page = state, page
-        if click_layer is None or click_strip is None:
+        if click_layer is None or click_strip is None or click_mode is None:
             import lv1_clic
             click_layer = click_layer or lv1_clic.click_layer
             click_strip = click_strip or lv1_clic.click_strip
-        self.click_layer, self.click_strip = click_layer, click_strip
+            click_mode = click_mode or lv1_clic.click_mode
+        self.click_layer, self.click_strip, self.click_mode = click_layer, click_strip, click_mode
         if jog is None:
             import lv1_clic
             jog = lambda n: lv1_clic.jog_bottom_fader(n, page + 1, jog_method)
@@ -1441,6 +1452,10 @@ class LV1Clicker(threading.Thread):
 
     def layer(self, k):
         self.q.put(("couche", k))
+
+    def mode(self, name):
+        """Bouton de mode de couche de la LV1 : input, mix, factory, custom, spill."""
+        self.q.put(("mode", name))
 
     def jog(self, notches):
         """Jog wheel : crans de molette sur le fader de plugin du bas de la page Channel."""
@@ -1485,6 +1500,16 @@ class LV1Clicker(threading.Thread):
                         elif not ok:
                             self._refused("jog", why or "envoi refusé par Windows")
                     continue
+                if kind == "mode":
+                    with self.state.lock:
+                        n = self.state.n_inputs
+                    ok, why = self.click_mode(arg, n, self.page + 1)
+                    JOURNAL.mark("clic LV1 mode %s : %s" % (arg, "envoyé" if ok else why))
+                    if not ok:
+                        self._refused("mode %s" % arg, why or "envoi refusé par Windows")
+                    else:
+                        self.last_why = None
+                    continue
                 if kind == "couche":
                     with self.state.lock:
                         if self.state.current.get(self.page) == arg:
@@ -1520,6 +1545,50 @@ class LV1Clicker(threading.Thread):
                         self.last_why = None
             except Exception as e:           # un clic raté ne doit jamais arrêter le pont
                 JOURNAL.mark("clic LV1 : erreur %r" % e)
+
+
+class LayerModeWatcher(threading.Thread):
+    """Mode de couche de la vue suivie (Input / Mix / Factory / Custom / Spill) et nombre de canaux configuré, lus
+    dans la base de la LV1 (copie) chaque fois qu'elle change : voyants des touches View, bouton à cliquer.
+    Le réseau ne le donne pas (/Notify/CustomButton et /Notify/SpillButton ne bougent pas, vérifié le 14/10)."""
+    PERIOD = 0.5
+
+    def __init__(self, state, page, read=None, stamp=None):
+        super().__init__(daemon=True)
+        self.state, self.page = state, page
+        if read is None or stamp is None:
+            import lv1_db
+            read = read or (lambda: lv1_db.layer_mode(page + 1))
+            stamp = stamp or lv1_db.db_stamp
+        self.read, self.stamp = read, stamp
+        self.last = object()
+
+    def step(self):
+        st = self.stamp()
+        if st == self.last:
+            return
+        try:
+            mode, n = self.read()
+        except Exception as e:              # base absente ou en cours d'écriture : on réessaiera au prochain changement
+            JOURNAL.mark("mode de couche illisible : %r" % e)
+            return
+        self.last = st
+        with self.state.lock:
+            changed = (self.state.layer_mode.get(self.page), self.state.n_inputs) != (mode, n)
+            self.state.layer_mode[self.page] = mode
+            self.state.n_inputs = n
+        if changed:
+            JOURNAL.mark("mode de couche (base LV1) : %s, %s canaux" % (mode, n))
+
+    def run(self):
+        while True:
+            self.step()
+            time.sleep(self.PERIOD)
+
+
+def view_leds(mode):
+    """Voyants des touches View selon le mode de couche (lv1_db.MODE_*) : {note: allumée}. Inconnu : tout éteint."""
+    return {NOTE_INPUTS: mode in (0, 4), NOTE_BUSES: mode == 5, NOTE_USER: mode == 1, NOTE_GLOBAL_VIEW: mode == 3}
 
 
 class LV1SelectionWatcher(threading.Thread):
@@ -1759,6 +1828,22 @@ class ButtonControl:
             self.lv1.layer(k)
         return True
 
+    def on_view(self, d1):
+        """Touches View -> bouton de mode de couche de la LV1 (clic simulé, --clic-lv1)."""
+        with self.state.lock:
+            n = self.state.n_inputs
+        name = {NOTE_INPUTS: "input" if n == 80 else "factory", NOTE_BUSES: "mix", NOTE_USER: "custom",
+                NOTE_GLOBAL_VIEW: "spill"}[d1]
+        JOURNAL.mark("XT bouton View %02X -> mode %s (%s canaux)" % (d1, name, n))
+        if name == "mix" and n != 80:
+            JOURNAL.mark("mode Mix : seulement en 80 canaux")
+            return
+        if self.lv1:
+            self.lv1.mode(name)
+        elif "view" not in self.warned:
+            print("  Touches INPUTS / BUSES / USER / GLOBAL VIEW : avec --clic-lv1 seulement.")
+            self.warned.add("view")
+
     def on_channel(self, d1, entries):
         """◄ CHANNEL ► : sélection au canal affiché précédent / suivant (tranches vides sautées).
 
@@ -1819,6 +1904,10 @@ class ButtonControl:
                     self.link.send("/Set/UserKey", [("i", keys[0]), ("T", True)])
                     self.link.send("/Set/UserKey", [("i", keys[0]), ("F", False)])
                     JOURNAL.mark("XT bouton Flip -> User Key %d (Flip A/B)" % (keys[0] + 1))
+            return True
+        if (status & 0xF0) == 0x90 and d1 in (NOTE_INPUTS, NOTE_BUSES, NOTE_USER, NOTE_GLOBAL_VIEW):
+            if d2:
+                self.on_view(d1)
             return True
         if (status & 0xF0) == 0x90 and d1 == NOTE_SOLO_ALL:
             if d2:
@@ -2407,6 +2496,8 @@ def main():
             already = state.connected
         if already:                           # connectée avant ce branchement : on lit tout de suite
             threading.Thread(target=load_pans, daemon=True).start()
+    if not a.dry_run:
+        LayerModeWatcher(state, a.mixer - 1).start()          # voyants INPUTS / BUSES / USER / GLOBAL VIEW
     if a.lecture_seule:
         print("  Mode lecture seule : rien n'est envoyé à la LV1.")
     if a.clic_lv1 and not a.lecture_seule:
@@ -2492,6 +2583,10 @@ def main():
                     surface.set_main_led(note, on)
             for k, on in enumerate(sends.fkey_leds()):
                 surface.set_main_led(NOTE_F1 + k, on)
+            with state.lock:
+                lmode = state.layer_mode.get(a.mixer - 1)
+            for note, on in view_leds(lmode).items():             # touches View = mode de couche de la LV1
+                surface.set_main_led(note, on)
             with state.lock:
                 sel = state.selected
                 any_solo = any(t.get("solo") for t in state.tracks.values())

@@ -64,7 +64,11 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   Actif = bleu clair. Colonne des couches IDENTIQUE en 64 et 80 (Ch 1-16 à y 515..567, `LAYER_Y0` 537 bon). Mode lisible
   dans `CurrentLV1.dat` (prop 12, `ovv_track_mapping_type` : 0 Factory, 1 CustomL, 3 SpillMd, 4 InptChn, 5 BussChn ;
   `config_info` track_type 0 = nb de canaux). Aucune commande réseau de mode (seul `/Set/SpillButton`, non essayé) :
-  changer de mode = clic simulé. Pas encore câblé sur la X-Touch (touches à choisir avec Joseph).
+  changer de mode = clic simulé (`lv1_clic.click_mode`, garde-fou = cadre de la 1re couche, le bouton inactif étant
+  sombre). **Touches View (choix de Joseph, 16/10)** : INPUTS 0x3F = Input (Factory hors 80), BUSES 0x43 = Mix, USER 0x45
+  = Custom, GLOBAL VIEW 0x33 = Spill (`ButtonControl.on_view`, `LV1Clicker.mode`) ; voyants `view_leds` depuis
+  `LayerModeWatcher` (base relue quand `db_stamp` change, 0,5 s). À vérifier sur le matériel : notes 0x43 / 0x45, et que
+  Spill allumé écrit bien 3 (SpillMd) en propriété 12. Test `tests/test_modes_couche.py`.
 
 ## Fichiers
 

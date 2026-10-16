@@ -25,6 +25,14 @@ from ctypes import wintypes as wt
 
 REF_W, REF_H = 1920.0, 1080.0
 LAYER_X, LAYER_Y0, LAYER_PITCH, LAYER_FRAME_X = 1847, 537, 72, 1795
+# Boutons de mode de couche, au-dessus des couches (captures du 16/10/2026, page Mixer 1, 1920x1080) : 80 canaux =
+# Input + Mix ; 16 / 32 / 64 = un seul bouton Factory centré ; Custom et Spill partout. Colonne des couches identique
+# dans les deux cas. Actif = rempli de bleu (56, 201, 255), inactif = fond sombre + contour : on vérifie donc le cadre
+# de la 1re couche (layer_frame(0)), pas le bouton lui-même.
+MODE_BUTTONS = {"input": (1814, 442), "mix": (1881, 442), "factory": (1847, 442), "custom": (1814, 479),
+                "spill": (1881, 479)}
+MODES_80 = ("input", "mix", "custom", "spill")
+MODES_64 = ("factory", "custom", "spill")
 STRIP_X0, STRIP_PITCH, STRIP_NAME_Y = 142 + 46, 96, 433
 TAB_X = {1: 651, 2: 749}
 TAB_Y = 28
@@ -416,6 +424,18 @@ def click_layer(k, mixer=1, method="message"):
     if why:
         return False, why
     return t.on_mixer(layer_frame(k), lambda: t.click(*layer_point(k), method=method))
+
+
+def click_mode(name, n_inputs, mixer=1, method="message"):
+    """Clique le bouton de mode de couche `name` (input, mix, factory, custom, spill) ; n_inputs = configuration de la
+    LV1 (80 : Input / Mix ; sinon Factory). Renvoie (fait, raison)."""
+    if name not in (MODES_80 if n_inputs == 80 else MODES_64):
+        return False, "pas de bouton %s en %s canaux" % (name, n_inputs or "?")
+    t = Target(mixer)
+    why = t.check(layer_frame(0))
+    if why:
+        return False, why
+    return t.on_mixer(layer_frame(0), lambda: t.click(*MODE_BUTTONS[name], method=method))
 
 
 def click_strip(i, mixer=1, method="message", rgb=None):
