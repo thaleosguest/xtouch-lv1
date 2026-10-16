@@ -41,7 +41,7 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
 - **Clics simulés dans la LV1** (`lv1_clic.py`, option `--clic-lv1`, classe `LV1Clicker`) : PostMessage
   WM_LBUTTON* à la fenêtre enfant sous le point (souris immobile). **Vérifié le 14/10** : `couche 3` et `tranche 5`
   marchent (PowerShell administrateur obligatoire : LV1 en admin, PrintWindow/clics refusés sinon).
-  Géométrie (1920x1080, fractions de la zone client) : couches x 1847, y 537+72k (cadre x 1795) ;
+  Géométrie (1920x1080, fractions de la zone client) : couches x 1847, y 537+72k (bord x 1782..1789) ;
   noms des tranches : bande CHERCHÉE à l'écran (sa position change avec Top/Middle/Bottom/Big Fader) dans la colonne
   x 145+96i (3 px du bord, hors texte), y 300..700, couleur exacte du canal (/Notify/TrackColor), hauteur 12..34,
   la plus proche de y 433 ; introuvable = PAS de clic (sinon risque de cliquer un MUTE) ; couleur passée en
@@ -70,8 +70,9 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   Input / Mix / Factory = radio ; Custom / Spill = bascules de la LV1 (2e clic -> dernier Input / Mix).
   **Piège (1er essai, 16/10)** : en mode Custom la colonne des couches change d'allure, (1795, 537) devient sombre -> tous
   les clics de mode ET de couche refusés (« bloqué sur USER »). Garde-fou des modes = texte / bleu dans les boutons Custom
-  et Spill (`mode_row_why`, y 479). Clics de COUCHE en mode Custom : toujours refusés (allure de la colonne Custom pas
-  encore relevée : capture à faire). Voyants `view_leds(mode, onglet)` depuis `LayerModeWatcher` (base relue quand
+  et Spill (`mode_row_why`, y 479). Clics de COUCHE : garde-fou = bord gauche des cases (x 1782..1789,
+  `layer_edge_why`) : contour gris 160 inactive, bleu / violet (Custom) active ; l'ancien point (1795) était dans l'aperçu
+  gris, absent des pages Custom vides (capture Custom du 16/10 : mêmes boutons et mêmes cases, Custom en violet). Voyants `view_leds(mode, onglet)` depuis `LayerModeWatcher` (base relue quand
   `db_stamp` change, onglet lu à l'écran, 0,5 s). SMPTE 0x35 = afficheur timecode REAPER / heure (`ButtonControl.reaper_tc`),
   LED 0x71 = timecode affiché. Notification = nom seul, une fois par couche. Test `tests/test_modes_couche.py`.
 

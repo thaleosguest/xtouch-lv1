@@ -24,7 +24,8 @@ import time
 from ctypes import wintypes as wt
 
 REF_W, REF_H = 1920.0, 1080.0
-LAYER_X, LAYER_Y0, LAYER_PITCH, LAYER_FRAME_X = 1847, 537, 72, 1795
+LAYER_X, LAYER_Y0, LAYER_PITCH = 1847, 537, 72
+LAYER_EDGE = (1782, 1789)        # bord gauche des cases de couche (contour en x 1784 sur 1920, captures du 16/10)
 # Boutons de mode de couche, au-dessus des couches (captures du 16/10/2026, page Mixer 1, 1920x1080) : 80 canaux =
 # Input + Mix ; 16 / 32 / 64 = un seul bouton Factory centré ; Custom et Spill partout. Colonne des couches identique
 # dans les deux cas. Actif = rempli de bleu (56, 201, 255), inactif = fond sombre + texte clair : garde-fou = texte ou
@@ -380,8 +381,19 @@ def layer_point(k):
     return LAYER_X, LAYER_Y0 + LAYER_PITCH * k
 
 
+def layer_edge_why(read, k):
+    """Garde-fou d'une case de couche : son bord gauche (x 1782..1789) doit être clair — contour gris (160) si inactive,
+    rempli de bleu (Input / Factory / Mix) ou de violet (Custom) si active ; fond de colonne (71) sinon.
+    Avant (16/10) : un point de l'aperçu gris intérieur (x 1795), absent des pages Custom vides -> clic refusé."""
+    y = LAYER_Y0 + LAYER_PITCH * k
+    if any((c := read(x, y)) and sum(c) >= 300 for x in range(LAYER_EDGE[0], LAYER_EDGE[1] + 1)):
+        return None
+    return "bord de la case de couche %d introuvable (x %d..%d, y %d)" % (k + 1, LAYER_EDGE[0], LAYER_EDGE[1], y)
+
+
 def layer_frame(k):
-    return LAYER_FRAME_X, LAYER_Y0 + LAYER_PITCH * k
+    """Garde-fou de la case k pour Target.check / on_mixer (fonction de la cible)."""
+    return lambda t: layer_edge_why(lambda x, y: pixel(*t.screen(x, y)), k)
 
 
 def strip_point(i):

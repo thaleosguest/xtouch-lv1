@@ -4,6 +4,7 @@
 - voyants : INPUTS = Input ou Factory, BUSES = Mix, USER = Custom, GROUP = Spill, GLOBAL VIEW = onglet All ;
 - touches : INPUTS = input en 80 canaux, factory sinon ; BUSES ignoré hors 80 ; USER = custom ; GROUP = spill ; GLOBAL VIEW = onglet All ;
 - SMPTE : bascule timecode REAPER / heure ; garde-fou de la rangée Custom / Spill (mode_row_why) ;
+- garde-fou des cases de couche : bord gauche clair (gris, bleu, violet en Custom) ;
 - LV1Clicker : clic du mode avec le nombre de canaux et le n° de Mixer ; lv1_clic refuse un bouton absent."""
 import os, sqlite3, sys, tempfile, time
 sys.path.insert(0, sys.argv[1])
@@ -75,6 +76,10 @@ check("clic du mode + onglet", calls == [("custom", 64, 2), ("all", 2)])
 text = lambda x, y: (201, 201, 201) if (x // 2) % 3 == 0 else (17, 17, 17)
 check("rangée vue", lv1_clic.mode_row_why(text) is None)
 check("rangée absente", lv1_clic.mode_row_why(lambda x, y: (17, 17, 17)) is not None)
+edge = lambda x, y: (160, 160, 160) if x == 1784 else (71, 71, 71)           # contour gris d'une case inactive
+check("case de couche", lv1_clic.layer_edge_why(edge, 3) is None
+      and lv1_clic.layer_edge_why(lambda x, y: (71, 71, 71), 3) is not None
+      and lv1_clic.layer_edge_why(lambda x, y: (140, 81, 192) if x >= 1784 else (71, 71, 71), 0) is None)   # Custom
 check("bouton absent", lv1_clic.click_mode("mix", 64)[0] is False and lv1_clic.click_mode("factory", 80)[0] is False)
 check("positions", lv1_clic.MODE_BUTTONS["factory"] == (1847, 442) and lv1_clic.MODE_BUTTONS["spill"] == (1881, 479))
 
