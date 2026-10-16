@@ -786,7 +786,8 @@ class Surface:
                     self.midi.short(h, 0x90, NOTE_SEND, 0)
                     self.midi.short(h, 0x90, NOTE_SOLO_ALL, 0)
                     self.midi.short(h, 0x90, NOTE_FLIP, 0)
-                    for note in (NOTE_INPUTS, NOTE_BUSES, NOTE_USER, NOTE_GLOBAL_VIEW, NOTE_SMPTE, NOTE_LED_SMPTE):
+                    for note in (NOTE_INPUTS, NOTE_BUSES, NOTE_USER, NOTE_GROUP, NOTE_GLOBAL_VIEW, NOTE_SMPTE,
+                                 NOTE_LED_SMPTE):
                         self.midi.short(h, 0x90, note, 0)
                     for k in range(8):
                         self.midi.short(h, 0x90, NOTE_F1 + k, 0)
@@ -887,10 +888,11 @@ CC_JOG = 0x3C
 NOTE_FLIP = 0x32                  # FLIP (vérifié le 14/10) -> User Key « Flip AB Input channel » de la LV1
 # Touches View (norme Mackie ; 0x33 et 0x3F vues dans les journaux de Joseph, 0x43 et 0x45 par la suite de la norme)
 # -> boutons de mode de couche de la LV1 (demande de Joseph du 16/10) : INPUTS = Input (Factory en 16/32/64),
-# BUSES = Mix (80 canaux), USER = Custom ; GLOBAL VIEW = onglet All (aller-retour avec Mixer N, Joseph 16/10 : Spill
-# n'a plus de touche). Voyants = mode lu dans la base / onglet lu à l'écran. Notes vérifiées le 16/10 (journal 175539).
+# BUSES = Mix (80 canaux), USER = Custom, GROUP (0x4F, vue dans les journaux) = Spill ; GLOBAL VIEW = onglet All
+# (aller-retour avec Mixer N, Joseph 16/10). Voyants = mode lu dans la base / onglet lu à l'écran. Notes vérifiées le 16/10 (journal 175539).
 # SMPTE/BEATS (0x35) : afficheur 7 segments = timecode REAPER ou heure (Joseph, 16/10) ; LED SMPTE (0x71) = timecode.
 NOTE_GLOBAL_VIEW, NOTE_INPUTS, NOTE_BUSES, NOTE_USER = 0x33, 0x3F, 0x43, 0x45
+NOTE_GROUP = 0x4F
 NOTE_SMPTE, NOTE_LED_SMPTE = 0x35, 0x71
 NOTE_SOLO_ALL = 0x5A             # bouton SOLO (groupe Marker..Click..Solo, Mackie, à confirmer) : allumé si un solo
                                   # est actif dans la LV1 ; appui = /ClearAllSolo (demande de Joseph, 15/10)
@@ -1613,8 +1615,9 @@ class LayerModeWatcher(threading.Thread):
 
 def view_leds(mode, tab=None):
     """Voyants des touches View : mode de couche (lv1_db.MODE_*) et onglet affiché ; {note: allumée}. Inconnu : éteint.
-    Spill (3) n'a plus de touche (GLOBAL VIEW = onglet All, Joseph 16/10)."""
-    return {NOTE_INPUTS: mode in (0, 4), NOTE_BUSES: mode == 5, NOTE_USER: mode == 1, NOTE_GLOBAL_VIEW: tab == "All"}
+    Spill (3) = GROUP ; GLOBAL VIEW = onglet All (Joseph, 16/10)."""
+    return {NOTE_INPUTS: mode in (0, 4), NOTE_BUSES: mode == 5, NOTE_USER: mode == 1, NOTE_GROUP: mode == 3,
+            NOTE_GLOBAL_VIEW: tab == "All"}
 
 
 class LV1SelectionWatcher(threading.Thread):
@@ -1864,7 +1867,8 @@ class ButtonControl:
             if self.lv1:
                 self.lv1.all_tab()
             return
-        name = {NOTE_INPUTS: "input" if n == 80 else "factory", NOTE_BUSES: "mix", NOTE_USER: "custom"}[d1]
+        name = {NOTE_INPUTS: "input" if n == 80 else "factory", NOTE_BUSES: "mix", NOTE_USER: "custom",
+                NOTE_GROUP: "spill"}[d1]
         JOURNAL.mark("XT bouton View %02X -> mode %s (%s canaux)" % (d1, name, n))
         if name == "mix" and n != 80:
             JOURNAL.mark("mode Mix : seulement en 80 canaux")
@@ -1872,7 +1876,7 @@ class ButtonControl:
         if self.lv1:
             self.lv1.mode(name)
         elif "view" not in self.warned:
-            print("  Touches INPUTS / BUSES / USER / GLOBAL VIEW : avec --clic-lv1 seulement.")
+            print("  Touches INPUTS / BUSES / USER / GROUP / GLOBAL VIEW : avec --clic-lv1 seulement.")
             self.warned.add("view")
 
     def on_channel(self, d1, entries):
@@ -1941,7 +1945,7 @@ class ButtonControl:
                 self.reaper_tc = not self.reaper_tc
                 JOURNAL.mark("XT bouton SMPTE -> afficheur : %s" % ("timecode REAPER" if self.reaper_tc else "heure"))
             return True
-        if (status & 0xF0) == 0x90 and d1 in (NOTE_INPUTS, NOTE_BUSES, NOTE_USER, NOTE_GLOBAL_VIEW):
+        if (status & 0xF0) == 0x90 and d1 in (NOTE_INPUTS, NOTE_BUSES, NOTE_USER, NOTE_GROUP, NOTE_GLOBAL_VIEW):
             if d2:
                 self.on_view(d1)
             return True

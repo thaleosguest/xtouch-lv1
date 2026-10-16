@@ -1,8 +1,8 @@
 """Test : touches View de la X-Touch -> boutons de mode de couche de la LV1 (demande de Joseph du 16/10).
 - lv1_db.layer_mode sur une fausse base (surface 2 / 3, propriété 12 ; config_info) ;
 - LayerModeWatcher : relit seulement quand la base change ;
-- voyants : INPUTS = Input ou Factory, BUSES = Mix, USER = Custom, GLOBAL VIEW = onglet All ;
-- touches : INPUTS = input en 80 canaux, factory sinon ; BUSES ignoré hors 80 ; USER = custom ; GLOBAL VIEW = onglet All ;
+- voyants : INPUTS = Input ou Factory, BUSES = Mix, USER = Custom, GROUP = Spill, GLOBAL VIEW = onglet All ;
+- touches : INPUTS = input en 80 canaux, factory sinon ; BUSES ignoré hors 80 ; USER = custom ; GROUP = spill ; GLOBAL VIEW = onglet All ;
 - SMPTE : bascule timecode REAPER / heure ; garde-fou de la rangée Custom / Spill (mode_row_why) ;
 - LV1Clicker : clic du mode avec le nombre de canaux et le n° de Mixer ; lv1_clic refuse un bouton absent."""
 import os, sqlite3, sys, tempfile, time
@@ -37,7 +37,8 @@ check("relu au changement", len(reads) == 2)
 
 L = D.view_leds
 check("voyants", L(4)[D.NOTE_INPUTS] and L(0)[D.NOTE_INPUTS] and L(5)[D.NOTE_BUSES] and L(1)[D.NOTE_USER]
-      and L(4, "All")[D.NOTE_GLOBAL_VIEW] and not L(3)[D.NOTE_GLOBAL_VIEW] and not any(L(None).values())
+      and L(3)[D.NOTE_GROUP] and L(4, "All")[D.NOTE_GLOBAL_VIEW] and not L(3)[D.NOTE_GLOBAL_VIEW]
+      and not any(L(None).values())
       and sum(L(5, "Mixer 1").values()) == 1)
 
 class FakeClicker:
@@ -48,9 +49,9 @@ b = D.ButtonControl(st, None, write=False)
 b.lv1 = FakeClicker()
 def press(note):
     b.on_midi(1, 0x90, note, 0x7F, 0, [], None); b.on_midi(1, 0x90, note, 0, 0, [], None)
-for n in (D.NOTE_INPUTS, D.NOTE_BUSES, D.NOTE_USER, D.NOTE_GLOBAL_VIEW):
+for n in (D.NOTE_INPUTS, D.NOTE_BUSES, D.NOTE_USER, D.NOTE_GROUP, D.NOTE_GLOBAL_VIEW):
     press(n)
-check("80 canaux", b.lv1.modes == ["input", "mix", "custom", "all"])
+check("80 canaux", b.lv1.modes == ["input", "mix", "custom", "spill", "all"])
 b.lv1.modes.clear(); st.n_inputs = 64
 press(D.NOTE_INPUTS); press(D.NOTE_BUSES)
 check("64 canaux", b.lv1.modes == ["factory"])

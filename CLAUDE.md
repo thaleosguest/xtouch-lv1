@@ -66,7 +66,7 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   `config_info` track_type 0 = nb de canaux). Aucune commande réseau de mode (seul `/Set/SpillButton`, non essayé) :
   changer de mode = clic simulé (`lv1_clic.click_mode`, garde-fou = cadre de la 1re couche, le bouton inactif étant
   sombre). **Touches View (Joseph, 16/10, notes vérifiées journal 175539)** : INPUTS 0x3F = Input (Factory hors 80),
-  BUSES 0x43 = Mix, USER 0x45 = Custom ; GLOBAL VIEW 0x33 = onglet All <-> Mixer N (`toggle_all_tab`) ; Spill sans touche.
+  BUSES 0x43 = Mix, USER 0x45 = Custom ; GROUP 0x4F = Spill ; GLOBAL VIEW 0x33 = onglet All <-> Mixer N (`toggle_all_tab`).
   Input / Mix / Factory = radio ; Custom / Spill = bascules de la LV1 (2e clic -> dernier Input / Mix).
   **Piège (1er essai, 16/10)** : en mode Custom la colonne des couches change d'allure, (1795, 537) devient sombre -> tous
   les clics de mode ET de couche refusés (« bloqué sur USER »). Garde-fou des modes = texte / bleu dans les boutons Custom
