@@ -69,8 +69,11 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   BUSES 0x43 = Mix, USER 0x45 = Custom ; GROUP 0x4F = Spill ; GLOBAL VIEW 0x33 = onglet All <-> Mixer N (`toggle_all_tab`).
   Input / Mix / Factory = radio ; Custom / Spill = bascules de la LV1 (2e clic -> dernier Input / Mix).
   **Piège (1er essai, 16/10)** : en mode Custom la colonne des couches change d'allure, (1795, 537) devient sombre -> tous
-  les clics de mode ET de couche refusés (« bloqué sur USER »). Garde-fou des modes = texte / bleu dans les boutons Custom
-  et Spill (`mode_row_why`, y 479). Clics de COUCHE : garde-fou = bord gauche des cases (x 1782..1789,
+  les clics de mode ET de couche refusés (« bloqué sur USER »). Garde-fou des modes = `mode_guard_why` : rangée Custom / Spill
+  (`mode_row_why`, y 479, somme RVB >= 300 : violet de Custom actif = 413 ; 2e essai : seuil 450 -> Custom / Spill actifs
+  non reconnus, tout bloqué) OU bord de la 1re couche. **Lenteur (2e essai : 1 à 2 s par clic)** : GetPixel = 15-30 ms par
+  point -> `Target.reader(box)` = une capture `screen_rows` (onglet ~30 ms, garde-fou ~35 ms). File des clics : appuis
+  répétés regroupés (radio = 1 clic, bascules Custom / Spill / All = parité). Clics de COUCHE : garde-fou = bord gauche des cases (x 1782..1789,
   `layer_edge_why`) : contour gris 160 inactive, bleu / violet (Custom) active ; l'ancien point (1795) était dans l'aperçu
   gris, absent des pages Custom vides (capture Custom du 16/10 : mêmes boutons et mêmes cases, Custom en violet). Voyants `view_leds(mode, onglet)` depuis `LayerModeWatcher` (base relue quand
   `db_stamp` change, onglet lu à l'écran, 0,5 s). SMPTE 0x35 = afficheur timecode REAPER / heure (`ButtonControl.reaper_tc`),

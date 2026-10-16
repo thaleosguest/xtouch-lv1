@@ -176,9 +176,27 @@ class Target:
             return "cadre de la case attendu en %s introuvable (couleur %s)" % (frame, c)
         return None
 
+    def reader(self, box):
+        """Une seule capture GDI de la zone box = (x0, y0, x1, y1) en pixels de référence 1920x1080 ; renvoie
+        read(x, y) (référence) -> (r, g, b) ou None hors zone. GetPixel coûte 15-30 ms PAR point (journal du 16/10 :
+        ~60 points lus un à un = 1 à 2 s avant chaque clic de mode)."""
+        x0, y0 = self.screen(box[0], box[1])
+        x1, y1 = self.screen(box[2], box[3])
+        try:
+            rows = screen_rows(x0, list(range(y0, y1 + 1)), x1 - x0 + 1)
+        except Exception:
+            return lambda x, y: None
+
+        def read(x, y):
+            sx, sy = self.screen(x, y)
+            return rows[sy - y0][sx - x0] if (x0 <= sx <= x1 and y0 <= sy <= y1) else None
+        return read
+
     def active_tab(self):
-        """Onglet affiché (« Mixer 1 », « Channel »…) lu à l'écran, ou None (LV1 cachée, illisible)."""
-        found = [name for name, x in TABS.items() if _close(pixel(*self.screen(x, TAB_READ_Y)), TAB_ACTIVE)]
+        """Onglet affiché (« Mixer 1 », « Channel »…) lu à l'écran (une capture de la ligne), ou None (LV1 cachée)."""
+        xs = list(TABS.values())
+        read = self.reader((min(xs), TAB_READ_Y, max(xs), TAB_READ_Y))
+        found = [name for name, x in TABS.items() if _close(read(x, TAB_READ_Y), TAB_ACTIVE)]
         return found[0] if len(found) == 1 else None
 
     def on_mixer(self, frame, action):
@@ -392,8 +410,9 @@ def layer_edge_why(read, k):
 
 
 def layer_frame(k):
-    """Garde-fou de la case k pour Target.check / on_mixer (fonction de la cible)."""
-    return lambda t: layer_edge_why(lambda x, y: pixel(*t.screen(x, y)), k)
+    """Garde-fou de la case k pour Target.check / on_mixer (fonction de la cible ; une capture du bord)."""
+    y = LAYER_Y0 + LAYER_PITCH * k
+    return lambda t: layer_edge_why(t.reader((LAYER_EDGE[0], y, LAYER_EDGE[1], y)), k)
 
 
 def strip_point(i):
@@ -448,14 +467,22 @@ def click_layer(k, mixer=1, method="message"):
 
 
 def mode_row_why(read):
-    """Garde-fou des boutons de mode : la rangée Custom / Spill doit montrer du texte ou un fond bleu (pixels clairs)
-    dans chacun des deux boutons. Le cadre des couches ne convient pas : en mode Custom la colonne des couches change
-    d'allure (journal du 16/10 : (1795, 537) sombre -> plus aucun clic de mode, Custom « bloqué »)."""
+    """Garde-fou des boutons de mode : la rangée Custom / Spill doit montrer, dans chacun des deux boutons, du texte ou
+    un fond de bouton actif — somme RVB >= 300 : texte (≥ 600), bleu actif (512), violet de Custom actif (413), contour
+    gris (480) ; le fond de la colonne (71 -> 213) et l'intérieur sombre (17) ne comptent pas. 2e essai du 16/10 : seuil
+    450 -> Custom / Spill ACTIFS non reconnus (violet), plus aucun clic de mode ensuite."""
     for x0, x1 in MODE_SPANS:
-        hits = sum(1 for x in range(x0, x1 + 1, 2) if (c := read(x, MODE_ROW_Y)) and sum(c) >= 450)
+        hits = sum(1 for x in range(x0, x1 + 1, 2) if (c := read(x, MODE_ROW_Y)) and sum(c) >= 300)
         if hits < 3:
             return "boutons Custom / Spill introuvables en y %d (x %d..%d)" % (MODE_ROW_Y, x0, x1)
     return None
+
+
+def mode_guard_why(read):
+    """Page Mixer reconnue pour un clic de mode : rangée Custom / Spill OU bord de la 1re case de couche (au cas où un
+    mode actif dessinerait ses boutons d'une couleur pas encore vue). Rien des deux -> pas de clic."""
+    row = mode_row_why(read)
+    return row if (row and layer_edge_why(read, 0)) else None
 
 
 def click_mode(name, n_inputs, mixer=1, method="message"):
@@ -465,7 +492,7 @@ def click_mode(name, n_inputs, mixer=1, method="message"):
     if name not in (MODES_80 if n_inputs == 80 else MODES_64):
         return False, "pas de bouton %s en %s canaux" % (name, n_inputs or "?")
     t = Target(mixer)
-    row = lambda tg: mode_row_why(lambda x, y: pixel(*tg.screen(x, y)))
+    row = lambda tg: mode_guard_why(tg.reader((LAYER_EDGE[0], MODE_ROW_Y, MODE_SPANS[1][1], LAYER_Y0)))
     why = t.check(row)
     if why:
         return False, why

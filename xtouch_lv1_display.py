@@ -1494,6 +1494,17 @@ class LV1Clicker(threading.Thread):
                         kind, arg = self.q.get_nowait()
                 except IndexError:
                     pass
+            if kind in ("mode", "onglet"):       # appuis répétés en attente (journal du 16/10 : 12 appuis sur GROUP
+                n = 1                            # exécutés un par un pendant 30 s) : regroupés
+                try:
+                    while self.q.queue and self.q.queue[0] == (kind, arg):
+                        self.q.get_nowait()
+                        n += 1
+                except (IndexError, queue.Empty):
+                    pass
+                if n % 2 == 0 and (kind == "onglet" or arg in ("custom", "spill")):
+                    JOURNAL.mark("clic LV1 %s %s : %d appuis, bascule annulée" % (kind, arg or "", n))
+                    continue                     # bascule : un nombre pair d'appuis revient au même
             if kind == "jog":                    # crans rapides regroupés en un seul envoi
                 try:
                     while self.q.queue and self.q.queue[0][0] == "jog":

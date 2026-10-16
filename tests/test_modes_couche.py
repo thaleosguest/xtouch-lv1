@@ -5,6 +5,7 @@
 - touches : INPUTS = input en 80 canaux, factory sinon ; BUSES ignoré hors 80 ; USER = custom ; GROUP = spill ; GLOBAL VIEW = onglet All ;
 - SMPTE : bascule timecode REAPER / heure ; garde-fou de la rangée Custom / Spill (mode_row_why) ;
 - garde-fou des cases de couche : bord gauche clair (gris, bleu, violet en Custom) ;
+- appuis répétés regroupés (radio : 1 clic ; bascules : parité) ; Custom actif violet reconnu ;
 - LV1Clicker : clic du mode avec le nombre de canaux et le n° de Mixer ; lv1_clic refuse un bouton absent."""
 import os, sqlite3, sys, tempfile, time
 sys.path.insert(0, sys.argv[1])
@@ -80,6 +81,21 @@ edge = lambda x, y: (160, 160, 160) if x == 1784 else (71, 71, 71)           # c
 check("case de couche", lv1_clic.layer_edge_why(edge, 3) is None
       and lv1_clic.layer_edge_why(lambda x, y: (71, 71, 71), 3) is not None
       and lv1_clic.layer_edge_why(lambda x, y: (140, 81, 192) if x >= 1784 else (71, 71, 71), 0) is None)   # Custom
+purple = lambda x, y: (140, 81, 192) if 1786 <= x <= 1843 else ((201, 201, 201) if (x // 2) % 3 == 0 else (17, 17, 17))
+check("Custom actif (violet)", lv1_clic.mode_row_why(purple) is None)
+dark_row = lambda x, y: (160, 160, 160) if (x == 1784 and y == 537) else (17, 17, 17)     # rangée inconnue, couches OK
+check("garde-fou de secours", lv1_clic.mode_guard_why(dark_row) is None
+      and lv1_clic.mode_guard_why(lambda x, y: (71, 71, 71)) is not None)
+calls2 = []
+clk2 = D.LV1Clicker(st, 0, click_layer=lambda *a, **k: (True, None), click_strip=lambda *a, **k: (True, None),
+                    jog=lambda n: (True, None), click_mode=lambda *a: (calls2.append(a[0]), (True, None))[1],
+                    click_all=lambda *a: (calls2.append("all"), (True, None))[1])
+for name in ["spill"] * 4 + ["input"] * 3 + ["custom"] * 3:
+    clk2.mode(name)
+clk2.all_tab(); clk2.all_tab()
+clk2.start()
+time.sleep(0.4)
+check("appuis regroupés", calls2 == ["input", "custom"])
 check("bouton absent", lv1_clic.click_mode("mix", 64)[0] is False and lv1_clic.click_mode("factory", 80)[0] is False)
 check("positions", lv1_clic.MODE_BUTTONS["factory"] == (1847, 442) and lv1_clic.MODE_BUTTONS["spill"] == (1881, 479))
 
