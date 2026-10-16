@@ -16,7 +16,7 @@ Les deux écrivent un rapport `.json` dans ce dossier : c'est ce fichier qu'il f
   lance tout seul** (sauf `--sans-reaper-lv1`), ainsi que X/M32 Gain Recall s'il le trouve (installé par le pack, dans
   `%LOCALAPPDATA%\Programs`, à côté de XTouch-LV1 ou via « Lancer avec Windows » ; sauf `--sans-gain-recall`). Il a besoin de XTouch-LV1 (le cocher coche XTouch-LV1). REAPER est un
   logiciel Cockos : essai 60 jours, puis licence REAPER (Help > About REAPER pour entrer sa clé) ;
-- **X32 Gain Recall** v3.0.0 (release GitHub).
+- **X32 Gain Recall** v3.0.1 (release GitHub).
 
 Fermer REAPER (et les programmes à mettre à jour), double-clic, cocher, choisir le dossier si besoin (**Browse…** ;
 défaut `%LOCALAPPDATA%\Programs`), lire les étapes affichées, **Install**.
@@ -39,7 +39,7 @@ raccourci (ex. `XTouch-LV1.exe --clic-lv1 --attendre --pilote TracksLive-FL`). R
 ADJUST à l'écran, ou `XTouch-LV1.exe --overlay --reglage`.
 
 **Fabriquer l'installeur** (développement) : `py build.py` -> `dist\Total_Control_LV1_Install.exe` (PyInstaller + PySide6 ;
-Gain Recall = release GitHub v3.0.0, téléchargée une fois dans `build\gainrecall`, empreinte vérifiée ;
+Gain Recall = release GitHub v3.0.1, téléchargée une fois dans `build\gainrecall`, empreinte vérifiée ;
 `--gain-recall CHEMIN.exe` = un exe local ; `--sans-gain-recall`).
 
 ## Test 1 : la LV1 donne-t-elle les couleurs et les vumètres ?

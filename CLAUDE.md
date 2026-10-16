@@ -91,7 +91,7 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   `py build.py` -> `dist/Total_Control_LV1_Install.exe` (installer.py en
   onefile qui embarque build/stage/{xtouch,gainrecall}). Cases à cocher (demande de Joseph) : XTouch-LV1, REAPER LV1
   (intégration REAPER, sans dossier propre, dépend de XTouch-LV1 : cocher l'un coche l'autre, désinstaller XTouch-LV1
-  la retire), X32 Gain Recall (release GitHub GR_TAG v3.0.0 téléchargée par build.py dans build/gainrecall, SHA-256
+  la retire), X32 Gain Recall (release GitHub GR_TAG v3.0.1 téléchargée par build.py dans build/gainrecall, SHA-256
   comparé au « digest » de l'API ; mode d'emploi = MODE_EMPLOI.md du dépôt x32-gain-recall-workspace au même tag,
   converti en HTML par build.md_to_html ; version.txt). Dossier choisi (Browse…, défaut %LOCALAPPDATA%\Programs,
   dossier non inscriptible refusé) ; étapes expliquées dans la fenêtre selon les cases.
