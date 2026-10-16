@@ -1,7 +1,7 @@
 """Test : afficheur 7 segments (position REAPER, sinon heure du PC), notification de couche, /time de REAPER.
 - time_display : 1 h 02 min 03,456 s -> « 1.02.03.456 » ; 17:05:09 -> « 17.05.09 » + 3 blancs ; 10 codes, points
   fusionnés dans le chiffre précédent (+0x40) ;
-- layer_toast : couche par défaut ignorée ; banque X-Touch, couche vide et Mixer 2 en sous-titre ;
+- layer_toast : couche par défaut ignorée ; nom seul (sans « banque X-Touch » ni « vide ») ;
 - ReaperLink : /time f reçu sur le port d'écoute -> .time, alive()."""
 import os, socket, sys, time
 sys.path.insert(0, sys.argv[1])
@@ -31,9 +31,9 @@ check("heure", txt(t) == " 17.05.09   " and len(t) == 10)
 a, t = D.time_display(-0.2, None)
 check("négatif", txt(t) == "  0.00.00.000")
 check("défaut ignoré", D.layer_toast("Ch 1-16 (par défaut)") is None and D.layer_toast(None) is None)
-check("simple", D.layer_toast("Grp/Fx") == ("Grp/Fx", None))
-check("banque", D.layer_toast("Ch 17-32 (banque X-Touch)") == ("Ch 17-32", "X-Touch bank"))
-check("vide + banque + M2", D.layer_toast("Page-3 (vide) (banque X-Touch)", 2) == ("Page-3", "Mixer 2  ·  empty  ·  X-Touch bank"))
+check("simple", D.layer_toast("Grp/Fx") == "Grp/Fx")
+check("banque", D.layer_toast("Ch 17-32 (banque X-Touch)") == "Ch 17-32")
+check("vide + banque", D.layer_toast("Page-3 (vide) (banque X-Touch)") == "Page-3")
 
 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
 r = R.ReaperLink("127.0.0.1", 9, port)

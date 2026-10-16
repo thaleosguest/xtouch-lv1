@@ -240,6 +240,7 @@ class LV1State:
         self.custom_on = {}       # vue -> bouton Custom allumé ? (/Notify/CustomButton, hypothèse)
         self.spill_on = {}        # vue -> bouton Spill allumé ? (/Notify/SpillButton, hypothèse)
         self.layer_mode = {}      # vue -> mode de couche lu dans la base (lv1_db.MODE_* ; touches View de la X-Touch)
+        self.lv1_tab = None       # onglet affiché par la LV1, lu à l'écran (« Mixer 1 », « All »…)
         self.n_inputs = None      # canaux d'entrée configurés (16 / 32 / 64 / 80), base LV1
         self.version = ""
         self.held_tracks = set()  # (g, ch) dont le fader X-Touch est sous le doigt : retours LV1 ignorés
@@ -785,7 +786,7 @@ class Surface:
                     self.midi.short(h, 0x90, NOTE_SEND, 0)
                     self.midi.short(h, 0x90, NOTE_SOLO_ALL, 0)
                     self.midi.short(h, 0x90, NOTE_FLIP, 0)
-                    for note in (NOTE_INPUTS, NOTE_BUSES, NOTE_USER, NOTE_GLOBAL_VIEW):
+                    for note in (NOTE_INPUTS, NOTE_BUSES, NOTE_USER, NOTE_GLOBAL_VIEW, NOTE_SMPTE, NOTE_LED_SMPTE):
                         self.midi.short(h, 0x90, note, 0)
                     for k in range(8):
                         self.midi.short(h, 0x90, NOTE_F1 + k, 0)
@@ -886,8 +887,11 @@ CC_JOG = 0x3C
 NOTE_FLIP = 0x32                  # FLIP (vérifié le 14/10) -> User Key « Flip AB Input channel » de la LV1
 # Touches View (norme Mackie ; 0x33 et 0x3F vues dans les journaux de Joseph, 0x43 et 0x45 par la suite de la norme)
 # -> boutons de mode de couche de la LV1 (demande de Joseph du 16/10) : INPUTS = Input (Factory en 16/32/64),
-# BUSES = Mix (80 canaux), USER = Custom, GLOBAL VIEW = Spill. Voyants = mode lu dans la base.
+# BUSES = Mix (80 canaux), USER = Custom ; GLOBAL VIEW = onglet All (aller-retour avec Mixer N, Joseph 16/10 : Spill
+# n'a plus de touche). Voyants = mode lu dans la base / onglet lu à l'écran. Notes vérifiées le 16/10 (journal 175539).
+# SMPTE/BEATS (0x35) : afficheur 7 segments = timecode REAPER ou heure (Joseph, 16/10) ; LED SMPTE (0x71) = timecode.
 NOTE_GLOBAL_VIEW, NOTE_INPUTS, NOTE_BUSES, NOTE_USER = 0x33, 0x3F, 0x43, 0x45
+NOTE_SMPTE, NOTE_LED_SMPTE = 0x35, 0x71
 NOTE_SOLO_ALL = 0x5A             # bouton SOLO (groupe Marker..Click..Solo, Mackie, à confirmer) : allumé si un solo
                                   # est actif dans la LV1 ; appui = /ClearAllSolo (demande de Joseph, 15/10)
 # Assignation des encodeurs (norme Mackie, à confirmer) : TRACK 0x28. Encodeurs : CC 0x10-0x17 relatifs
@@ -975,18 +979,15 @@ def time_display(seconds, clock):
     return seg_codes("", 2), seg_codes(text, 10)
 
 
-def layer_toast(layer_name, mixer=1):
-    """Nom de couche du pont -> (nom, sous-titre) de la notification de l'overlay, ou None (couche pas encore connue)."""
+def layer_toast(layer_name):
+    """Nom de couche du pont -> nom seul pour la notification (Joseph, 16/10 : « juste le nom du layer »), sans les
+    mentions « (banque X-Touch) » / « (vide) » ; None si la couche n'est pas encore connue."""
     if not layer_name or layer_name.endswith("(par défaut)"):
         return None
-    tags = []
-    for suffix, tag in ((" (banque X-Touch)", "X-Touch bank"), (" (vide)", "empty")):
+    for suffix in (" (banque X-Touch)", " (vide)"):
         if layer_name.endswith(suffix):
             layer_name = layer_name[:-len(suffix)]
-            tags.insert(0, tag)
-    if mixer == 2:
-        tags.insert(0, "Mixer 2")
-    return layer_name, "  ·  ".join(tags) or None
+    return layer_name
 
 
 # Pan côté réseau LV1 : -45 (L45) .. +45 (R45), comme l'écran et la base (bug du 15/10 : envoyé en -1..+1, « tout à
@@ -1430,18 +1431,21 @@ class LV1Clicker(threading.Thread):
     WAIT_LAYER = 1.0     # s d'attente de /Notify/CurrentLayer après un clic de couche
 
     def __init__(self, state, page, click_layer=None, click_strip=None, jog=None, jog_method="message",
-                 click_mode=None):
+                 click_mode=None, click_all=None):
         # click_strip(i, mixer, rgb=...) : couleur du canal (0..255) pour trouver la bande du nom à l'écran.
         # Bug du 15/10 : passée en 3e position, elle tombait dans « method » -> aucune sélection cliquée.
-        # click_mode(nom, n_inputs, mixer) : bouton Input / Mix / Factory / Custom / Spill (touches View).
+        # click_mode(nom, n_inputs, mixer) : bouton Input / Mix / Factory / Custom / Spill (touches View) ;
+        # click_all(mixer) : onglet All <-> Mixer N (GLOBAL VIEW).
         super().__init__(daemon=True)
         self.state, self.page = state, page
-        if click_layer is None or click_strip is None or click_mode is None:
+        if None in (click_layer, click_strip, click_mode, click_all):
             import lv1_clic
             click_layer = click_layer or lv1_clic.click_layer
             click_strip = click_strip or lv1_clic.click_strip
             click_mode = click_mode or lv1_clic.click_mode
+            click_all = click_all or lv1_clic.toggle_all_tab
         self.click_layer, self.click_strip, self.click_mode = click_layer, click_strip, click_mode
+        self.click_all = click_all
         if jog is None:
             import lv1_clic
             jog = lambda n: lv1_clic.jog_bottom_fader(n, page + 1, jog_method)
@@ -1456,6 +1460,10 @@ class LV1Clicker(threading.Thread):
     def mode(self, name):
         """Bouton de mode de couche de la LV1 : input, mix, factory, custom, spill."""
         self.q.put(("mode", name))
+
+    def all_tab(self):
+        """Onglet All de la LV1, ou retour sur Mixer N si All est déjà affiché."""
+        self.q.put(("onglet", None))
 
     def jog(self, notches):
         """Jog wheel : crans de molette sur le fader de plugin du bas de la page Channel."""
@@ -1499,6 +1507,12 @@ class LV1Clicker(threading.Thread):
                             self.jog_fallback(arg)       # choix de Joseph : jog selon la page LV1
                         elif not ok:
                             self._refused("jog", why or "envoi refusé par Windows")
+                    continue
+                if kind == "onglet":
+                    ok, why = self.click_all(self.page + 1)
+                    JOURNAL.mark("clic LV1 onglet All / Mixer : %s" % ("envoyé" if ok else why))
+                    if not ok:
+                        self._refused("onglet All", why or "envoi refusé par Windows")
                     continue
                 if kind == "mode":
                     with self.state.lock:
@@ -1553,17 +1567,28 @@ class LayerModeWatcher(threading.Thread):
     Le réseau ne le donne pas (/Notify/CustomButton et /Notify/SpillButton ne bougent pas, vérifié le 14/10)."""
     PERIOD = 0.5
 
-    def __init__(self, state, page, read=None, stamp=None):
+    def __init__(self, state, page, read=None, stamp=None, tab=None):
         super().__init__(daemon=True)
         self.state, self.page = state, page
         if read is None or stamp is None:
             import lv1_db
             read = read or (lambda: lv1_db.layer_mode(page + 1))
             stamp = stamp or lv1_db.db_stamp
-        self.read, self.stamp = read, stamp
+        if tab is None and sys.platform == "win32":          # onglet affiché (voyant GLOBAL VIEW = onglet All)
+            import lv1_clic
+            tab = lambda: lv1_clic.Target(page + 1).active_tab()
+        self.read, self.stamp, self.tab = read, stamp, tab
         self.last = object()
 
     def step(self):
+        if self.tab:
+            try:
+                t = self.tab()
+            except Exception:
+                t = None
+            if t is not None:                                # illisible (LV1 cachée) : on garde le dernier
+                with self.state.lock:
+                    self.state.lv1_tab = t
         st = self.stamp()
         if st == self.last:
             return
@@ -1586,9 +1611,10 @@ class LayerModeWatcher(threading.Thread):
             time.sleep(self.PERIOD)
 
 
-def view_leds(mode):
-    """Voyants des touches View selon le mode de couche (lv1_db.MODE_*) : {note: allumée}. Inconnu : tout éteint."""
-    return {NOTE_INPUTS: mode in (0, 4), NOTE_BUSES: mode == 5, NOTE_USER: mode == 1, NOTE_GLOBAL_VIEW: mode == 3}
+def view_leds(mode, tab=None):
+    """Voyants des touches View : mode de couche (lv1_db.MODE_*) et onglet affiché ; {note: allumée}. Inconnu : éteint.
+    Spill (3) n'a plus de touche (GLOBAL VIEW = onglet All, Joseph 16/10)."""
+    return {NOTE_INPUTS: mode in (0, 4), NOTE_BUSES: mode == 5, NOTE_USER: mode == 1, NOTE_GLOBAL_VIEW: tab == "All"}
 
 
 class LV1SelectionWatcher(threading.Thread):
@@ -1814,6 +1840,7 @@ class ButtonControl:
         self.busy = busy          # vrai si un fader est sous le doigt : pas de changement de banque
         self.lv1 = None           # LV1Clicker si --clic-lv1 : la LV1 suit couche et sélection
         self.transport = None     # TransportControl (Reaper) : reçoit le jog quand il ne va pas à la LV1
+        self.reaper_tc = True     # afficheur : timecode de REAPER (s'il répond) ou heure ; touche SMPTE
         self.warned = set()
 
     def on_bank(self, d1):
@@ -1832,8 +1859,12 @@ class ButtonControl:
         """Touches View -> bouton de mode de couche de la LV1 (clic simulé, --clic-lv1)."""
         with self.state.lock:
             n = self.state.n_inputs
-        name = {NOTE_INPUTS: "input" if n == 80 else "factory", NOTE_BUSES: "mix", NOTE_USER: "custom",
-                NOTE_GLOBAL_VIEW: "spill"}[d1]
+        if d1 == NOTE_GLOBAL_VIEW:
+            JOURNAL.mark("XT bouton Global View -> onglet All / Mixer")
+            if self.lv1:
+                self.lv1.all_tab()
+            return
+        name = {NOTE_INPUTS: "input" if n == 80 else "factory", NOTE_BUSES: "mix", NOTE_USER: "custom"}[d1]
         JOURNAL.mark("XT bouton View %02X -> mode %s (%s canaux)" % (d1, name, n))
         if name == "mix" and n != 80:
             JOURNAL.mark("mode Mix : seulement en 80 canaux")
@@ -1904,6 +1935,11 @@ class ButtonControl:
                     self.link.send("/Set/UserKey", [("i", keys[0]), ("T", True)])
                     self.link.send("/Set/UserKey", [("i", keys[0]), ("F", False)])
                     JOURNAL.mark("XT bouton Flip -> User Key %d (Flip A/B)" % (keys[0] + 1))
+            return True
+        if (status & 0xF0) == 0x90 and d1 == NOTE_SMPTE:
+            if d2:
+                self.reaper_tc = not self.reaper_tc
+                JOURNAL.mark("XT bouton SMPTE -> afficheur : %s" % ("timecode REAPER" if self.reaper_tc else "heure"))
             return True
         if (status & 0xF0) == 0x90 and d1 in (NOTE_INPUTS, NOTE_BUSES, NOTE_USER, NOTE_GLOBAL_VIEW):
             if d2:
@@ -2522,6 +2558,7 @@ def main():
     if master_target and surface.master_unit is not None:
         print("  Fader master -> %s" % default_label(*master_target))
     last_layer = object()
+    last_toast = [None]                   # dernier nom notifié (pas deux notifs pour la même couche)
     woke = []
     tracks_sent = [0.0]
     diag_t = [0.0, None]                    # message reçu pendant l'attente de fin de tour, traité au début du suivant
@@ -2560,9 +2597,10 @@ def main():
                 if layer_name:
                     print("  Couche affichée : %s" % layer_name)
                     JOURNAL.mark("affiché : %s" % layer_name)
-                    toast = layer_toast(layer_name, a.mixer)
-                    if overlay and toast:
-                        overlay.set_layer(*toast)
+                    toast = layer_toast(layer_name)
+                    if overlay and toast and toast != last_toast[0]:     # banque X-Touch puis LV1 : une seule notif
+                        last_toast[0] = toast
+                        overlay.set_layer(toast)
                 last_layer = layer_name
             rings, recs = gain.frame(entries[:surface.strips], bot)
             surface.push(top, bot, cols, lvls, fads, now, held, master_fv)
@@ -2584,9 +2622,11 @@ def main():
             for k, on in enumerate(sends.fkey_leds()):
                 surface.set_main_led(NOTE_F1 + k, on)
             with state.lock:
-                lmode = state.layer_mode.get(a.mixer - 1)
-            for note, on in view_leds(lmode).items():             # touches View = mode de couche de la LV1
+                lmode, ltab = state.layer_mode.get(a.mixer - 1), state.lv1_tab
+            for note, on in view_leds(lmode, ltab).items():       # touches View = mode de couche / onglet All
                 surface.set_main_led(note, on)
+            surface.set_main_led(NOTE_SMPTE, buttons.reaper_tc)   # SMPTE : timecode choisi ; LED SMPTE : affiché
+            surface.set_main_led(NOTE_LED_SMPTE, bool(buttons.reaper_tc and reaper and reaper.alive()))
             with state.lock:
                 sel = state.selected
                 any_solo = any(t.get("solo") for t in state.tracks.values())
@@ -2602,8 +2642,8 @@ def main():
                 assign = seg_codes("SE", 2)
                 timecode = seg_codes(sends.label() or "--", 5) + timecode[5:]
             else:                                            # position de REAPER LV1, sinon heure (Joseph, 16/10)
-                assign, timecode = time_display(reaper.time if reaper and reaper.alive() else None,
-                                                time.localtime())
+                tc = reaper.time if (buttons.reaper_tc and reaper and reaper.alive()) else None
+                assign, timecode = time_display(tc, time.localtime())
             surface.push_master_display(assign, timecode)
             if overlay:
                 if faders.held(now):                       # touché, ou bougé sans toucher (ongle) : bandeau affiché

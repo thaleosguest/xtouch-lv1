@@ -27,10 +27,11 @@ REF_W, REF_H = 1920.0, 1080.0
 LAYER_X, LAYER_Y0, LAYER_PITCH, LAYER_FRAME_X = 1847, 537, 72, 1795
 # Boutons de mode de couche, au-dessus des couches (captures du 16/10/2026, page Mixer 1, 1920x1080) : 80 canaux =
 # Input + Mix ; 16 / 32 / 64 = un seul bouton Factory centré ; Custom et Spill partout. Colonne des couches identique
-# dans les deux cas. Actif = rempli de bleu (56, 201, 255), inactif = fond sombre + contour : on vérifie donc le cadre
-# de la 1re couche (layer_frame(0)), pas le bouton lui-même.
+# dans les deux cas. Actif = rempli de bleu (56, 201, 255), inactif = fond sombre + texte clair : garde-fou = texte ou
+# bleu présent dans les boutons Custom et Spill (mode_row_why ; 8 à 11 points clairs sur les captures, 0 ailleurs).
 MODE_BUTTONS = {"input": (1814, 442), "mix": (1881, 442), "factory": (1847, 442), "custom": (1814, 479),
                 "spill": (1881, 479)}
+MODE_ROW_Y, MODE_SPANS = 479, ((1786, 1843), (1853, 1910))     # rangée Custom / Spill (garde-fou)
 MODES_80 = ("input", "mix", "custom", "spill")
 MODES_64 = ("factory", "custom", "spill")
 STRIP_X0, STRIP_PITCH, STRIP_NAME_Y = 142 + 46, 96, 433
@@ -143,8 +144,9 @@ class Target:
         cx, cy = self.pt(rx, ry)
         return self.rect[0] + cx, self.rect[1] + cy
 
-    def check(self, frame=None):
-        """None si on peut cliquer, sinon la raison (texte)."""
+    def check(self, frame=None, tabs=True):
+        """None si on peut cliquer, sinon la raison (texte). frame : point (x, y) d'un cadre clair attendu, ou
+        fonction (target) -> raison ou None. tabs=False : n'importe quel onglet (bascule de l'onglet All)."""
         if not is_admin():
             return "pas administrateur (la LV1 l'est : Windows bloquerait le clic)"
         if not self.hwnd:
@@ -153,16 +155,24 @@ class Target:
             return "LV1 réduite"
         if not self.rect or self.rect[2] < 800:
             return "zone client LV1 illisible"
+        if not tabs:
+            return None
         if not self.detached:
             tab = self.active_tab()
             if tab not in ("Mixer %d" % self.mixer, "Channel"):
                 return "onglet Mixer %d (ou Channel) pas affiché (lu : %s ; LV1 cachée ?)" % (self.mixer, tab)
             if tab == "Channel":
                 return None            # aller-retour d'onglet : la case sera vérifiée sur la page Mixer
-        if frame is not None:
-            c = pixel(*self.screen(*frame))
-            if c is None or sum(c) < 150:
-                return "cadre de la case attendu en %s introuvable (couleur %s)" % (frame, c)
+        return self.frame_why(frame)
+
+    def frame_why(self, frame):
+        if frame is None:
+            return None
+        if callable(frame):
+            return frame(self)
+        c = pixel(*self.screen(*frame))
+        if c is None or sum(c) < 150:
+            return "cadre de la case attendu en %s introuvable (couleur %s)" % (frame, c)
         return None
 
     def active_tab(self):
@@ -183,11 +193,10 @@ class Target:
                     self.click(TABS["Channel"], TAB_Y)
                     return False, "onglet Mixer %d pas affiché après le clic" % self.mixer
                 time.sleep(0.02)
-            if frame is not None:
-                c = pixel(*self.screen(*frame))
-                if c is None or sum(c) < 150:
-                    self.click(TABS["Channel"], TAB_Y)
-                    return False, "case introuvable sur la page Mixer (couleur %s)" % (c,)
+            why = self.frame_why(frame)
+            if why:
+                self.click(TABS["Channel"], TAB_Y)
+                return False, "page Mixer : %s" % why
         ok = action()
         if hop:
             time.sleep(0.08)
@@ -426,16 +435,43 @@ def click_layer(k, mixer=1, method="message"):
     return t.on_mixer(layer_frame(k), lambda: t.click(*layer_point(k), method=method))
 
 
+def mode_row_why(read):
+    """Garde-fou des boutons de mode : la rangée Custom / Spill doit montrer du texte ou un fond bleu (pixels clairs)
+    dans chacun des deux boutons. Le cadre des couches ne convient pas : en mode Custom la colonne des couches change
+    d'allure (journal du 16/10 : (1795, 537) sombre -> plus aucun clic de mode, Custom « bloqué »)."""
+    for x0, x1 in MODE_SPANS:
+        hits = sum(1 for x in range(x0, x1 + 1, 2) if (c := read(x, MODE_ROW_Y)) and sum(c) >= 450)
+        if hits < 3:
+            return "boutons Custom / Spill introuvables en y %d (x %d..%d)" % (MODE_ROW_Y, x0, x1)
+    return None
+
+
 def click_mode(name, n_inputs, mixer=1, method="message"):
     """Clique le bouton de mode de couche `name` (input, mix, factory, custom, spill) ; n_inputs = configuration de la
-    LV1 (80 : Input / Mix ; sinon Factory). Renvoie (fait, raison)."""
+    LV1 (80 : Input / Mix ; sinon Factory). Input / Mix / Factory : un clic active ; Custom / Spill : bascules de la
+    LV1 (un 2e clic revient au dernier Input / Mix). Renvoie (fait, raison)."""
     if name not in (MODES_80 if n_inputs == 80 else MODES_64):
         return False, "pas de bouton %s en %s canaux" % (name, n_inputs or "?")
     t = Target(mixer)
-    why = t.check(layer_frame(0))
+    row = lambda tg: mode_row_why(lambda x, y: pixel(*tg.screen(x, y)))
+    why = t.check(row)
     if why:
         return False, why
-    return t.on_mixer(layer_frame(0), lambda: t.click(*MODE_BUTTONS[name], method=method))
+    return t.on_mixer(row, lambda: t.click(*MODE_BUTTONS[name], method=method))
+
+
+def toggle_all_tab(mixer=1, method="message"):
+    """Touche GLOBAL VIEW (Joseph, 16/10) : onglet All ; déjà sur All -> retour sur Mixer N. Renvoie (fait, raison)."""
+    t = Target(mixer)
+    why = t.check(tabs=False)
+    if why:
+        return False, why
+    if t.detached:
+        return False, "Mixer détaché : pas d'onglet All dans cette fenêtre"
+    tab = t.active_tab()
+    if tab is None:
+        return False, "onglets illisibles (LV1 cachée ?)"
+    return t.click(TABS["Mixer %d" % mixer if tab == "All" else "All"], TAB_Y, method), None
 
 
 def click_strip(i, mixer=1, method="message", rgb=None):

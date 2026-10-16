@@ -65,10 +65,15 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   dans `CurrentLV1.dat` (prop 12, `ovv_track_mapping_type` : 0 Factory, 1 CustomL, 3 SpillMd, 4 InptChn, 5 BussChn ;
   `config_info` track_type 0 = nb de canaux). Aucune commande réseau de mode (seul `/Set/SpillButton`, non essayé) :
   changer de mode = clic simulé (`lv1_clic.click_mode`, garde-fou = cadre de la 1re couche, le bouton inactif étant
-  sombre). **Touches View (choix de Joseph, 16/10)** : INPUTS 0x3F = Input (Factory hors 80), BUSES 0x43 = Mix, USER 0x45
-  = Custom, GLOBAL VIEW 0x33 = Spill (`ButtonControl.on_view`, `LV1Clicker.mode`) ; voyants `view_leds` depuis
-  `LayerModeWatcher` (base relue quand `db_stamp` change, 0,5 s). À vérifier sur le matériel : notes 0x43 / 0x45, et que
-  Spill allumé écrit bien 3 (SpillMd) en propriété 12. Test `tests/test_modes_couche.py`.
+  sombre). **Touches View (Joseph, 16/10, notes vérifiées journal 175539)** : INPUTS 0x3F = Input (Factory hors 80),
+  BUSES 0x43 = Mix, USER 0x45 = Custom ; GLOBAL VIEW 0x33 = onglet All <-> Mixer N (`toggle_all_tab`) ; Spill sans touche.
+  Input / Mix / Factory = radio ; Custom / Spill = bascules de la LV1 (2e clic -> dernier Input / Mix).
+  **Piège (1er essai, 16/10)** : en mode Custom la colonne des couches change d'allure, (1795, 537) devient sombre -> tous
+  les clics de mode ET de couche refusés (« bloqué sur USER »). Garde-fou des modes = texte / bleu dans les boutons Custom
+  et Spill (`mode_row_why`, y 479). Clics de COUCHE en mode Custom : toujours refusés (allure de la colonne Custom pas
+  encore relevée : capture à faire). Voyants `view_leds(mode, onglet)` depuis `LayerModeWatcher` (base relue quand
+  `db_stamp` change, onglet lu à l'écran, 0,5 s). SMPTE 0x35 = afficheur timecode REAPER / heure (`ButtonControl.reaper_tc`),
+  LED 0x71 = timecode affiché. Notification = nom seul, une fois par couche. Test `tests/test_modes_couche.py`.
 
 ## Fichiers
 

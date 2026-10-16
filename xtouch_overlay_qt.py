@@ -37,7 +37,7 @@ FRAME_MIN, FRAME_MAX = 0.35, 0.95
 BORDER = 5
 # Notification de couche : taille (px) ; coin bas-droit en pixels de référence 1920x1080 de la LV1 = juste à gauche
 # de la colonne des couches (x 1785) et au-dessus de la rangée SOLO (y 1018) ; visible TOAST_MS puis fondu.
-TOAST_W, TOAST_H, TOAST_RIGHT, TOAST_BOTTOM, TOAST_MS = 300, 92, 1772, 1010, 2500
+TOAST_W, TOAST_H, TOAST_RIGHT, TOAST_BOTTOM, TOAST_MS = 260, 64, 1772, 1010, 2500
 FLAGS = (Qt.FramelessWindowHint | Qt.Tool | Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus
          | Qt.WindowTransparentForInput)
 
@@ -140,7 +140,8 @@ class Banner(QWidget):
 
 class LayerToast(QWidget):
     """Couche affichée, en bas à droite de la LV1 comme une notification (demande de Joseph du 16/10) : petite carte
-    sombre, liseré bleu LV1, « LAYER » + nom de la couche (Ch 17-32, Grp/Fx, Page-1…). Traversée par les clics."""
+    sombre, liseré bleu LV1, le NOM de la couche seul (Ch 17-32, Grp/Fx, Page-1… : « juste le nom du layer »).
+    Traversée par les clics."""
 
     def __init__(self):
         super().__init__(None, FLAGS)
@@ -168,14 +169,9 @@ class LayerToast(QWidget):
         p.setClipPath(path)
         p.fillRect(QRectF(r.left(), r.top(), 6, r.height()), A_BLUE)          # liseré gauche : bleu des boutons LV1
         p.restore()
-        p.setPen(A_BLUE)
-        p.setFont(self.f_lbl)
-        lbl = "LAYER" + ("  ·  " + self.sub.upper() if self.sub else "")
-        p.drawText(QRectF(r.left() + 20, r.top() + 10, r.width() - 32, 20), Qt.AlignLeft | Qt.AlignVCenter, lbl)
         p.setPen(QColor(TXT))
         p.setFont(self.f_name)
-        p.drawText(QRectF(r.left() + 20, r.top() + 30, r.width() - 32, r.height() - 38), Qt.AlignLeft | Qt.AlignVCenter,
-                   self.name)
+        p.drawText(QRectF(r.left() + 20, r.top(), r.width() - 32, r.height()), Qt.AlignLeft | Qt.AlignVCenter, self.name)
 
 
 class Frame(QWidget):
