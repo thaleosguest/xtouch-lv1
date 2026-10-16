@@ -4,6 +4,7 @@
 --     vumètre (2 barres si stéréo), maintien de crête 1,5 s, voyant rouge d'écrêtage (clic = effacer), « R » si armée ;
 --   * ÉCRAN TACTILE (Joseph, 16/10) : gros boutons, pas de clic droit nécessaire (bouton MENU), colonnes larges,
 --     glisser le doigt sur les vumètres = défiler ; FIT = toutes les colonnes tiennent dans la fenêtre ;
+--   * SYNC TRACKS = lance lv1_sync_tracks.lua (pistes = entrées de la LV1 ; Joseph, 16/10) ;
 --   * à gauche : ARM ALL (tout armer / tout désarmer) et MON (monitoring d'entrée de toutes les pistes, OFF -> ON ->
 --     AUTO) ; W - / W + = hauteur des formes d'onde (zoom d'amplitude, affichage seulement) ; « R » en bas d'une colonne = armer cette piste (demande de Joseph du 16/10) ;
 --   * clic sur une colonne = sélectionne la piste et la fait défiler dans la vue ;
@@ -18,6 +19,7 @@
 -- comme dans Tracks Live. Relancer l'action la ferme (bascule).
 
 local EXT = "lv1_meter_bridge"
+local SCRIPT_DIR = ({reaper.get_action_context()})[2]:match("^(.*[\\/])")   -- lv1_sync_tracks.lua est à côté
 local DB_MIN, DB_MAX = -60, 0           -- échelle : barre pleine = 0 dBFS (comme Tracks Live)
 local HOLD, FALL = 1.5, 30              -- maintien de crête (s), retombée du vumètre (dB/s)
 local COL_W, COL_MIN = 44, 10           -- largeur fixe d'une colonne / minimum en mode « tout voir »
@@ -216,7 +218,7 @@ end
 
 local function draw_panel(list)
   buttons = {}
-  local bh = math.max(24, math.min(BTN_H, math.floor((gfx.h - 6) / 3) - 4))   -- fenêtre basse : boutons réduits
+  local bh = math.max(22, math.min(BTN_H, math.floor((gfx.h - 6) / 4) - 4))   -- fenêtre basse : boutons réduits
   local x1, x2 = 4, 8 + BTN_W
   local row = function(k) return 6 + k * (bh + 4) end
   local arm = common(list, "I_RECARM")
@@ -231,6 +233,7 @@ local function draw_panel(list)
   button(x2, row(1), BTN_W, bh, WAVE_UP and (z and string.format("+  %.2fx", z) or "WAVE +") or "?", false, "wave_up")
   button(x1, row(2), BTN_W, bh, "FIT", fit, "fit", {0.22, 0.79, 1.0})
   button(x2, row(2), BTN_W, bh, "MENU", false, "menu")
+  button(x1, row(3), 2 * BTN_W + 4, bh, "SYNC TRACKS", false, "sync")
 end
 
 local function draw()
@@ -264,7 +267,7 @@ local function draw()
   if #list == 0 then
     set(DIM); gfx.setfont(1)
     gfx.x, gfx.y = SIDE_W + 8, top
-    gfx.drawstr(lv1_only and "No LV1 track (run LV1 sync tracks)" or "No track")
+    gfx.drawstr(lv1_only and "No LV1 track: tap SYNC TRACKS" or "No track: tap SYNC TRACKS")
   end
   return max_scroll
 end
@@ -312,6 +315,8 @@ local function click(x, y)                                 -- boutons : dès l'a
       flash[b.act] = reaper.time_precise()
       local list = tracks()
       if b.act == "menu" then menu()
+      elseif b.act == "sync" then                           -- synchro des pistes avec la LV1 (Joseph, 16/10)
+        dofile(SCRIPT_DIR .. "lv1_sync_tracks.lua")
       elseif b.act == "fit" then
         fit = not fit
         reaper.SetExtState(EXT, "fit", fit and "1" or "0", true)

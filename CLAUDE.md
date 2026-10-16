@@ -77,6 +77,9 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   master cachés, transport en haut, règle minutes:secondes. Vérifié le 16/10 sur un REAPER portable (capture). Le pont
   lance REAPER LV1 (`suite.json` écrit par l'installeur, `start_reaper_lv1` par explorer.exe = droits normaux, pas si
   déjà ouvert, `--sans-reaper-lv1`). Icône rouge `assets/reaper_lv1.ico` (on ne modifie pas reaper.exe : licence).
+  Barre de vumètres : bouton SYNC TRACKS (dofile de lv1_sync_tracks.lua, à côté ; vérifié le 16/10 dans le REAPER
+  portable : 9 pistes créées). Liste des plugins (reaper-vstplugins64.ini, vstshells, clap) reprise du REAPER habituel
+  : REAPER rajoute de lui-même les dossiers VST3 standards à vstpath64 (vu le 16/10), la liste évite le scan.
   Restent : rappel « About » de la version d'évaluation, scan VST3 du dossier commun de Windows au 1er démarrage.
 - **Logo (16/10, Joseph : le même que X/M32 Gain Recall, autre couleur)** : `tools/make_icon.py` (repris de
   x32-gain-recall-workspace, bloc de droite bleu LV1 #38C9FF au lieu de l'ambre) -> `assets/logo.svg`, `assets/icon.ico`

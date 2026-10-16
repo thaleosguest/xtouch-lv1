@@ -372,6 +372,8 @@ docker > Attach docker to: Top. Tout se fait au doigt (écran tactile) ; le clic
   - **WAVE - / WAVE +** : hauteur des formes d'onde (affichage seulement, le son ne change pas) ; « ? » = action
     introuvable dans ce Reaper ;
   - **FIT** : toutes les colonnes tiennent dans la fenêtre (bleu) ou largeur fixe ;
+  - **SYNC TRACKS** : synchronise les pistes avec la LV1 (lance `lv1_sync_tracks.lua` : OUI = canaux enregistrés,
+    NON = tous) ; à faire au début (un nouveau projet est vide) et quand des canaux changent ;
   - **MENU** : Show mixer / Show master track (les décocher = vue « pistes seulement »), hauteur de toutes les pistes
     (Micro … Extreme), pistes LV1 seulement, effacer les écrêtages, ancrer / détacher.
 - Les pistes créées par la synchro sont désarmées, monitoring OFF.

@@ -470,6 +470,14 @@ def reaper_portable_config(rdir, xt_dir, personal, log, icon_src=None):
                 ini_set(lines, sec, k, v)
         log(_("Audio device settings copied from your REAPER", "Réglages de la carte son repris de votre REAPER"))
     write_lines(ini, lines)
+    # REAPER rajoute de lui-même les dossiers VST3 standards de Windows (essai du 16/10 : ~4 min de scan des Waves au
+    # 1er démarrage) : la liste déjà scannée par le REAPER habituel évite ce scan (fichiers connus = pas rescannés)
+    for f in ("reaper-vstplugins64.ini", "reaper-vstshells64.ini", "reaper-clap-win64.ini"):
+        s, d = os.path.join(personal or "", f), os.path.join(rdir, f)
+        if personal and os.path.exists(s) and not os.path.exists(d):
+            shutil.copy2(s, d)
+            log(_("Plugin list copied from your REAPER (no long scan): %s",
+                  "Liste des plugins reprise de votre REAPER (pas de long scan) : %s") % f)
     ext = os.path.join(rdir, "reaper-extstate.ini")
     el = read_lines(ext)
     if not ini_section(el, "lv1_meter_bridge"):           # vumètres : docker 1 (en haut), toutes les colonnes visibles
