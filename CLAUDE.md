@@ -4,6 +4,14 @@
 > et testé le 14/10/2026 dans une discussion précédente (hors Claude Code), pour ne pas refaire
 > les recherches. Tout ce qui est marqué « vérifié » l'a été sur le matériel réel de Joseph.
 
+## GitHub (publié le 16/10/2026)
+
+- Dépôt public `https://github.com/thaleosguest/xtouch-lv1` (branche `master`), release `v0.1` : `Total_Control_LV1_Install.exe`
+  + `XTouch-LV1-v0.1.zip` (zip de `build/stage/xtouch`, SANS les réglages ni journaux de Joseph de `dist/XTouch-LV1`).
+  Pas de CI : compiler (`py build.py`), zipper, puis `gh release create vX.Y <fichiers> --notes-file ...`.
+- Page de profil `thaleosguest/thaleosguest` (README : tableau des 3 produits). Gain Recall garde son nom et son dépôt.
+- Ne jamais versionner « Manuel Livetrack 2/ » (manuel d'un tiers), journaux, captures.
+
 ## Objectif
 
 Faire de la **Behringer X-Touch + X-Touch Extender** une surface de contrôle pour la **Waves eMotion
