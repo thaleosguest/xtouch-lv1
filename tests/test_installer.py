@@ -56,10 +56,10 @@ try:                                                    # REAPER LV1 seul, XTouc
 except RuntimeError:
     pass
 I.install(src, progs, [I.XT], rp, out.append, do_shortcuts=False)
-check("XT seul", I.installed(progs) == {I.XT: "0.1"} and not os.path.exists(rdir) and "RSbbb" in get(os.path.join(rp, "reaper-kb.ini")))
+check("XT seul", I.installed(progs) == {I.XT: I.VERSION} and not os.path.exists(rdir) and "RSbbb" in get(os.path.join(rp, "reaper-kb.ini")))
 old = os.path.join(progs, I.OLD_SUITES[0])                # installation faite sous l'ancien nom « LV1 Suite »
 os.rename(I.suite_dir(progs), old)
-check("ancien nom relu", I.installed(progs) == {I.XT: "0.1"})
+check("ancien nom relu", I.installed(progs) == {I.XT: I.VERSION})
 for _ in range(2):
     I.install(src, progs, [I.XT, I.RP, I.GR], rp, out.append, do_shortcuts=False)
 check("ancien dossier retiré", not os.path.exists(old) and os.path.isfile(os.path.join(I.suite_dir(progs), "installed.json")))
@@ -81,7 +81,7 @@ pk, ps_ = get(os.path.join(rp, "reaper-kb.ini")), get(os.path.join(rp, "Scripts"
 check("REAPER habituel nettoyé", "lv1_" not in pk and "lyrics" in pk and I.BEGIN not in ps_ and "user stuff" in ps_)
 check("réglage gardé", get(os.path.join(xt_dir, "xtouch_ecran.json")) == "MINE")
 check("crlf", "\n" not in kb.replace("\r\n", ""))
-check("installed", I.installed(progs) == {I.XT: "0.1", I.RP: I.REAPER_VERSION, I.GR: "3.0.0"})
+check("installed", I.installed(progs) == {I.XT: I.VERSION, I.RP: I.REAPER_VERSION, I.GR: "3.0.0"})
 import json
 sj = json.loads(get(os.path.join(xt_dir, "suite.json")))
 check("suite.json Gain Recall", sj.get("gainrecall") == os.path.join(progs, "X32 Gain Recall", "XM32_Gain_Recall_LV1.exe")

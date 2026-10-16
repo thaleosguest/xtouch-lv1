@@ -79,6 +79,11 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   `db_stamp` change, onglet lu à l'écran, 0,5 s). SMPTE 0x35 = afficheur timecode REAPER / heure (`ButtonControl.reaper_tc`),
   LED 0x71 = timecode affiché. Notification = nom seul, une fois par couche. Test `tests/test_modes_couche.py`.
 
+- **V0.2 (16/10)** : exe SANS console (`--noconsole`) : `redirect_output_to_log` -> `xtouch_console.txt`, `tray.py`
+  (copie de x32-gain-recall) : Mode d'emploi / Dossier des journaux / Quitter (`STOP`, fin propre), une seule instance
+  (mutex `Local\XTouchLV1_Bridge`, exe seulement). Voyant GROUP = Spill lu à l'écran (`lv1_clic.spill_on`, vert
+  (140, 255, 0)) : la base garde le mode d'avant (4) avec Spill allumé (vérifié, aucune propriété ne change).
+
 ## Fichiers
 
 - **V0.1 = installeur « Total Control for LV1 » (16/10/2026, ex « LV1 Suite » : nom choisi par Joseph ; « Total Control »

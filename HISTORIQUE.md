@@ -78,3 +78,11 @@ Chaque ligne correspond à un ou plusieurs commits git (`git log` pour le détai
 - Notification « LAYER » en bas à droite de la LV1 à chaque changement de couche.
 - Boutons Input / Mix / Factory / Custom / Spill de la LV1 relevés (80 et 64 canaux).
 - Touches INPUTS / BUSES / USER / GLOBAL VIEW = Input (Factory) / Mix / Custom / Spill de la LV1, voyants selon le mode.
+
+## 16/10/2026 : V0.2
+
+- Touches View : INPUTS = Input / Factory, BUSES = Mix, USER = Custom, GROUP = Spill, GLOBAL VIEW = onglet All ; voyants
+  (mode lu dans la base ; Spill et onglet lus à l'écran) ; clics rapides (une capture), appuis répétés regroupés.
+- Clics de couche aussi en Custom (garde-fou sur le bord des cases).
+- SMPTE : afficheur timecode REAPER / heure. Notification = nom de la couche seul.
+- XTouch-LV1 lance X/M32 Gain Recall ; exe sans fenêtre noire, icône près de l'horloge (Quitter), une seule instance.

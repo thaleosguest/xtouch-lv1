@@ -8,7 +8,7 @@ Une **Behringer X-Touch + X-Touch Extender** comme surface de contrôle de la **
 couleurs des canaux sur les écrans, vumètres, faders motorisés, Mute / Solo / Select, couches, sends, User Keys,
 transport vers REAPER — et le **gain des préamplis X32 / M32** sur les encodeurs.
 
-Version courante : **0.1**. Mode d'emploi complet : [MODE_EMPLOI.html](MODE_EMPLOI.html).
+Version courante : **0.2**. Mode d'emploi complet : [MODE_EMPLOI.html](MODE_EMPLOI.html).
 
 ## Téléchargement
 
@@ -17,7 +17,7 @@ Dans la page [Releases](../../releases/latest), deux fichiers :
 | Fichier | Contenu | Pour qui |
 |---|---|---|
 | **`Total_Control_LV1_Install.exe`** | le pack **Total Control for LV1** : installeur avec cases à cocher pour **XTouch-LV1**, **REAPER LV1** et **[X/M32 Gain Recall for eMotion LV1](https://github.com/thaleosguest/x32-gain-recall)** | la plupart des gens |
-| `XTouch-LV1-v0.1.zip` | XTouch-LV1 seul, sans installation (dézipper, lancer `XTouch-LV1.exe`) | qui veut juste la surface |
+| `XTouch-LV1-v0.2.zip` | XTouch-LV1 seul, sans installation (dézipper, lancer `XTouch-LV1.exe`) | qui veut juste la surface |
 
 ### Le pack Total Control for LV1
 
@@ -39,7 +39,11 @@ désinstalleur).
 - Mute, Solo, Select synchronisés avec l'écran de la LV1 ; ◄ BANK ► et ◄ CHANNEL ► suivent les couches
   (usine, custom, 80 canaux, Spill).
 - Encodeurs : pan, et **gain des préamplis X32 / M32** (avec X/M32 Gain Recall).
+- INPUTS / BUSES / USER / GROUP = boutons Input (Factory) / Mix / Custom / Spill de la LV1, GLOBAL VIEW = onglet All,
+  voyants selon l'état de la LV1.
+- Afficheur : position de REAPER ou heure (SMPTE pour basculer) ; nom de la couche en notification à l'écran.
 - Sends on fader, F1-F8 = User Keys de la LV1, FLIP = Flip A/B, transport et molette vers REAPER.
+- Lance tout seul REAPER LV1 et X/M32 Gain Recall ; tourne sans fenêtre, icône près de l'horloge pour quitter.
 
 ## Prérequis
 

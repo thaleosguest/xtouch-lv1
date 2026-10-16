@@ -44,7 +44,7 @@ import unicodedata
 import lv1_probe as L
 import xtouch_probe as X
 
-VERSION = "0.1"
+VERSION = "0.2"
 # Dossier des fichiers de Joseph (réglages, courbe, journaux, reaper/) : à côté de l'exe une fois compilé (build.py)
 HERE = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.abspath(__file__))
 COLOR_FILE = os.path.join(HERE, "xtouch_couleurs.json")
@@ -241,6 +241,7 @@ class LV1State:
         self.spill_on = {}        # vue -> bouton Spill allumé ? (/Notify/SpillButton, hypothèse)
         self.layer_mode = {}      # vue -> mode de couche lu dans la base (lv1_db.MODE_* ; touches View de la X-Touch)
         self.lv1_tab = None       # onglet affiché par la LV1, lu à l'écran (« Mixer 1 », « All »…)
+        self.spill_lit = False    # bouton Spill allumé sur la LV1, lu à l'écran (la base ne l'écrit pas)
         self.n_inputs = None      # canaux d'entrée configurés (16 / 32 / 64 / 80), base LV1
         self.version = ""
         self.held_tracks = set()  # (g, ch) dont le fader X-Touch est sous le doigt : retours LV1 ignorés
@@ -1580,17 +1581,18 @@ class LayerModeWatcher(threading.Thread):
     Le réseau ne le donne pas (/Notify/CustomButton et /Notify/SpillButton ne bougent pas, vérifié le 14/10)."""
     PERIOD = 0.5
 
-    def __init__(self, state, page, read=None, stamp=None, tab=None):
+    def __init__(self, state, page, read=None, stamp=None, tab=None, spill=None):
         super().__init__(daemon=True)
         self.state, self.page = state, page
         if read is None or stamp is None:
             import lv1_db
             read = read or (lambda: lv1_db.layer_mode(page + 1))
             stamp = stamp or lv1_db.db_stamp
-        if tab is None and sys.platform == "win32":          # onglet affiché (voyant GLOBAL VIEW = onglet All)
+        if (tab is None or spill is None) and sys.platform == "win32":
             import lv1_clic
-            tab = lambda: lv1_clic.Target(page + 1).active_tab()
-        self.read, self.stamp, self.tab = read, stamp, tab
+            tab = tab or (lambda: lv1_clic.Target(page + 1).active_tab())     # voyant GLOBAL VIEW = onglet All
+            spill = spill or (lambda: lv1_clic.spill_on(page + 1))           # voyant GROUP (pas dans la base)
+        self.read, self.stamp, self.tab, self.spill = read, stamp, tab, spill
         self.last = object()
 
     def step(self):
@@ -1602,6 +1604,14 @@ class LayerModeWatcher(threading.Thread):
             if t is not None:                                # illisible (LV1 cachée) : on garde le dernier
                 with self.state.lock:
                     self.state.lv1_tab = t
+        if self.spill:
+            try:
+                sp = self.spill()
+            except Exception:
+                sp = None
+            if sp is not None:                               # page Mixer pas affichée : on garde le dernier
+                with self.state.lock:
+                    self.state.spill_lit = sp
         st = self.stamp()
         if st == self.last:
             return
@@ -1624,11 +1634,13 @@ class LayerModeWatcher(threading.Thread):
             time.sleep(self.PERIOD)
 
 
-def view_leds(mode, tab=None):
-    """Voyants des touches View : mode de couche (lv1_db.MODE_*) et onglet affiché ; {note: allumée}. Inconnu : éteint.
-    Spill (3) = GROUP ; GLOBAL VIEW = onglet All (Joseph, 16/10)."""
-    return {NOTE_INPUTS: mode in (0, 4), NOTE_BUSES: mode == 5, NOTE_USER: mode == 1, NOTE_GROUP: mode == 3,
-            NOTE_GLOBAL_VIEW: tab == "All"}
+def view_leds(mode, tab=None, spill=False):
+    """Voyants des touches View : mode de couche (lv1_db.MODE_*), onglet affiché, Spill lu à l'écran ; {note: allumée}.
+    Inconnu : éteint. Spill allumé : la base garde le mode d'avant (4), mais seul Spill est allumé sur la LV1 -> seul
+    GROUP. GLOBAL VIEW = onglet All (Joseph, 16/10)."""
+    spill = bool(spill or mode == 3)
+    return {NOTE_INPUTS: mode in (0, 4) and not spill, NOTE_BUSES: mode == 5 and not spill,
+            NOTE_USER: mode == 1 and not spill, NOTE_GROUP: spill, NOTE_GLOBAL_VIEW: tab == "All"}
 
 
 class LV1SelectionWatcher(threading.Thread):
@@ -2388,6 +2400,54 @@ def start_gain_recall():
 
 
 OVERLAY_FACTORY = None   # tests : fabrique d'un faux affichage d'écran (sinon Qt / tkinter hors --dry-run)
+STOP = threading.Event()  # « Quitter » de l'icône près de l'horloge : fin propre de la boucle (écrans remis à zéro)
+
+
+def redirect_output_to_log():
+    """Exe sans fenêtre noire (Joseph, 16/10) : print() et les erreurs vont dans xtouch_console.txt, à côté de l'exe
+    (remplacé à chaque lancement). Sans effet quand une console existe (py, tests)."""
+    if sys.stdout is not None and sys.stderr is not None:
+        return
+    try:
+        f = open(os.path.join(HERE, "xtouch_console.txt"), "w", encoding="utf-8", buffering=1)
+    except OSError:
+        return
+    sys.stdout = sys.stdout or f
+    sys.stderr = sys.stderr or f
+
+
+def already_running():
+    """Une seule instance du pont (mutex Windows nommé) : sans fenêtre, un 2e lancement passerait inaperçu et se
+    disputerait les ports MIDI avec le 1er. Le mutex reste tenu jusqu'à la fin du processus."""
+    if sys.platform != "win32":
+        return False
+    import ctypes
+    k32 = ctypes.windll.kernel32
+    k32.CreateMutexW.restype = ctypes.c_void_p
+    already_running.handle = k32.CreateMutexW(None, False, "Local\\XTouchLV1_Bridge")
+    return k32.GetLastError() == 183                       # ERROR_ALREADY_EXISTS
+
+
+def start_tray():
+    """Icône près de l'horloge (comme X/M32 Gain Recall) : mode d'emploi, dossier des journaux, Quitter."""
+    try:
+        import tray
+    except ImportError:
+        return None
+
+    def open_path(path):
+        try:
+            os.startfile(path)
+        except OSError:
+            pass
+    return tray.TrayIcon(
+        "XTouch-LV1 v%s" % VERSION,
+        [("Mode d'emploi", lambda: open_path(os.path.join(HERE, "MODE_EMPLOI.html"))),
+         ("Dossier des journaux", lambda: open_path(HERE)),
+         None,
+         ("Quitter XTouch-LV1", STOP.set)],
+        icon_path=os.path.join(HERE, "assets", "icon.ico"),
+    ).start()
 
 
 def main():
@@ -2432,6 +2492,11 @@ def main():
     if getattr(sys, "frozen", False) and not argv:      # exe lancé d'un double-clic : réglage de Joseph
         argv = ["--clic-lv1", "--attendre"]
     a = ap.parse_args(argv)
+    redirect_output_to_log()
+    if getattr(sys, "frozen", False) and already_running():
+        print("  XTouch-LV1 tourne déjà (icône près de l'horloge) : ce lancement s'arrête.")
+        return 0
+    tray_icon = start_tray() if (getattr(sys, "frozen", False) and not a.dry_run) else None
     print("  XTouch-LV1 v%s" % VERSION)
     if not a.dry_run and not a.sans_reaper_lv1:
         threading.Thread(target=start_reaper_lv1, daemon=True).start()
@@ -2457,7 +2522,10 @@ def main():
     if a.attendre and main_idx is None and ext_idx is None:     # plug and play : on attend le branchement USB
         print("  En attente des X-Touch (brancher l'USB)...")
         while main_idx is None and ext_idx is None:
-            time.sleep(2)
+            if STOP.wait(2):
+                if tray_icon:
+                    tray_icon.stop()
+                return 0
             ports = midi.list()
             main_idx, ext_idx = X.pick_ports(ports, a.main, a.ext)
         time.sleep(2)                                  # laisser Windows finir d'installer les deux ports
@@ -2644,7 +2712,7 @@ def main():
     recall_until, recall_sent, recall_touched = [0.0], [0.0], [None]
     t_end = time.time() + a.seconds if a.seconds else None
     try:
-        while not (t_end and time.time() > t_end):
+        while not (t_end and time.time() > t_end) and not STOP.is_set():
             now = time.time()
             while True:
                 if woke:
@@ -2701,8 +2769,8 @@ def main():
             for k, on in enumerate(sends.fkey_leds()):
                 surface.set_main_led(NOTE_F1 + k, on)
             with state.lock:
-                lmode, ltab = state.layer_mode.get(a.mixer - 1), state.lv1_tab
-            for note, on in view_leds(lmode, ltab).items():       # touches View = mode de couche / onglet All
+                lmode, ltab, lspill = state.layer_mode.get(a.mixer - 1), state.lv1_tab, state.spill_lit
+            for note, on in view_leds(lmode, ltab, lspill).items():       # touches View = mode de couche / onglet All
                 surface.set_main_led(note, on)
             surface.set_main_led(NOTE_SMPTE, buttons.reaper_tc)   # SMPTE : timecode choisi ; LED SMPTE : affiché
             surface.set_main_led(NOTE_LED_SMPTE, bool(buttons.reaper_tc and reaper and reaper.alive()))
@@ -2784,6 +2852,8 @@ def main():
         for _, _, h in units:
             midi.close(h)
         print("\nArrêté, écrans remis à zéro.")
+        if tray_icon:
+            tray_icon.stop()
     return 0
 
 

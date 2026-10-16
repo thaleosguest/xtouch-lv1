@@ -499,6 +499,22 @@ def click_mode(name, n_inputs, mixer=1, method="message"):
     return t.on_mixer(row, lambda: t.click(*MODE_BUTTONS[name], method=method))
 
 
+SPILL_ON = (140, 255, 0)          # bouton Spill allumé (capture du 16/10) ; éteint = fond sombre (17)
+SPILL_PTS = ((1860, 479), (1900, 488), (1858, 486))
+
+
+def spill_on(mixer=1):
+    """Spill allumé ? lu à l'écran (la base ne l'écrit pas : mode resté 4 avec Spill allumé, 16/10). None si la page
+    Mixer N n'est pas affichée (onglet All, Channel, LV1 cachée) : le voyant garde alors son dernier état."""
+    t = Target(mixer)
+    if not t.hwnd or not t.rect or t.rect[2] < 800 or u32().IsIconic(t.hwnd):
+        return None
+    if not t.detached and t.active_tab() != "Mixer %d" % mixer:
+        return None
+    read = t.reader((1858, 479, 1900, 488))
+    return sum(1 for p in SPILL_PTS if _close(read(*p), SPILL_ON, 20)) >= 2
+
+
 def toggle_all_tab(mixer=1, method="message"):
     """Touche GLOBAL VIEW (Joseph, 16/10) : onglet All ; déjà sur All -> retour sur Mixer N. Renvoie (fait, raison)."""
     t = Target(mixer)

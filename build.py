@@ -6,7 +6,8 @@
     py build.py --sans-gain-recall       # XTouch-LV1 seul
 
 1. PyInstaller compile le pont (xtouch_lv1_display.py, overlay Qt compris : « XTouch-LV1.exe --overlay ») en dossier
-   (onedir, console, droits administrateur demandés au lancement) ;
+   (onedir, SANS fenêtre noire depuis le 16/10 : icône près de l'horloge, sortie dans xtouch_console.txt ; droits
+   administrateur demandés au lancement) ;
 2. build/stage/xtouch = ce dossier + reaper/*.lua + LISEZMOI.md + MODE_EMPLOI.html + exemple de couleurs ;
    build/stage/gainrecall = XM32_Gain_Recall_LV1.exe + MODE_EMPLOI.html (converti du MODE_EMPLOI.md de la release,
    pris dans le dépôt x32-gain-recall-workspace au tag GR_TAG) + version.txt ;
@@ -197,7 +198,7 @@ def main():
     print("Compilation de %s v%s..." % (NAME, ver))
     out = os.path.join(WORK, "out")
     icon = os.path.join(HERE, "assets", "icon.ico")      # logo bleu (tools/make_icon.py)
-    pyinstaller(["--console", "--uac-admin", "--icon", icon, "--name", NAME, "--distpath", out,
+    pyinstaller(["--noconsole", "--uac-admin", "--icon", icon, "--name", NAME, "--distpath", out,
                  "--hidden-import", "xtouch_overlay_qt", os.path.join(HERE, "xtouch_lv1_display.py")])
 
     stage_root = os.path.join(WORK, "stage")

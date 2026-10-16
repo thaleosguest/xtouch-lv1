@@ -31,7 +31,7 @@ check("base Mixer 2", lv1_db.layer_mode(2, db) == (1, 80))
 
 st = D.LV1State()
 reads, stamp = [], [1]
-w = D.LayerModeWatcher(st, 0, read=lambda: (reads.append(1), (4, 80))[1], stamp=lambda: stamp[0], tab=lambda: "All")
+w = D.LayerModeWatcher(st, 0, read=lambda: (reads.append(1), (4, 80))[1], stamp=lambda: stamp[0], tab=lambda: "All", spill=lambda: None)
 w.step(); w.step()
 check("lu une fois", len(reads) == 1 and st.layer_mode.get(0) == 4 and st.n_inputs == 80 and st.lv1_tab == "All")
 stamp[0] = 2; w.step()
@@ -42,6 +42,11 @@ check("voyants", L(4)[D.NOTE_INPUTS] and L(0)[D.NOTE_INPUTS] and L(5)[D.NOTE_BUS
       and L(3)[D.NOTE_GROUP] and L(4, "All")[D.NOTE_GLOBAL_VIEW] and not L(3)[D.NOTE_GLOBAL_VIEW]
       and not any(L(None).values())
       and sum(L(5, "Mixer 1").values()) == 1)
+check("voyant Spill (écran)", L(4, "Mixer 1", True)[D.NOTE_GROUP] and not L(4, "Mixer 1", True)[D.NOTE_INPUTS]
+      and sum(L(4, "Mixer 1", True).values()) == 1)
+w2 = D.LayerModeWatcher(st, 0, read=lambda: (4, 80), stamp=lambda: 9, tab=lambda: "Mixer 1", spill=lambda: True)
+w2.step()
+check("Spill lu par le surveillant", st.spill_lit is True)
 
 class FakeClicker:
     def __init__(self): self.modes = []
