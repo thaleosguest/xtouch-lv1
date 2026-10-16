@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>XTouch-LV1 Mode d'emploi</title>
+<link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjAgMTIwIj48cmVjdCB4PSIwIiB5PSIwIiB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgcng9IjI2IiBmaWxsPSIjMkIyRTMzIi8+PHJlY3QgeD0iMTQiIHk9IjQwIiB3aWR0aD0iMzYiIGhlaWdodD0iNDAiIHJ4PSI4IiBmaWxsPSIjNDU0QTUyIi8+PHJlY3QgeD0iNzAiIHk9IjQwIiB3aWR0aD0iMzYiIGhlaWdodD0iNDAiIHJ4PSI4IiBmaWxsPSIjMzhDOUZGIi8+PHJlY3QgeD0iNTAiIHk9IjU3IiB3aWR0aD0iMjAiIGhlaWdodD0iNiIgZmlsbD0iI0U5RURGMCIvPjxjaXJjbGUgY3g9IjMyIiBjeT0iNjAiIHI9IjQuNSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRTlFREYwIiBzdHJva2Utd2lkdGg9IjkuMCIvPjxsaW5lIHgxPSIzMiIgeTE9IjYwIiB4Mj0iMzUuNSIgeTI9IjUzLjkiIHN0cm9rZT0iIzQ1NEE1MiIgc3Ryb2tlLXdpZHRoPSIzLjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxyZWN0IHg9IjgwIiB5PSI1MCIgd2lkdGg9IjUiIGhlaWdodD0iMjAiIHJ4PSIyIiBmaWxsPSIjMkIyRTMzIi8+PHJlY3QgeD0iODgiIHk9IjU2IiB3aWR0aD0iNSIgaGVpZ2h0PSIxNCIgcng9IjIiIGZpbGw9IiMyQjJFMzMiLz48cmVjdCB4PSI5NiIgeT0iNDYiIHdpZHRoPSI1IiBoZWlnaHQ9IjI0IiByeD0iMiIgZmlsbD0iIzJCMkUzMyIvPjwvc3ZnPg==">
 <style>
 :root {
   --bg: #f4f5f7; --card: #ffffff; --text: #1b1d20; --dim: #5c636b; --line: #d9dde2;
@@ -22,7 +23,8 @@
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 "Segoe UI", system-ui, sans-serif; }
 main { max-width: 980px; margin: 0 auto; padding: 24px 16px 64px; }
-h1 { font-size: 28px; margin: 0 0 4px; }
+h1 { font-size: 28px; margin: 0 0 4px; display: flex; align-items: center; gap: 12px; }
+.logo svg { width: 48px; height: 48px; display: block; }
 h2 { font-size: 20px; margin: 36px 0 10px; padding-bottom: 6px; border-bottom: 2px solid var(--line); }
 h3 { font-size: 16px; margin: 20px 0 6px; }
 p.lead { color: var(--dim); margin: 0 0 16px; }
@@ -59,7 +61,7 @@ code { font-family: Consolas, monospace; font-size: 13px; background: var(--card
 </head>
 <body>
 <main>
-<h1>XTouch-LV1 — mode d'emploi</h1>
+<h1><span class="logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><rect x="0" y="0" width="120" height="120" rx="26" fill="#2B2E33"/><rect x="14" y="40" width="36" height="40" rx="8" fill="#454A52"/><rect x="70" y="40" width="36" height="40" rx="8" fill="#38C9FF"/><rect x="50" y="57" width="20" height="6" fill="#E9EDF0"/><circle cx="32" cy="60" r="4.5" fill="none" stroke="#E9EDF0" stroke-width="9.0"/><line x1="32" y1="60" x2="35.5" y2="53.9" stroke="#454A52" stroke-width="3.2" stroke-linecap="round"/><rect x="80" y="50" width="5" height="20" rx="2" fill="#2B2E33"/><rect x="88" y="56" width="5" height="14" rx="2" fill="#2B2E33"/><rect x="96" y="46" width="5" height="24" rx="2" fill="#2B2E33"/></svg></span>XTouch-LV1 — mode d'emploi</h1>
 <p class="lead">Behringer X-Touch + X-Touch Extender pour Waves eMotion LV1, avec Reaper (enregistrement, virtual
 soundcheck). Version 0.1. Les fonctions marquées <span class="tag">à confirmer</span> sont programmées mais pas encore
 essayées sur la X-Touch.</p>

@@ -196,7 +196,8 @@ def main():
         print("X32 Gain Recall : %s (%s)" % (gr, a.gain_recall_tag if a.gain_recall else GR_TAG))
     print("Compilation de %s v%s..." % (NAME, ver))
     out = os.path.join(WORK, "out")
-    pyinstaller(["--console", "--uac-admin", "--name", NAME, "--distpath", out,
+    icon = os.path.join(HERE, "assets", "icon.ico")      # logo bleu (tools/make_icon.py)
+    pyinstaller(["--console", "--uac-admin", "--icon", icon, "--name", NAME, "--distpath", out,
                  "--hidden-import", "xtouch_overlay_qt", os.path.join(HERE, "xtouch_lv1_display.py")])
 
     stage_root = os.path.join(WORK, "stage")
@@ -212,8 +213,9 @@ def main():
     if gr:
         stage_gain_recall(os.path.join(stage_root, "gainrecall"), gr, a.gain_recall_tag if a.gain_recall else GR_TAG)
 
-    pyinstaller(["--onefile", "--windowed", "--name", INSTALLER, "--distpath", DIST,
-                 "--add-data", "%s%s." % (stage_root, os.pathsep), os.path.join(HERE, "installer.py")])
+    pyinstaller(["--onefile", "--windowed", "--icon", icon, "--name", INSTALLER, "--distpath", DIST,
+                 "--add-data", "%s%s." % (stage_root, os.pathsep),
+                 "--add-data", "%s%sassets" % (icon, os.pathsep), os.path.join(HERE, "installer.py")])
     old = os.path.join(DIST, "XTouch_LV1_Install.exe")    # ancien nom (installeur XTouch-LV1 seul)
     if os.path.exists(old):
         os.remove(old)

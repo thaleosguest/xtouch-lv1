@@ -387,6 +387,12 @@ def gui(a, sources):
     root = tk.Tk()
     root.title("%s %s" % (SUITE, "Uninstall" if removing else "Setup"))
     root.configure(bg="#111213")
+    ico = os.path.join(getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__))), "assets", "icon.ico")
+    if os.path.exists(ico):                                # logo de XTouch-LV1 dans la barre de titre
+        try:
+            root.iconbitmap(ico)
+        except tk.TclError:
+            pass
     root.geometry("720x600")
     bg, fg, dim = "#111213", "#e9edf0", "#9aa0a6"
     tk.Label(root, text=SUITE, fg=fg, bg=bg, font=("Segoe UI", 16, "bold")).pack(anchor="w", padx=16, pady=(14, 0))

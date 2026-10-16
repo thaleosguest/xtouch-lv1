@@ -63,6 +63,9 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   Gain Recall (%APPDATA%) jamais touchées ; sa clé Run retirée à la désinstallation si elle vise l'exe installé.
   Test `tests/test_installer.py` ; essai de l'exe : `--silencieux --no-shortcuts --root DIR --reaper DIR [--apps]`.
   Essai du pont sans élévation : `__COMPAT_LAYER=RunAsInvoker`.
+- **Logo (16/10, Joseph : le même que X/M32 Gain Recall, autre couleur)** : `tools/make_icon.py` (repris de
+  x32-gain-recall-workspace, bloc de droite bleu LV1 #38C9FF au lieu de l'ambre) -> `assets/logo.svg`, `assets/icon.ico`
+  (exe du pont, installeur et sa fenêtre, MODE_EMPLOI.html). Relancer après toute retouche : `py tools/make_icon.py`.
 - `xtouch_lv1_display.py` : le programme principal (affichage + faders + master + Mute/Solo).
   Options : `--mixer 1|2`, `--ext-droite` (Extender à gauche par défaut), `--master g:c` (défaut `3:0` = LR,
   `aucun`), `--lecture-seule`, `--no-journal`, `--dry-run`, `--host/--port`, `--main/--ext`, `--seconds`.
