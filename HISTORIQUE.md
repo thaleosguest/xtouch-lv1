@@ -65,3 +65,5 @@ Chaque ligne correspond à un ou plusieurs commits git (`git log` pour le détai
   OFF/ON/AUTO, hauteur des formes d'onde.
 - **V0.1 compilée** : `py build.py` -> `dist/XTouch-LV1/XTouch-LV1.exe` (un seul exe, overlay compris, droits
   administrateur, attend les X-Touch), zip à donner `dist/XTouch-LV1-v0.1.zip`.
+- Installeur **LV1 Suite** (`dist/LV1_Suite_Install.exe`) : XTouch-LV1, REAPER LV1 et X32 Gain Recall v3.0.0 au
+  choix, dossier au choix, étapes expliquées, désinstalleur ; mode d'emploi de la surface (`MODE_EMPLOI.html`).

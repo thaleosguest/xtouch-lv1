@@ -4,29 +4,37 @@ Deux tests indépendants, Python 3 standard (rien à installer), à lancer sur l
 Les deux écrivent un rapport `.json` dans ce dossier : c'est ce fichier qu'il faut m'envoyer.
 
 
-## Installation (V0.1, plug and play)
+## Installation : LV1 Suite (V0.1, plug and play)
 
-**Installer** : fermer REAPER (et XTouch-LV1 s'il tourne), double-clic sur `XTouch_LV1_Install.exe`, puis **Install**.
-L'installeur :
-- copie le programme dans `%LOCALAPPDATA%\Programs\XTouch-LV1` (une réinstallation garde la calibration des faders, le
-  réglage de l'écran et les journaux) ;
-- crée les raccourcis **XTouch-LV1** (Bureau + menu Démarrer), **XTouch-LV1 Manual** (mode d'emploi, `MODE_EMPLOI.html`)
-  et **Uninstall XTouch-LV1** (menu Démarrer) ;
-- REAPER : déclare les 3 scripts (scènes, synchro des pistes, barre de vumètres ; les anciens chemins sont remplacés),
-  lance les scènes et la barre de vumètres **au démarrage de REAPER**, ajoute la surface OSC 8000/9000 si elle manque ;
-- reprend les réglages (`xtouch_courbe_fader.json`, `xtouch_ecran.json`) posés à côté de lui s'il n'en a pas encore.
+**`LV1_Suite_Install.exe`** installe, au choix (cases à cocher) :
+- **XTouch-LV1** v0.1 : le pont X-Touch + Extender <-> LV1 ;
+- **REAPER LV1** : l'intégration REAPER (scènes <-> marqueurs, synchro des pistes, barre de vumètres, surface OSC du
+  transport) ; elle a besoin de XTouch-LV1 (la cocher coche XTouch-LV1) ;
+- **X32 Gain Recall** v3.0.0 (release GitHub).
 
-**Lancer** : raccourci XTouch-LV1. Windows demande les droits administrateur (pour que la LV1 suive BANK et la
-sélection). La fenêtre noire montre ce qui se passe ; la fermer = arrêter. Les X-Touch peuvent être branchées après :
-il les attend. Il trouve la LV1 tout seul et se reconnecte si elle redémarre.
+Fermer REAPER (et les programmes à mettre à jour), double-clic, cocher, choisir le dossier si besoin (**Browse…** ;
+défaut `%LOCALAPPDATA%\Programs`), lire les étapes affichées, **Install**.
+- XTouch-LV1 : une réinstallation garde la calibration des faders, le réglage de l'écran et les journaux ; les réglages
+  posés à côté de l'installeur (ou dans `dist\XTouch-LV1`) sont repris s'il n'en a pas.
+- REAPER LV1 : scripts déclarés (anciens chemins remplacés), scènes + barre de vumètres lancées au démarrage de REAPER,
+  surface OSC 8000/9000 ajoutée si elle manque.
+- X32 Gain Recall : ses scènes et réglages restent dans `%APPDATA%\X32 Gain Recall` (jamais touchés). Si « Lancer avec
+  Windows » était coché avec une autre copie de l'exe, le recocher dans l'appli.
+- Raccourcis : Bureau (un par programme) et menu Démarrer > **LV1 Suite** (programmes, modes d'emploi, désinstalleur).
+- **Désinstaller** : menu Démarrer > LV1 Suite > Uninstall LV1 Suite (cases à cocher aussi).
 
-Une fois dans la LV1 : retirer le contrôleur Mackie de System Inventory (sinon elle garde les ports MIDI).
+**Lancer XTouch-LV1** : raccourci XTouch-LV1. Windows demande les droits administrateur (pour que la LV1 suive BANK et
+la sélection). La fenêtre noire montre ce qui se passe ; la fermer = arrêter. Les X-Touch peuvent être branchées après :
+il les attend. Il trouve la LV1 tout seul et se reconnecte si elle redémarre. Dans la LV1 : retirer le contrôleur
+Mackie de System Inventory.
 
 Options : sans argument = `--clic-lv1 --attendre` ; les options de `xtouch_lv1_display.py` restent possibles dans un
-raccourci (ex. `XTouch-LV1.exe --clic-lv1 --attendre --pilote TracksLive-FL`). Réglage du rappel de pistes :
-bouton ADJUST à l'écran, ou `XTouch-LV1.exe --overlay --reglage`.
+raccourci (ex. `XTouch-LV1.exe --clic-lv1 --attendre --pilote TracksLive-FL`). Réglage du rappel de pistes : bouton
+ADJUST à l'écran, ou `XTouch-LV1.exe --overlay --reglage`.
 
-**Fabriquer l'installeur** (développement) : `py build.py` -> `dist\XTouch_LV1_Install.exe` (PyInstaller + PySide6).
+**Fabriquer l'installeur** (développement) : `py build.py` -> `dist\LV1_Suite_Install.exe` (PyInstaller + PySide6 ;
+Gain Recall = release GitHub v3.0.0, téléchargée une fois dans `build\gainrecall`, empreinte vérifiée ;
+`--gain-recall CHEMIN.exe` = un exe local ; `--sans-gain-recall`).
 
 ## Test 1 : la LV1 donne-t-elle les couleurs et les vumètres ?
 

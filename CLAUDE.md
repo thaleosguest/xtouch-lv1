@@ -46,17 +46,23 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
 
 ## Fichiers
 
-- **V0.1 = installeur (16/10/2026)** : `py build.py` -> `dist/XTouch_LV1_Install.exe` (installer.py en onefile qui
-  embarque build/stage/XTouch-LV1 = pont compilé onedir console `--uac-admin` + reaper/*.lua + LISEZMOI). Un seul exe
-  pour le pont : `--overlay` = processus overlay Qt (xtouch_overlay.py lance `sys.executable --overlay` si `sys.frozen`).
-  Fichiers de Joseph à côté de l'exe (HERE / CFG_FILE / FOLDER = dossier de sys.executable si compilé). Sans argument :
-  `--clic-lv1 --attendre` (attend les ports USB). `VERSION` dans xtouch_lv1_display.py ET installer.py (build.py vérifie).
-  Installeur : %LOCALAPPDATA%\Programs\XTouch-LV1 (réglages jamais écrasés, repris à côté de l'installeur ou dans
-  dist/XTouch-LV1), raccourcis (PowerShell WScript.Shell), REAPER fermé obligatoire : reaper-kb.ini (lignes
-  « Custom: lv1_*.lua » remplacées, id RS+sha1(chemin)), Scripts/__startup.lua (bloc marqué, NamedCommandLookup),
-  surface OSC 8000/9000 dans REAPER.ini si absente ; « Uninstall XTouch-LV1.exe » = copie de l'installeur.
-  Test `tests/test_installer.py` (dossiers temporaires) ; essai de l'exe : `--silencieux --no-shortcuts --target
-  --reaper`. Essai du pont sans élévation : `__COMPAT_LAYER=RunAsInvoker`.
+- **V0.1 = installeur « LV1 Suite » (16/10/2026)** : `py build.py` -> `dist/LV1_Suite_Install.exe` (installer.py en
+  onefile qui embarque build/stage/{xtouch,gainrecall}). Cases à cocher (demande de Joseph) : XTouch-LV1, REAPER LV1
+  (intégration REAPER, sans dossier propre, dépend de XTouch-LV1 : cocher l'un coche l'autre, désinstaller XTouch-LV1
+  la retire), X32 Gain Recall (release GitHub GR_TAG v3.0.0 téléchargée par build.py dans build/gainrecall, SHA-256
+  comparé au « digest » de l'API ; mode d'emploi = MODE_EMPLOI.md du dépôt x32-gain-recall-workspace au même tag,
+  converti en HTML par build.md_to_html ; version.txt). Dossier choisi (Browse…, défaut %LOCALAPPDATA%\Programs,
+  dossier non inscriptible refusé) ; étapes expliquées dans la fenêtre selon les cases.
+  Un seul exe pour le pont : `--overlay` = processus overlay Qt (xtouch_overlay.py lance `sys.executable --overlay` si
+  `sys.frozen`). Fichiers de Joseph à côté de l'exe (HERE / CFG_FILE / FOLDER = dossier de sys.executable si compilé).
+  Sans argument : `--clic-lv1 --attendre` (attend les ports USB). `VERSION` dans xtouch_lv1_display.py ET installer.py
+  (build.py vérifie). Installé : <dossier>/XTouch-LV1, <dossier>/X32 Gain Recall, <dossier>/LV1 Suite (Uninstall LV1
+  Suite.exe = copie de l'installeur, racine = dossier parent ; installed.json). Raccourcis : Bureau + menu Démarrer
+  « LV1 Suite » (PowerShell WScript.Shell). REAPER fermé obligatoire : reaper-kb.ini (lignes « Custom: lv1_*.lua »
+  remplacées, id RS+sha1(chemin)), Scripts/__startup.lua (bloc marqué), surface OSC 8000/9000 si absente. Données de
+  Gain Recall (%APPDATA%) jamais touchées ; sa clé Run retirée à la désinstallation si elle vise l'exe installé.
+  Test `tests/test_installer.py` ; essai de l'exe : `--silencieux --no-shortcuts --root DIR --reaper DIR [--apps]`.
+  Essai du pont sans élévation : `__COMPAT_LAYER=RunAsInvoker`.
 - `xtouch_lv1_display.py` : le programme principal (affichage + faders + master + Mute/Solo).
   Options : `--mixer 1|2`, `--ext-droite` (Extender à gauche par défaut), `--master g:c` (défaut `3:0` = LR,
   `aucun`), `--lecture-seule`, `--no-journal`, `--dry-run`, `--host/--port`, `--main/--ext`, `--seconds`.
