@@ -2542,21 +2542,75 @@ def already_running():
     return k32.GetLastError() == 183                       # ERROR_ALREADY_EXISTS
 
 
+RELEASES_API = "https://api.github.com/repos/thaleosguest/xtouch-lv1/releases/latest"
+RELEASES_PAGE = "https://github.com/thaleosguest/xtouch-lv1/releases/latest"
+UPDATE = {"version": None, "url": None}   # mise à jour disponible (avis de mise à jour, demande de Joseph du 18/10)
+
+
+def version_tuple(text):
+    """« v0.2.10 » -> (0, 2, 10) ; () si ce n'est pas un numéro de version."""
+    parts = (text or "").strip().lstrip("vV").split(".")
+    return tuple(int(x) for x in parts) if parts and all(x.isdigit() for x in parts) else ()
+
+
+def check_update(tray_icon=None, fetch=None):
+    """Dernière release publiée sur GitHub plus récente que VERSION -> UPDATE + bulle près de l'horloge (une fois par
+    version). Rien n'est téléchargé : le menu de l'icône ouvre la page de téléchargement (comme X/M32 Gain Recall)."""
+    try:
+        if fetch is None:
+            import urllib.request
+            req = urllib.request.Request(RELEASES_API, headers={"User-Agent": "XTouch-LV1/%s" % VERSION,
+                                                                "Accept": "application/vnd.github+json"})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                rel = json.loads(r.read())
+        else:
+            rel = fetch()
+    except Exception as e:
+        print("  Vérification des mises à jour impossible : %s" % e)
+        return
+    tag = rel.get("tag_name") or ""
+    if rel.get("draft") or rel.get("prerelease") or not version_tuple(tag):
+        return
+    if version_tuple(tag) > version_tuple(VERSION):
+        new = UPDATE["version"] != tag.lstrip("vV")
+        UPDATE.update(version=tag.lstrip("vV"), url=rel.get("html_url") or RELEASES_PAGE)
+        print("  Mise à jour disponible : %s (%s)" % (UPDATE["version"], UPDATE["url"]))
+        JOURNAL.mark("mise à jour disponible : %s" % UPDATE["version"])
+        if new and tray_icon:
+            tray_icon.notify("Total Control for LV1 %s disponible" % UPDATE["version"],
+                             "Clic droit sur l'icône XTouch-LV1 > Mise à jour, pour la télécharger.")
+
+
+def update_loop(tray_icon):
+    """Au lancement (après 10 s : la LV1 et les X-Touch d'abord), puis une fois par jour (pont laissé ouvert)."""
+    if STOP.wait(10):
+        return
+    while True:
+        check_update(tray_icon)
+        if STOP.wait(24 * 3600):
+            return
+
+
 def start_tray():
-    """Icône près de l'horloge (comme X/M32 Gain Recall) : mode d'emploi, dossier des journaux, Quitter."""
+    """Icône près de l'horloge (comme X/M32 Gain Recall) : mise à jour (si disponible), mode d'emploi, dossier des
+    journaux, Quitter."""
     try:
         import tray
     except ImportError:
         return None
 
     def open_path(path):
+        """Par explorer.exe : le pont est administrateur, le navigateur / le dossier s'ouvrent avec les droits normaux."""
+        import subprocess
         try:
-            os.startfile(path)
+            subprocess.Popen(["explorer.exe", path], creationflags=0x08000000)
         except OSError:
             pass
     return tray.TrayIcon(
         "XTouch-LV1 v%s" % VERSION,
-        [("Mode d'emploi", lambda: open_path(os.path.join(HERE, "MODE_EMPLOI.html"))),
+        [(lambda: ("Mise à jour %s disponible..." % UPDATE["version"]) if UPDATE["version"] else None,
+          lambda: open_path(UPDATE["url"] or RELEASES_PAGE)),
+         ("Mode d'emploi", lambda: open_path(os.path.join(HERE, "MODE_EMPLOI.html"))),
          ("Dossier des journaux", lambda: open_path(HERE)),
          None,
          ("Quitter XTouch-LV1", STOP.set)],
@@ -2610,6 +2664,8 @@ def main():
         return 0                                                 # écrasait xtouch_console.txt du 1er (18/10)
     redirect_output_to_log()
     tray_icon = start_tray() if (getattr(sys, "frozen", False) and not a.dry_run) else None
+    if tray_icon:
+        threading.Thread(target=update_loop, args=(tray_icon,), daemon=True).start()
     print("  XTouch-LV1 v%s" % VERSION)
     if not a.dry_run and not a.sans_reaper_lv1:
         threading.Thread(target=start_reaper_lv1, daemon=True).start()

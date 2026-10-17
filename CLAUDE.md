@@ -101,6 +101,13 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   Reconnexion 0.2.2 vérifiée en vrai (journal 004716) : perdue à 113 s, 1er essai Extender seule (X-Touch refusée,
   ports renumérotés), attente des deux, reconnectée à 118 s, 594 événements ensuite.
 
+- **Installeur, fin (18/10)** : bouton « Lancer XTouch-LV1 » à côté de Fermer (`finish` / `launch_xtouch`, os.startfile
+  = ShellExecute, nécessaire pour l'UAC ; Popen -> erreur 740), seulement si XTouch-LV1 est installé et sans erreur.
+- **Avis de mise à jour (18/10)** : `check_update` (GitHub `releases/latest` de xtouch-lv1, `version_tuple`), 10 s après le
+  lancement puis toutes les 24 h (`update_loop`, exe avec icône seulement), bulle une fois par version + entrée du menu
+  de l'icône (libellé fonction, None = masquée). Pages / dossiers ouverts par explorer.exe (pont admin : navigateur en
+  droits normaux). Test `tests/test_mise_a_jour.py`.
+
 ## Fichiers
 
 - **V0.1 = installeur « Total Control for LV1 » (16/10/2026, ex « LV1 Suite » : nom choisi par Joseph ; « Total Control »

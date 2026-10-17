@@ -30,7 +30,9 @@ défaut `%LOCALAPPDATA%\Programs`), lire les étapes affichées, **Install**.
 - **Désinstaller** : menu Démarrer > Total Control for LV1 > Uninstall Total Control for LV1 (cases à cocher aussi).
 
 **Lancer XTouch-LV1** : raccourci XTouch-LV1. Windows demande les droits administrateur (pour que la LV1 suive BANK et
-la sélection). Pas de fenêtre noire : icône près de l'horloge (clic droit > Quitter XTouch-LV1 ; messages dans `xtouch_console.txt`). Les X-Touch peuvent être branchées après :
+la sélection). Pas de fenêtre noire : icône près de l'horloge (clic droit > Quitter XTouch-LV1 ; messages dans `xtouch_console.txt`) ;
+avis de mise à jour (bulle + entrée du menu) quand une nouvelle version est publiée sur GitHub. À la fin de
+l'installation, le bouton **Lancer XTouch-LV1** le démarre directement. Les X-Touch peuvent être branchées après :
 il les attend. Il trouve la LV1 tout seul et se reconnecte si elle redémarre. Dans la LV1 : retirer le contrôleur
 Mackie de System Inventory.
 

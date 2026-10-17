@@ -746,15 +746,35 @@ def gui(a, sources):
                 return label
         return None
 
+    def launch_xtouch(r):
+        """Bouton « Lancer XTouch-LV1 » (Joseph, 18/10) : ShellExecute (os.startfile) car l'exe demande les droits
+        administrateur (UAC) ; un simple Popen échouerait (erreur 740). Puis l'installeur se ferme."""
+        try:
+            os.startfile(os.path.join(app_dir(r, XT), APPS[XT]["exe"]))
+        except OSError as e:
+            messagebox.showwarning(SUITE, _("Cannot start XTouch-LV1: %s", "Impossible de lancer XTouch-LV1 : %s") % e)
+            return
+        root.destroy()
+
+    def finish(r, ok):
+        state["go"].config(state="normal", text=_("Close", "Fermer"), command=root.destroy)
+        if ok and not removing and XT in installed(r):
+            state["go"].config(bg="#3a3e43", fg=fg)
+            tk.Button(state["bar"], text=_("Launch XTouch-LV1", "Lancer XTouch-LV1"), command=lambda: launch_xtouch(r),
+                      bg="#38c9ff", fg="#111213", relief="flat", font=("Segoe UI", 11, "bold"), padx=24,
+                      pady=6).pack(side="right", padx=(0, 10))
+
     def work(apps, keep, r):
+        ok = False
         try:
             if removing:
                 uninstall(r, apps, a.reaper, log, keep, not a.no_shortcuts)
             else:
                 install(sources, r, apps, a.reaper, log, not a.no_shortcuts, a.reaper_setup)
+            ok = True
         except Exception as e:                             # message lisible plutôt qu'une fenêtre qui disparaît
             log(_("ERROR: %s", "ERREUR : %s") % e)
-        root.after(0, lambda: state["go"].config(state="normal", text=_("Close", "Fermer"), command=root.destroy))
+        root.after(0, lambda: finish(r, ok))
 
     def start():
         apps = chosen()
@@ -846,6 +866,7 @@ def gui(a, sources):
         state["box"].pack(fill="both", expand=True, padx=16, pady=10)
         bar = tk.Frame(body, bg=bg)
         bar.pack(fill="x", padx=16, pady=(0, 14))
+        state["bar"] = bar
         state["go"] = tk.Button(bar, text=go_label(), command=start, bg="#38c9ff", fg="#111213", relief="flat",
                                 font=("Segoe UI", 11, "bold"), padx=24, pady=6, state="normal" if keys else "disabled")
         state["go"].pack(side="right")
