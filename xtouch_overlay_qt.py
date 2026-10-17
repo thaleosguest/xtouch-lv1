@@ -919,6 +919,7 @@ class Overlay:
         # La pastille FLIP n'apparaît que si la LV1 (ou une de ses fenêtres / boîtes de dialogue) est au premier
         # plan (Joseph, 15/10 : elle restait par-dessus les autres programmes). Rappel de pistes et sends on fader
         # restent affichés même LV1 en arrière-plan (choix de Joseph).
+        self.demo = rect_fn is not None
         self.pid_fn = (lambda: None) if rect_fn else (lambda: lv1_pid(mixer))     # démo : toujours affiché
         self.pid, self.lv1_rect, self.front = None, None, True
         self.rect_fn = rect_fn or (lambda: lv1_rect(mixer))
@@ -1057,6 +1058,15 @@ class Overlay:
             self.recall_on = bool(m["recall"])
             if self.recall_on:
                 self.recall.set(m["recall"])
+            return
+        if "mixer" in m:                             # {"mixer": 1 | 2} : Mixer suivi par le pont (18/10)
+            n = 2 if m["mixer"] == 2 else 1
+            if n != self.mixer:
+                self.mixer = n
+                if not self.demo:
+                    self.rect_fn = lambda: lv1_rect(n)
+                    self.pid_fn = lambda: lv1_pid(n)
+                self.rect_t = 0.0                        # recalcul de la fenêtre au prochain tour
             return
         if "layer" in m:                             # {"layer": {"name": "Ch 17-32", "sub": "Mixer 2"}} : notification
             if m["layer"]:

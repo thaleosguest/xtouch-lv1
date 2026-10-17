@@ -88,7 +88,7 @@ nom du canal (haut), fader en dB (bas), couleur du canal, vumètre post-fader.
 2. X-Touch et Extender en mode Mackie Control, en USB.
 3. ```
    py xtouch_lv1_display.py              # suit Mixer 1
-   py xtouch_lv1_display.py --mixer 2    # suit Mixer 2
+   py xtouch_lv1_display.py --mixer 2    # Mixer 2 imposé (défaut : --mixer auto = l'onglet affiché)
    py xtouch_lv1_display.py --ext-droite # si l'Extender est à DROITE (par défaut : à gauche)
    ```
 4. Change de couche, de couleur, de nom, bouge un fader dans la LV1 : les X-Touch doivent suivre.

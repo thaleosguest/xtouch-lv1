@@ -84,6 +84,9 @@ class LV1Overlay(threading.Thread):
     def set_layer(self, name, sub=None):
         pass                      # notification de couche : version Qt seulement
 
+    def set_mixer(self, mixer):
+        self.mixer = mixer        # Mixer suivi : fenêtre détachée « MIXER2 » le cas échéant (rect_fn lit self.mixer)
+
     def set(self, text):
         """Texte à afficher (None = mode normal). Un changement relance le bandeau."""
         with self.lock:
@@ -231,6 +234,14 @@ class QtOverlay:
         """Notification « LAYER  Ch 17-32 » en bas à droite de la LV1 (quelques secondes)."""
         try:
             self.proc.stdin.write((json.dumps({"layer": {"name": name, "sub": sub}}) + "\n").encode("utf-8"))
+            self.proc.stdin.flush()
+        except OSError:
+            pass
+
+    def set_mixer(self, mixer):
+        """Mixer suivi (1 / 2) : l'overlay se cale sur sa fenêtre (principale, ou « MIXER2 » détachée)."""
+        try:
+            self.proc.stdin.write((json.dumps({"mixer": mixer}) + "\n").encode("utf-8"))
             self.proc.stdin.flush()
         except OSError:
             pass

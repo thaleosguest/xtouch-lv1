@@ -8,7 +8,7 @@ Une **Behringer X-Touch + X-Touch Extender** comme surface de contrôle de la **
 couleurs des canaux sur les écrans, vumètres, faders motorisés, Mute / Solo / Select, couches, sends, User Keys,
 transport vers REAPER — et le **gain des préamplis X32 / M32** sur les encodeurs.
 
-Version courante : **0.2.2**. Mode d'emploi complet : [MODE_EMPLOI.html](MODE_EMPLOI.html).
+Version courante : **0.3**. Mode d'emploi complet : [MODE_EMPLOI.html](MODE_EMPLOI.html).
 
 ## Téléchargement
 
@@ -17,7 +17,7 @@ Dans la page [Releases](../../releases/latest), deux fichiers :
 | Fichier | Contenu | Pour qui |
 |---|---|---|
 | **`Total_Control_LV1_Install.exe`** | le pack **Total Control for LV1** : installeur avec cases à cocher pour **XTouch-LV1**, **REAPER LV1** et **[X/M32 Gain Recall for eMotion LV1](https://github.com/thaleosguest/x32-gain-recall)** | la plupart des gens |
-| `XTouch-LV1-v0.2.2.zip` | XTouch-LV1 seul, sans installation (dézipper, lancer `XTouch-LV1.exe`) | qui veut juste la surface |
+| `XTouch-LV1-v0.3.zip` | XTouch-LV1 seul, sans installation (dézipper, lancer `XTouch-LV1.exe`) | qui veut juste la surface |
 
 ### Le pack Total Control for LV1
 
@@ -36,6 +36,7 @@ désinstalleur).
 
 - Écrans : nom du canal, valeur du fader en dB, **couleur du canal LV1** ; vumètres post-fader.
 - Faders motorisés dans les deux sens, fader master sur LR ; calibration sur les repères imprimés.
+- Suit le Mixer affiché sur la LV1 (Mixer 1 ou Mixer 2), tout marche pareil sur les deux.
 - Mute, Solo, Select synchronisés avec l'écran de la LV1 ; ◄ BANK ► et ◄ CHANNEL ► suivent les couches
   (usine, custom, 80 canaux, Spill).
 - Encodeurs : pan, et **gain des préamplis X32 / M32** (avec X/M32 Gain Recall).

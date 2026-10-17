@@ -108,6 +108,14 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   de l'icône (libellé fonction, None = masquée). Pages / dossiers ouverts par explorer.exe (pont admin : navigateur en
   droits normaux). Test `tests/test_mise_a_jour.py`.
 
+- **Mixer 2 (V0.3, 18/10, « tout ce qu'on a fait pour Mixer 1, aussi sur Mixer 2 »)** : `state.view` = Mixer suivi, partagé
+  (propriété `page` de LV1Clicker / LayerModeWatcher / LV1SelectionWatcher / ButtonControl) ; `ViewFollower` (0,2 s,
+  `lv1_clic.view_hint` : onglet de la fenêtre principale via Target(0), ou fenêtre MIXER1/2 détachée au premier plan ;
+  ~15 ms) ; autre onglet = dernier Mixer gardé ; `--mixer 1|2` impose. build_frame, voyants, overlay (`set_mixer` ->
+  fenêtre détachée), AppControl suivent. Mode de couche relu au changement de Mixer (clé (stamp, vue)). Notif de couche
+  re-montrée en changeant de Mixer. Limite : Mixer détaché -> onglets de la fenêtre principale décalés (mal lus).
+  Test `tests/test_mixer_suivi.py`. Vérifié en direct : onglet Mixer 2 lu.
+
 ## Fichiers
 
 - **V0.1 = installeur « Total Control for LV1 » (16/10/2026, ex « LV1 Suite » : nom choisi par Joseph ; « Total Control »
@@ -155,7 +163,7 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   x32-gain-recall-workspace, bloc de droite bleu LV1 #38C9FF au lieu de l'ambre) -> `assets/logo.svg`, `assets/icon.ico`
   (exe du pont, installeur et sa fenêtre, MODE_EMPLOI.html). Relancer après toute retouche : `py tools/make_icon.py`.
 - `xtouch_lv1_display.py` : le programme principal (affichage + faders + master + Mute/Solo).
-  Options : `--mixer 1|2`, `--ext-droite` (Extender à gauche par défaut), `--master g:c` (défaut `3:0` = LR,
+  Options : `--mixer auto|1|2` (défaut auto = onglet affiché, `ViewFollower`), `--ext-droite` (Extender à gauche par défaut), `--master g:c` (défaut `3:0` = LR,
   `aucun`), `--lecture-seule`, `--no-journal`, `--dry-run`, `--host/--port`, `--main/--ext`, `--seconds`.
   Écrit un journal `xtouch_journal_*.txt` (messages LV1 complets + gestes X-Touch + envois).
 - `lv1_probe.py` : sonde LV1 en lecture seule (rapport JSON). Contient l'OSC, le cadrage, la découverte zDNS.

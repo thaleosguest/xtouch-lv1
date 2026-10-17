@@ -499,6 +499,26 @@ def click_mode(name, n_inputs, mixer=1, method="message"):
     return t.on_mixer(row, lambda: t.click(*MODE_BUTTONS[name], method=method))
 
 
+def view_hint():
+    """Pour suivre le Mixer affiché : (onglet actif de la fenêtre PRINCIPALE ou None, n° du Mixer détaché au premier plan
+    ou None). Target(0) : il n'y a pas de fenêtre « MIXER0 », donc c'est la fenêtre principale."""
+    u = u32()
+    front = None
+    fg = u.GetForegroundWindow()
+    if fg:
+        n = u.GetWindowTextLengthW(fg)
+        b = ctypes.create_unicode_buffer(n + 1)
+        u.GetWindowTextW(fg, b, n + 1)
+        title = b.value.upper().replace(" ", "")
+        if title in ("MIXER1", "MIXER2"):
+            front = int(title[-1])
+    t = Target(0)
+    tab = None
+    if t.hwnd and t.rect and t.rect[2] >= 800 and not u.IsIconic(t.hwnd):
+        tab = t.active_tab()
+    return tab, front
+
+
 SPILL_ON = (140, 255, 0)          # bouton Spill allumé (capture du 16/10) ; éteint = fond sombre (17)
 SPILL_PTS = ((1860, 479), (1900, 488), (1858, 486))
 

@@ -44,7 +44,7 @@ import unicodedata
 import lv1_probe as L
 import xtouch_probe as X
 
-VERSION = "0.2.2"
+VERSION = "0.3"
 # Dossier des fichiers de Joseph (réglages, courbe, journaux, reaper/) : à côté de l'exe une fois compilé (build.py)
 HERE = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.abspath(__file__))
 COLOR_FILE = os.path.join(HERE, "xtouch_couleurs.json")
@@ -239,6 +239,7 @@ class LV1State:
         self.channels_at = 0.0    # instant du dernier /Channels (état complet renvoyé : connexion, Flip A/B…)
         self.custom_on = {}       # vue -> bouton Custom allumé ? (/Notify/CustomButton, hypothèse)
         self.spill_on = {}        # vue -> bouton Spill allumé ? (/Notify/SpillButton, hypothèse)
+        self.view = 0             # Mixer suivi : 0 = Mixer 1, 1 = Mixer 2 (ViewFollower : onglet affiché, 18/10)
         self.layer_mode = {}      # vue -> mode de couche lu dans la base (lv1_db.MODE_* ; touches View de la X-Touch)
         self.lv1_tab = None       # onglet affiché par la LV1, lu à l'écran (« Mixer 1 », « All »…)
         self.spill_lit = False    # bouton Spill allumé sur la LV1, lu à l'écran (la base ne l'écrit pas)
@@ -1452,7 +1453,7 @@ class LV1Clicker(threading.Thread):
         self.click_all = click_all
         if jog is None:
             import lv1_clic
-            jog = lambda n: lv1_clic.jog_bottom_fader(n, page + 1, jog_method)
+            jog = lambda n: lv1_clic.jog_bottom_fader(n, self.page + 1, jog_method)
         self.jog_fn = jog
         self.jog_fallback = None     # jog refusé (pas de fader de plugin à l'écran) -> Reaper (TransportControl.jog)
         self.q = queue.Queue()
@@ -1460,6 +1461,15 @@ class LV1Clicker(threading.Thread):
 
     def layer(self, k):
         self.q.put(("couche", k))
+
+    @property
+    def page(self):
+        """Mixer suivi (0 = Mixer 1, 1 = Mixer 2) : partagé par tout le pont (state.view), suit l'onglet affiché."""
+        return self.state.view
+
+    @page.setter
+    def page(self, value):
+        self.state.view = value
 
     def mode(self, name):
         """Bouton de mode de couche de la LV1 : input, mix, factory, custom, spill."""
@@ -1587,12 +1597,12 @@ class LayerModeWatcher(threading.Thread):
         self.state, self.page = state, page
         if read is None or stamp is None:
             import lv1_db
-            read = read or (lambda: lv1_db.layer_mode(page + 1))
+            read = read or (lambda: lv1_db.layer_mode(self.page + 1))
             stamp = stamp or lv1_db.db_stamp
-        if (tab is None or spill is None) and sys.platform == "win32":
+        if spill is None and sys.platform == "win32":
             import lv1_clic
-            tab = tab or (lambda: lv1_clic.Target(page + 1).active_tab())     # voyant GLOBAL VIEW = onglet All
-            spill = spill or (lambda: lv1_clic.spill_on(page + 1))           # voyant GROUP (pas dans la base)
+            spill = lambda: lv1_clic.spill_on(self.page + 1)               # voyant GROUP (pas dans la base)
+        # tab : onglet affiché (voyant GLOBAL VIEW) ; en vrai c'est ViewFollower qui le lit (tests : injecté)
         self.read, self.stamp, self.tab, self.spill = read, stamp, tab, spill
         self.last = object()
 
@@ -1613,7 +1623,7 @@ class LayerModeWatcher(threading.Thread):
             if sp is not None:                               # page Mixer pas affichée : on garde le dernier
                 with self.state.lock:
                     self.state.spill_lit = sp
-        st = self.stamp()
+        st = (self.stamp(), self.page)                     # autre Mixer suivi : relire son mode
         if st == self.last:
             return
         try:
@@ -1629,9 +1639,62 @@ class LayerModeWatcher(threading.Thread):
         if changed:
             JOURNAL.mark("mode de couche (base LV1) : %s, %s canaux" % (mode, n))
 
+    @property
+    def page(self):
+        """Mixer suivi (0 = Mixer 1, 1 = Mixer 2) : partagé par tout le pont (state.view), suit l'onglet affiché."""
+        return self.state.view
+
+    @page.setter
+    def page(self, value):
+        self.state.view = value
+
     def run(self):
         while True:
             self.step()
+            time.sleep(self.PERIOD)
+
+
+class ViewFollower(threading.Thread):
+    """Mixer suivi par tout le pont (demande de Joseph du 18/10 : tout ce qui marche sur Mixer 1 aussi sur Mixer 2) :
+    onglet Mixer 1 / Mixer 2 de la fenêtre principale, ou fenêtre Mixer détachée (« MIXER1 » / « MIXER2 ») au premier
+    plan ; autre onglet (Channel, All…) : le dernier Mixer reste suivi. fixed = 0 / 1 (--mixer 1 / 2) : vue imposée.
+    Met aussi à jour state.lv1_tab (voyant GLOBAL VIEW). Limite : avec un Mixer détaché, la fenêtre principale a moins
+    d'onglets (positions décalées) -> son onglet peut être mal lu (cas 2 écrans, hors de l'usage de Joseph)."""
+    PERIOD = 0.2
+
+    def __init__(self, state, fixed=None, read=None):
+        super().__init__(daemon=True)
+        self.state, self.fixed = state, fixed
+        if read is None:
+            import lv1_clic
+            read = lv1_clic.view_hint
+        self.read = read
+
+    def step(self):
+        tab, front_mixer = self.read()
+        new = None
+        with self.state.lock:
+            if tab is not None:                              # illisible (LV1 cachée) : on garde le dernier
+                self.state.lv1_tab = tab
+            if self.fixed is None:
+                if front_mixer in (1, 2):
+                    new = front_mixer - 1
+                elif tab in ("Mixer 1", "Mixer 2"):
+                    new = int(tab[-1]) - 1
+                if new is None or new == self.state.view:
+                    new = None
+                else:
+                    self.state.view = new
+        if new is not None:
+            JOURNAL.mark("Mixer suivi : Mixer %d" % (new + 1))
+            print("  Mixer suivi : Mixer %d" % (new + 1))
+
+    def run(self):
+        while True:
+            try:
+                self.step()
+            except Exception as e:
+                JOURNAL.mark("lecture de l'onglet LV1 : erreur %r" % e)
             time.sleep(self.PERIOD)
 
 
@@ -1657,12 +1720,24 @@ class LV1SelectionWatcher(threading.Thread):
         self.state, self.page = state, page
         if read is None:
             import lv1_clic
-            read = lambda: lv1_clic.selected_strip(page + 1)[0]
+            read = lambda: lv1_clic.selected_strip(self.page + 1)[0]
         self.read = read
         self.last = None
+        self.last_page = None
         self.stop_flag = False
 
+    @property
+    def page(self):
+        """Mixer suivi (0 = Mixer 1, 1 = Mixer 2) : partagé par tout le pont (state.view), suit l'onglet affiché."""
+        return self.state.view
+
+    @page.setter
+    def page(self, value):
+        self.state.view = value
+
     def step(self):
+        if self.page != self.last_page:                      # autre Mixer suivi : sa sélection repart de zéro
+            self.last_page, self.last = self.page, None
         col = self.read()
         if col is None or col == self.last:
             if col is not None:
@@ -1863,12 +1938,21 @@ class ButtonControl:
 
     def __init__(self, state, link, write=True, page=0, busy=lambda: False):
         self.state, self.link, self.write = state, link, write
-        self.page = page          # vue LV1 suivie (0 = Mixer 1)
+        self.page = page          # vue LV1 suivie (0 = Mixer 1) : state.view, partagée (propriété)
         self.busy = busy          # vrai si un fader est sous le doigt : pas de changement de banque
         self.lv1 = None           # LV1Clicker si --clic-lv1 : la LV1 suit couche et sélection
         self.transport = None     # TransportControl (Reaper) : reçoit le jog quand il ne va pas à la LV1
         self.reaper_tc = True     # afficheur : timecode de REAPER (s'il répond) ou heure ; touche SMPTE
         self.warned = set()
+
+    @property
+    def page(self):
+        """Mixer suivi (0 = Mixer 1, 1 = Mixer 2) : partagé par tout le pont (state.view), suit l'onglet affiché."""
+        return self.state.view
+
+    @page.setter
+    def page(self, value):
+        self.state.view = value
 
     def on_bank(self, d1):
         step = -1 if d1 == NOTE_BANK_LEFT else 1
@@ -2620,7 +2704,8 @@ def start_tray():
 
 def main():
     ap = argparse.ArgumentParser(description="LV1 sur X-Touch + Extender : affichage + faders (étape 1).")
-    ap.add_argument("--mixer", type=int, choices=[1, 2], default=1, help="vue suivie : Mixer 1 ou 2 (1)")
+    ap.add_argument("--mixer", choices=["auto", "1", "2"], default="auto",
+                    help="Mixer suivi : auto = l'onglet / la fenêtre Mixer affiché (défaut), ou 1 / 2 imposé")
     ap.add_argument("--main", type=int, help="numéro du port MIDI de la X-Touch")
     ap.add_argument("--ext", type=int, help="numéro du port MIDI de l'Extender")
     ap.add_argument("--ext-droite", action="store_true",
@@ -2711,11 +2796,13 @@ def main():
         print("  Couleurs personnalisées : %d entrées (xtouch_couleurs.json)" % len(overrides))
 
     state = LV1State()
+    fixed_view = None if a.mixer == "auto" else int(a.mixer) - 1
+    state.view = fixed_view or 0
     link = LV1Link(state, a.host, a.port)
     link.start()
     surface = Surface(midi, units)
     faders = FaderControl(state, link, write=not a.lecture_seule)
-    buttons = ButtonControl(state, link, write=not a.lecture_seule, page=a.mixer - 1,
+    buttons = ButtonControl(state, link, write=not a.lecture_seule, page=state.view,
                             busy=lambda: bool(faders.held(time.time())))
     xlink = None
     if a.x32.lower() not in ("aucun", "none", "off"):
@@ -2734,7 +2821,7 @@ def main():
         reaper = reaper_link.ReaperLink(*target, journal=lambda m: JOURNAL.mark(m))
         print("  Reaper (OSC %s:%d, retours sur %d) : transport, marqueurs, zoom, jog hors plugin LV1." % target)
     transport = TransportControl(reaper)
-    apps = AppControl(state, link, reaper, a.mixer, write=not a.lecture_seule) if not a.dry_run else None
+    apps = AppControl(state, link, reaper, state.view + 1, write=not a.lecture_seule) if not a.dry_run else None
     scene_bridge = None
     if reaper:                       # scènes LV1 <-> marqueurs Reaper (script reaper/lv1_scenes.lua dans Reaper)
         import reaper_scenes
@@ -2759,10 +2846,10 @@ def main():
             threading.Thread(target=watch_routing, daemon=True).start()
         print("  Scènes LV1 <-> marqueurs Reaper : charger reaper/lv1_scenes.lua dans Reaper (Actions > Load ReaScript).")
     buttons.transport = transport
-    overlay = OVERLAY_FACTORY(a.mixer) if OVERLAY_FACTORY else None     # tests : faux affichage d'écran
+    overlay = OVERLAY_FACTORY(state.view + 1) if OVERLAY_FACTORY else None     # tests : faux affichage d'écran
     if overlay is None and not a.dry_run and not a.sans_cadre and sys.platform == "win32":
         import xtouch_overlay
-        overlay = xtouch_overlay.make_overlay(a.mixer)    # Qt (style Gain Recall v3) si PySide6, sinon tkinter
+        overlay = xtouch_overlay.make_overlay(state.view + 1)   # Qt (style Gain Recall v3) si PySide6, sinon tk
     faders.key_of = sends.key_of
     gain.send_aux = lambda: sends.aux
     # master en lecture seule quand il est sur LR (hors sends on fader : là, il règle le master de l'aux)
@@ -2818,19 +2905,22 @@ def main():
         if already:                           # connectée avant ce branchement : on lit tout de suite
             threading.Thread(target=load_pans, daemon=True).start()
     if not a.dry_run:
-        LayerModeWatcher(state, a.mixer - 1).start()          # voyants INPUTS / BUSES / USER / GLOBAL VIEW
+        LayerModeWatcher(state, state.view).start()           # voyants INPUTS / BUSES / USER / GROUP
+        if sys.platform == "win32":
+            ViewFollower(state, fixed_view).start()           # Mixer suivi (onglet / fenêtre) + voyant GLOBAL VIEW
     if a.lecture_seule:
         print("  Mode lecture seule : rien n'est envoyé à la LV1.")
     if a.clic_lv1 and not a.lecture_seule:
         import lv1_clic
         if not lv1_clic.is_admin():
             print("  --clic-lv1 : PAS administrateur, Windows bloquera les clics (relancer en administrateur).")
-        buttons.lv1 = LV1Clicker(state, a.mixer - 1, jog_method=a.jog_methode)
+        buttons.lv1 = LV1Clicker(state, state.view, jog_method=a.jog_methode)
         if reaper:
             buttons.lv1.jog_fallback = transport.jog
         buttons.lv1.start()
-        LV1SelectionWatcher(state, a.mixer - 1).start()
-        print("  Clics LV1 : la LV1 suit BANK et la sélection, la X-Touch suit la sélection LV1 (page Mixer %d)." % a.mixer)
+        LV1SelectionWatcher(state, state.view).start()
+        print("  Clics LV1 : la LV1 suit BANK et la sélection, la X-Touch suit la sélection LV1 (Mixer suivi : %s)."
+              % ("onglet affiché" if fixed_view is None else "Mixer %d" % (fixed_view + 1)))
     print("Recherche de la LV1… (Ctrl+C pour arrêter)")
     entries = [None] * surface.strips
     master_target = None
@@ -2843,7 +2933,8 @@ def main():
     if master_target and surface.master_unit is not None:
         print("  Fader master -> %s" % default_label(*master_target))
     last_layer = object()
-    last_toast = [None]                   # dernier nom notifié (pas deux notifs pour la même couche)
+    last_toast = [None]                   # dernier (Mixer, nom) notifié (pas deux notifs pour la même couche)
+    shown_view = [state.view]
     woke = []
     tracks_sent = [0.0]
     diag_t = [0.0, None]                    # message reçu pendant l'attente de fin de tour, traité au début du suivant
@@ -2902,7 +2993,14 @@ def main():
                         or buttons.on_midi(unit, st, d1, d2, t, entries, surface)):
                     JOURNAL.mark("MIDI unité %d : %02X %02X %02X" % (unit, st, d1, d2))
             held = faders.flush(now)
-            top, bot, cols, lvls, fads, layer_name, entries = build_frame(state, a.mixer - 1, surface.strips, overrides)
+            view = state.view
+            if view != shown_view[0]:                       # autre Mixer : overlay (fenêtre détachée) et bascule d'appli
+                shown_view[0] = view
+                if overlay and hasattr(overlay, "set_mixer"):
+                    overlay.set_mixer(view + 1)
+                if apps is not None:
+                    apps.mixer = view + 1
+            top, bot, cols, lvls, fads, layer_name, entries = build_frame(state, view, surface.strips, overrides)
             send_leds = sends.frame(entries, top, bot, cols, fads, overrides)
             master_now = sends.aux_track() or master_target      # mode SEND : fader master = master de l'aux
             entries = list(entries) + [None] * (MASTER - len(entries)) + [master_now]
@@ -2917,8 +3015,8 @@ def main():
                     print("  Couche affichée : %s" % layer_name)
                     JOURNAL.mark("affiché : %s" % layer_name)
                     toast = layer_toast(layer_name)
-                    if overlay and toast and toast != last_toast[0]:     # banque X-Touch puis LV1 : une seule notif
-                        last_toast[0] = toast
+                    if overlay and toast and (view, toast) != last_toast[0]:   # banque X-Touch puis LV1 : une notif
+                        last_toast[0] = (view, toast)                          # (re-notifiée en changeant de Mixer)
                         overlay.set_layer(toast)
                 last_layer = layer_name
             rings, recs = gain.frame(entries[:surface.strips], bot)
@@ -2941,7 +3039,7 @@ def main():
             for k, on in enumerate(sends.fkey_leds()):
                 surface.set_main_led(NOTE_F1 + k, on)
             with state.lock:
-                lmode, ltab, lspill = state.layer_mode.get(a.mixer - 1), state.lv1_tab, state.spill_lit
+                lmode, ltab, lspill = state.layer_mode.get(state.view), state.lv1_tab, state.spill_lit
             for note, on in view_leds(lmode, ltab, lspill).items():       # touches View = mode de couche / onglet All
                 surface.set_main_led(note, on)
             surface.set_main_led(NOTE_SMPTE, buttons.reaper_tc)   # SMPTE : timecode choisi ; LED SMPTE : affiché

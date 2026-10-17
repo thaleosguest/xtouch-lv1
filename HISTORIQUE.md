@@ -97,3 +97,8 @@ Chaque ligne correspond à un ou plusieurs commits git (`git log` pour le détai
 - Entrées MIDI refusées (boutons et faders muets, 3 lancements du 18/10) : notées dans le journal, réessayées toutes les
   3 s (entrées seules) ; reconnexion qui attend toutes les unités du démarrage (vu : 1 sur 2) ; un 2e lancement
   n'écrase plus xtouch_console.txt.
+
+## 18/10/2026 : V0.3
+
+- La surface suit le Mixer affiché (onglet Mixer 1 / Mixer 2, ou fenêtre Mixer détachée) : couches, BANK, sélection,
+  touches View et voyants, notification, overlay marchent sur Mixer 2 comme sur Mixer 1 (`--mixer auto`, défaut).
