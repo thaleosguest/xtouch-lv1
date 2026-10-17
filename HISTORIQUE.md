@@ -91,3 +91,9 @@ Chaque ligne correspond à un ou plusieurs commits git (`git log` pour le détai
 
 - Plus de plantage quand la X-Touch disparaît (USB débranché, veille, X-Touch éteinte) : le pont attend son retour
   et se reconnecte tout seul (`SafeMidi`, `open_units`).
+
+## 18/10/2026 : V0.2.2
+
+- Entrées MIDI refusées (boutons et faders muets, 3 lancements du 18/10) : notées dans le journal, réessayées toutes les
+  3 s (entrées seules) ; reconnexion qui attend toutes les unités du démarrage (vu : 1 sur 2) ; un 2e lancement
+  n'écrase plus xtouch_console.txt.

@@ -44,7 +44,7 @@ import unicodedata
 import lv1_probe as L
 import xtouch_probe as X
 
-VERSION = "0.2.1"
+VERSION = "0.2.2"
 # Dossier des fichiers de Joseph (réglages, courbe, journaux, reaper/) : à côté de l'exe une fois compilé (build.py)
 HERE = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.abspath(__file__))
 COLOR_FILE = os.path.join(HERE, "xtouch_couleurs.json")
@@ -2461,8 +2461,10 @@ def open_units(midi, a, wait=False):
         try:
             units.append((label, dev, midi.open(idx)))
             print("  %s : port %d « %s »" % (label, idx, dict(ports).get(idx, "?")))
+            JOURNAL.mark("sortie %s ouverte (port %d)" % (label, idx))
         except OSError as e:
             print("  %s : %s" % (label, e))
+            JOURNAL.mark("sortie %s REFUSÉE : %s" % (label, e))
     # Par défaut l'Extender est à GAUCHE (installation de Joseph) : elle porte les tranches 1-8.
     if not a.ext_droite and len(units) == 2:
         units.reverse()
@@ -2470,7 +2472,10 @@ def open_units(midi, a, wait=False):
 
 
 def open_inputs(midi_in, units):
-    """Entrées MIDI : même ordre que les sorties (unité 0 = tranches 1-8)."""
+    """Entrées MIDI : même ordre que les sorties (unité 0 = tranches 1-8). Renvoie le nombre d'entrées ouvertes :
+    une entrée refusée (déjà ouverte par un autre programme, erreur 4) = boutons et faders muets (18/10 : trois
+    lancements sans un seul appui reçu) -> la boucle réessaie (`ports_missing`)."""
+    opened = 0
     in_ports = midi_in.list()
     in_main, in_ext = X.pick_ports(in_ports, None, None)
     by_label = {"X-Touch": in_main, "Extender": in_ext}
@@ -2481,9 +2486,31 @@ def open_inputs(midi_in, units):
             continue
         try:
             midi_in.open(idx, u)
+            opened += 1
             print("  %s : entrée %d « %s »" % (label, idx, dict(in_ports).get(idx, "?")))
+            JOURNAL.mark("entrée %s ouverte (port %d)" % (label, idx))
         except OSError as e:
             print("  %s : %s" % (label, e))
+            JOURNAL.mark("entrée %s REFUSÉE : %s" % (label, e))
+    return opened
+
+
+def ports_missing(midi, midi_in, a, wanted, units, inputs_open):
+    """(quoi, raison) s'il faut rouvrir des ports, sinon (None, None) : "sorties" = une unité du démarrage manque (tout
+    est rouvert), "entrées" = une entrée n'est pas ouverte (seules les entrées sont rouvertes : pas d'écrans renvoyés
+    toutes les 3 s si un autre programme la garde). Seulement si le port est de nouveau listé par Windows."""
+    have = [label for label, _, _ in units]
+    out_ports = midi.list()
+    main_idx, ext_idx = X.pick_ports(out_ports, a.main, a.ext)
+    listed = {"X-Touch": main_idx is not None, "Extender": ext_idx is not None}
+    lost = [w for w in wanted if w not in have and listed.get(w)]
+    if lost:
+        return "sorties", "unité revenue : %s" % ", ".join(lost)
+    if midi_in is not None and inputs_open < len(units):
+        in_main, in_ext = X.pick_ports(midi_in.list(), None, None)
+        if any({"X-Touch": in_main, "Extender": in_ext}.get(label) is not None for label in have):
+            return "entrées", "entrée MIDI pas ouverte (%d / %d)" % (inputs_open, len(units))
+    return None, None
 
 
 OVERLAY_FACTORY = None   # tests : fabrique d'un faux affichage d'écran (sinon Qt / tkinter hors --dry-run)
@@ -2579,10 +2606,9 @@ def main():
     if getattr(sys, "frozen", False) and not argv:      # exe lancé d'un double-clic : réglage de Joseph
         argv = ["--clic-lv1", "--attendre"]
     a = ap.parse_args(argv)
+    if getattr(sys, "frozen", False) and already_running():      # AVANT le journal de sortie : un 2e lancement
+        return 0                                                 # écrasait xtouch_console.txt du 1er (18/10)
     redirect_output_to_log()
-    if getattr(sys, "frozen", False) and already_running():
-        print("  XTouch-LV1 tourne déjà (icône près de l'horloge) : ce lancement s'arrête.")
-        return 0
     tray_icon = start_tray() if (getattr(sys, "frozen", False) and not a.dry_run) else None
     print("  XTouch-LV1 v%s" % VERSION)
     if not a.dry_run and not a.sans_reaper_lv1:
@@ -2616,9 +2642,12 @@ def main():
 
     events = EVENTS
     midi_in = None
+    wanted = [label for label, _, _ in units]          # unités du démarrage : on les veut toutes après une coupure
+    inputs_open = 0
     if not a.dry_run:
         midi_in = WinMidiIn(events)
-        open_inputs(midi_in, units)
+        inputs_open = open_inputs(midi_in, units)
+    ports_check = [time.time()]
     load_fader_curve()
 
     overrides = load_color_overrides()
@@ -2766,6 +2795,15 @@ def main():
     t_end = time.time() + a.seconds if a.seconds else None
     try:
         while not (t_end and time.time() > t_end) and not STOP.is_set():
+            if not midi.lost and time.time() - ports_check[0] > 3.0 and not a.dry_run:
+                ports_check[0] = time.time()
+                what, why_missing = ports_missing(midi, midi_in, a, wanted, units, inputs_open)
+                if what == "sorties":
+                    midi.lost = why_missing
+                elif what == "entrées":
+                    JOURNAL.mark("nouvel essai des entrées MIDI : %s" % why_missing)
+                    midi_in.close_all()
+                    inputs_open = open_inputs(midi_in, units)
             if midi.lost:                                # X-Touch disparue : on attend qu'elle revienne, puis on rouvre
                 print("  X-Touch perdue (%s) : en attente de son retour..." % midi.lost)
                 JOURNAL.mark("X-Touch perdue : %s" % midi.lost)
@@ -2774,13 +2812,18 @@ def main():
                 if midi_in:
                     midi_in.close_all()
                 again = None if STOP.wait(1) else open_units(midi, a, wait=True)   # pas de boucle folle
+                t_all = time.time() + 20                 # 18/10 : reconnectée avec 1 unité sur 2 -> attendre les deux
+                while again is not None and len(again) < len(wanted) and time.time() < t_all:
+                    for _, _, h in again:
+                        midi.close(h)
+                    again = None if STOP.wait(2) else open_units(midi, a, wait=True)
                 if again is None:
                     units = []
                     break
                 units[:] = again
                 midi.lost = None
-                if midi_in and units:
-                    open_inputs(midi_in, units)
+                inputs_open = open_inputs(midi_in, units) if (midi_in and units) else 0
+                ports_check[0] = time.time()
                 surface = Surface(midi, units)           # caches vides : tout est renvoyé (écrans, LED, moteurs)
                 JOURNAL.mark("X-Touch reconnectée (%d unité(s))" % len(units))
                 print("  X-Touch reconnectée.")

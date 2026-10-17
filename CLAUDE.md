@@ -89,6 +89,14 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   la boucle ferme tout, attend la X-Touch (`open_units(wait=True)`), rouvre sorties + entrées, nouveau `Surface` (tout
   renvoyé). `WinMidiIn.close_all` vide la liste. Test `tests/test_xtouch_perdue.py`.
 
+- **V0.2.2 (18/10)** : 3 lancements SANS un seul appui reçu (journaux 002117, 003214, 003526 : 0 événement X-Touch,
+  sorties OK) + un pont « zombie » qui ne tenait plus aucun port (vérifié : entrées et sortie 3 libres) et que le
+  Gestionnaire des tâches ne pouvait pas arrêter (pont en admin -> Gestionnaire en admin, ou Quitter de l'icône).
+  Cause des entrées refusées pas encore connue (console écrasée par un 2e lancement) -> journal « entrée … REFUSÉE »,
+  `ports_missing` toutes les 3 s (entrées seules réessayées, ou tout si une unité revient), reconnexion qui attend toutes
+  les unités (`wanted`, 20 s max), mutex AVANT `redirect_output_to_log`. Entrées MIDI winmm EXCLUSIVES (vérifié :
+  2e midiInOpen -> 4).
+
 ## Fichiers
 
 - **V0.1 = installeur « Total Control for LV1 » (16/10/2026, ex « LV1 Suite » : nom choisi par Joseph ; « Total Control »
