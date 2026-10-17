@@ -96,6 +96,10 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   `ports_missing` toutes les 3 s (entrées seules réessayées, ou tout si une unité revient), reconnexion qui attend toutes
   les unités (`wanted`, 20 s max), mutex AVANT `redirect_output_to_log`. Entrées MIDI winmm EXCLUSIVES (vérifié :
   2e midiInOpen -> 4).
+  **Cause trouvée (18/10, essai de Joseph)** : la X-Touch elle-même restait bloquée après la coupure USB (ports ouverts
+  sans erreur, écrans OK, 0 événement reçu, rien non plus sur MIDIIN2) ; éteindre / rallumer la X-Touch la débloque.
+  Reconnexion 0.2.2 vérifiée en vrai (journal 004716) : perdue à 113 s, 1er essai Extender seule (X-Touch refusée,
+  ports renumérotés), attente des deux, reconnectée à 118 s, 594 événements ensuite.
 
 ## Fichiers
 
