@@ -86,3 +86,8 @@ Chaque ligne correspond à un ou plusieurs commits git (`git log` pour le détai
 - Clics de couche aussi en Custom (garde-fou sur le bord des cases).
 - SMPTE : afficheur timecode REAPER / heure. Notification = nom de la couche seul.
 - XTouch-LV1 lance X/M32 Gain Recall ; exe sans fenêtre noire, icône près de l'horloge (Quitter), une seule instance.
+
+## 18/10/2026 : V0.2.1
+
+- Plus de plantage quand la X-Touch disparaît (USB débranché, veille, X-Touch éteinte) : le pont attend son retour
+  et se reconnecte tout seul (`SafeMidi`, `open_units`).

@@ -44,7 +44,7 @@ import unicodedata
 import lv1_probe as L
 import xtouch_probe as X
 
-VERSION = "0.2"
+VERSION = "0.2.1"
 # Dossier des fichiers de Joseph (réglages, courbe, journaux, reaper/) : à côté de l'exe une fois compilé (build.py)
 HERE = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.abspath(__file__))
 COLOR_FILE = os.path.join(HERE, "xtouch_couleurs.json")
@@ -863,6 +863,7 @@ class WinMidiIn:
                 self.w.midiInClose(h)
             except OSError:
                 pass
+        self.handles = []
 
 
 EVENTS = queue.Queue()  # messages MIDI reçus (global : les tests peuvent en injecter)
@@ -2399,6 +2400,92 @@ def start_gain_recall():
     print("  X/M32 Gain Recall : lancé (%s)" % exe)
 
 
+class SafeMidi:
+    """Sorties MIDI qui ne plantent pas quand la X-Touch disparaît (USB débranché, veille, X-Touch éteinte : « envoi
+    court : There is no driver installed on your system », plantage de la 0.2 chez Joseph le 18/10). La 1re erreur est
+    notée dans `lost`, les envois suivants sont ignorés, et la boucle principale attend la X-Touch puis rouvre tout."""
+
+    def __init__(self, midi):
+        self.midi, self.lost = midi, None
+
+    def list(self):
+        return self.midi.list()
+
+    def open(self, index):
+        return self.midi.open(index)
+
+    def close(self, h):
+        try:
+            self.midi.close(h)
+        except OSError:
+            pass
+
+    def short(self, h, *args):
+        if self.lost:
+            return
+        try:
+            self.midi.short(h, *args)
+        except OSError as e:
+            self.lost = str(e)
+
+    def long(self, h, data):
+        if self.lost:
+            return
+        try:
+            self.midi.long(h, data)
+        except OSError as e:
+            self.lost = str(e)
+
+
+def open_units(midi, a, wait=False):
+    """Ouvre les sorties X-Touch / Extender : [(libellé, id SysEx, handle)] (Extender d'abord sauf --ext-droite), ou
+    [] si aucune. wait : attendre le branchement USB (vérifié toutes les 2 s) ; None si « Quitter » pendant l'attente."""
+    ports = midi.list()
+    main_idx, ext_idx = X.pick_ports(ports, a.main, a.ext)
+    if wait and main_idx is None and ext_idx is None:            # plug and play : on attend le branchement USB
+        print("  En attente des X-Touch (brancher l'USB)...")
+        while main_idx is None and ext_idx is None:
+            if STOP.wait(2):
+                return None
+            ports = midi.list()
+            main_idx, ext_idx = X.pick_ports(ports, a.main, a.ext)
+        if STOP.wait(2):                                         # laisser Windows finir d'installer les deux ports
+            return None
+        ports = midi.list()
+        main_idx, ext_idx = X.pick_ports(ports, a.main, a.ext)
+    units = []
+    for label, idx, dev in (("X-Touch", main_idx, X.ID_MAIN), ("Extender", ext_idx, X.ID_EXT)):
+        if idx is None:
+            print("  %s : port introuvable, ignorée." % label)
+            continue
+        try:
+            units.append((label, dev, midi.open(idx)))
+            print("  %s : port %d « %s »" % (label, idx, dict(ports).get(idx, "?")))
+        except OSError as e:
+            print("  %s : %s" % (label, e))
+    # Par défaut l'Extender est à GAUCHE (installation de Joseph) : elle porte les tranches 1-8.
+    if not a.ext_droite and len(units) == 2:
+        units.reverse()
+    return units
+
+
+def open_inputs(midi_in, units):
+    """Entrées MIDI : même ordre que les sorties (unité 0 = tranches 1-8)."""
+    in_ports = midi_in.list()
+    in_main, in_ext = X.pick_ports(in_ports, None, None)
+    by_label = {"X-Touch": in_main, "Extender": in_ext}
+    for u, (label, _, _) in enumerate(units):
+        idx = by_label.get(label)
+        if idx is None:
+            print("  %s : entrée MIDI introuvable (faders sans effet)." % label)
+            continue
+        try:
+            midi_in.open(idx, u)
+            print("  %s : entrée %d « %s »" % (label, idx, dict(in_ports).get(idx, "?")))
+        except OSError as e:
+            print("  %s : %s" % (label, e))
+
+
 OVERLAY_FACTORY = None   # tests : fabrique d'un faux affichage d'écran (sinon Qt / tkinter hors --dry-run)
 STOP = threading.Event()  # « Quitter » de l'icône près de l'horloge : fin propre de la boucle (écrans remis à zéro)
 
@@ -2516,56 +2603,22 @@ def main():
         return 2
     else:
         midi = X.WinMidiOut()
+    midi = SafeMidi(midi)
 
-    ports = midi.list()
-    main_idx, ext_idx = X.pick_ports(ports, a.main, a.ext)
-    if a.attendre and main_idx is None and ext_idx is None:     # plug and play : on attend le branchement USB
-        print("  En attente des X-Touch (brancher l'USB)...")
-        while main_idx is None and ext_idx is None:
-            if STOP.wait(2):
-                if tray_icon:
-                    tray_icon.stop()
-                return 0
-            ports = midi.list()
-            main_idx, ext_idx = X.pick_ports(ports, a.main, a.ext)
-        time.sleep(2)                                  # laisser Windows finir d'installer les deux ports
-        ports = midi.list()
-        main_idx, ext_idx = X.pick_ports(ports, a.main, a.ext)
-    units = []
-    for label, idx, dev in (("X-Touch", main_idx, X.ID_MAIN), ("Extender", ext_idx, X.ID_EXT)):
-        if idx is None:
-            print("  %s : port introuvable, ignorée." % label)
-            continue
-        try:
-            units.append((label, dev, midi.open(idx)))
-            print("  %s : port %d « %s »" % (label, idx, dict(ports).get(idx, "?")))
-        except OSError as e:
-            print("  %s : %s" % (label, e))
+    units = open_units(midi, a, wait=a.attendre)
+    if units is None:                                  # « Quitter » pendant l'attente des X-Touch
+        if tray_icon:
+            tray_icon.stop()
+        return 0
     if not units:
         print("Aucune X-Touch utilisable. Liste des ports : py xtouch_probe.py --list")
         return 3
-    # Par défaut l'Extender est à GAUCHE (installation de Joseph) : elle porte les tranches 1-8.
-    if not a.ext_droite and len(units) == 2:
-        units.reverse()
 
-    # Entrées MIDI : même ordre que les sorties (unité 0 = tranches 1-8).
     events = EVENTS
     midi_in = None
     if not a.dry_run:
         midi_in = WinMidiIn(events)
-        in_ports = midi_in.list()
-        in_main, in_ext = X.pick_ports(in_ports, None, None)
-        by_label = {"X-Touch": in_main, "Extender": in_ext}
-        for u, (label, _, _) in enumerate(units):
-            idx = by_label.get(label)
-            if idx is None:
-                print("  %s : entrée MIDI introuvable (faders sans effet)." % label)
-                continue
-            try:
-                midi_in.open(idx, u)
-                print("  %s : entrée %d « %s »" % (label, idx, dict(in_ports).get(idx, "?")))
-            except OSError as e:
-                print("  %s : %s" % (label, e))
+        open_inputs(midi_in, units)
     load_fader_curve()
 
     overrides = load_color_overrides()
@@ -2713,6 +2766,26 @@ def main():
     t_end = time.time() + a.seconds if a.seconds else None
     try:
         while not (t_end and time.time() > t_end) and not STOP.is_set():
+            if midi.lost:                                # X-Touch disparue : on attend qu'elle revienne, puis on rouvre
+                print("  X-Touch perdue (%s) : en attente de son retour..." % midi.lost)
+                JOURNAL.mark("X-Touch perdue : %s" % midi.lost)
+                for _, _, h in units:
+                    midi.close(h)
+                if midi_in:
+                    midi_in.close_all()
+                again = None if STOP.wait(1) else open_units(midi, a, wait=True)   # pas de boucle folle
+                if again is None:
+                    units = []
+                    break
+                units[:] = again
+                midi.lost = None
+                if midi_in and units:
+                    open_inputs(midi_in, units)
+                surface = Surface(midi, units)           # caches vides : tout est renvoyé (écrans, LED, moteurs)
+                JOURNAL.mark("X-Touch reconnectée (%d unité(s))" % len(units))
+                print("  X-Touch reconnectée.")
+                if not units:
+                    continue
             now = time.time()
             while True:
                 if woke:

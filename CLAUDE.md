@@ -84,6 +84,11 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   (mutex `Local\XTouchLV1_Bridge`, exe seulement). Voyant GROUP = Spill lu à l'écran (`lv1_clic.spill_on`, vert
   (140, 255, 0)) : la base garde le mode d'avant (4) avec Spill allumé (vérifié, aucune propriété ne change).
 
+- **V0.2.1 (18/10)** : plantage de la 0.2 chez Joseph (fenêtre « Unhandled exception » : « envoi court : There is no
+  driver installed on your system », X-Touch disparue) -> `SafeMidi` (sorties : erreur notée dans `lost`, pas d'exception),
+  la boucle ferme tout, attend la X-Touch (`open_units(wait=True)`), rouvre sorties + entrées, nouveau `Surface` (tout
+  renvoyé). `WinMidiIn.close_all` vide la liste. Test `tests/test_xtouch_perdue.py`.
+
 ## Fichiers
 
 - **V0.1 = installeur « Total Control for LV1 » (16/10/2026, ex « LV1 Suite » : nom choisi par Joseph ; « Total Control »
