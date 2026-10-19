@@ -88,6 +88,11 @@ def window_pid(hwnd):
 
 def exe_of(pid):
     """Nom du programme d'un processus, en minuscules (« reaper.exe »), ou "" si illisible."""
+    return exe_path(pid).rsplit("\\", 1)[-1].lower()
+
+
+def exe_path(pid):
+    """Chemin complet du programme d'un processus, ou "" si illisible."""
     k = ctypes.windll.kernel32
     k.OpenProcess.restype = ctypes.c_void_p
     k.QueryFullProcessImageNameW.argtypes = [ctypes.c_void_p, wt.DWORD, ctypes.c_wchar_p, ctypes.POINTER(wt.DWORD)]
@@ -97,7 +102,7 @@ def exe_of(pid):
         return ""
     try:
         buf, n = ctypes.create_unicode_buffer(520), wt.DWORD(520)
-        return buf.value.rsplit("\\", 1)[-1].lower() if k.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(n)) else ""
+        return buf.value if k.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(n)) else ""
     finally:
         k.CloseHandle(h)
 

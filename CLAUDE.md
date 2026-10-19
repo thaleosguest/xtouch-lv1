@@ -116,7 +116,9 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   Limite : SoF lancé depuis le menu LV1 (pas de User Key) puis SEND / sortie sur la X-Touch -> la LV1 reste en SoF
   (pas de commande réseau connue pour l'en sortir). Test `tests/test_sof_lv1.py`.
 - **Tout quitter (19/10, demande de Joseph)** : menu de l'icône « Tout quitter (XTouch-LV1 + X/M32 Gain Recall) » =
-  `quit_all` : POST `<--x32>/api/quit` (Gain Recall l'accepte depuis 127.0.0.1 seulement), puis `STOP`. Masqué si
+  `quit_all` : POST `<--x32>/api/quit` (Gain Recall l'accepte depuis 127.0.0.1 seulement), puis REAPER LV1 (ajouté le
+  19/10 : WM_CLOSE à SES fenêtres, reconnues au chemin de `suite.json` -> `lv1.screen.exe_path` ; le REAPER habituel
+  n'est pas touché ; projet non enregistré = question de REAPER), puis `STOP`. Libellé `quit_all_label`. Masqué si
   `--x32 aucun`. Test `tests/test_tout_quitter.py` (faux Gain Recall) ; **validé par Joseph le 19/10**.
 - **Avis de mise à jour (18/10)** : `check_update` (GitHub `releases/latest` de xtouch-lv1, `version_tuple`), 10 s après le
   lancement puis toutes les 24 h (`update_loop`, exe avec icône seulement), bulle une fois par version + entrée du menu

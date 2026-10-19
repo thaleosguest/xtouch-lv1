@@ -1056,16 +1056,62 @@ def quit_gain_recall(url):
         return False
 
 
-def quit_all(gr_url):
-    """« Tout quitter » (demande de Joseph, 19/10) : X/M32 Gain Recall puis XTouch-LV1 (écrans remis à zéro)."""
-    ok = quit_gain_recall(gr_url)
-    JOURNAL.mark("Tout quitter : X/M32 Gain Recall %s" % ("arrêté" if ok else "pas de réponse (pas lancé ?)"))
+def reaper_lv1_exe(suite_file=None):
+    """Chemin de REAPER LV1 (noté par l'installeur dans suite.json), ou None s'il n'est pas installé."""
+    try:
+        with open(suite_file or SUITE_FILE, encoding="utf-8") as f:
+            exe = json.load(f).get("reaper")
+    except (OSError, ValueError):
+        return None
+    return exe if exe and os.path.exists(exe) else None
+
+
+def quit_reaper_lv1(exe, wins=None, path_of=None, post=None):
+    """Ferme REAPER LV1 comme sa croix (WM_CLOSE à SES fenêtres, reconnues au chemin de l'exe : le REAPER habituel
+    n'est jamais touché ; projet non enregistré -> REAPER pose sa question). Renvoie le nombre de fenêtres fermées."""
+    if not exe:
+        return 0
+    if wins is None or path_of is None or post is None:
+        from lv1 import screen
+        wins = screen.windows() if wins is None else wins
+        path_of = path_of or (lambda h: screen.exe_path(screen.window_pid(h)))
+        post = post or (lambda h: screen.user32().PostMessageW(h, 0x0010, 0, 0))     # WM_CLOSE
+    want = os.path.normcase(os.path.abspath(exe))
+    n = 0
+    for h, _title in wins:
+        p = path_of(h)
+        if p and os.path.normcase(os.path.abspath(p)) == want:
+            post(h)
+            n += 1
+    return n
+
+
+def quit_all(gr_url, reaper_exe=None):
+    """« Tout quitter » (demande de Joseph, 19/10) : X/M32 Gain Recall, REAPER LV1, puis XTouch-LV1 (écrans remis à
+    zéro)."""
+    if gr_url:
+        ok = quit_gain_recall(gr_url)
+        JOURNAL.mark("Tout quitter : X/M32 Gain Recall %s" % ("arrêté" if ok else "pas de réponse (pas lancé ?)"))
+    if reaper_exe:
+        try:
+            n = quit_reaper_lv1(reaper_exe)
+        except Exception as e:
+            n, why = 0, repr(e)
+        else:
+            why = "pas ouvert"
+        JOURNAL.mark("Tout quitter : REAPER LV1 %s" % ("fermé (%d fenêtre(s))" % n if n else why))
     STOP.set()
 
 
-def start_tray(gr_url=None):
+def quit_all_label(gr_url, reaper_exe):
+    """Libellé de « Tout quitter » : ce qui sera fermé ; None (entrée masquée) s'il n'y a que XTouch-LV1."""
+    extra = [x for x, on in (("X/M32 Gain Recall", gr_url), ("REAPER LV1", reaper_exe)) if on]
+    return "Tout quitter (XTouch-LV1 + %s)" % " + ".join(extra) if extra else None
+
+
+def start_tray(gr_url=None, reaper_exe=None):
     """Icône près de l'horloge (comme X/M32 Gain Recall) : mise à jour (si disponible), mode d'emploi, dossier des
-    journaux, Quitter ; « Tout quitter » (avec X/M32 Gain Recall) si le pont est relié à Gain Recall (gr_url)."""
+    journaux, Quitter ; « Tout quitter » avec X/M32 Gain Recall (gr_url) et / ou REAPER LV1 (reaper_exe)."""
     try:
         import tray
     except ImportError:
@@ -1086,8 +1132,8 @@ def start_tray(gr_url=None):
          ("Dossier des journaux", lambda: open_path(HERE)),
          None,
          ("Quitter XTouch-LV1", STOP.set),
-         (lambda: "Tout quitter (XTouch-LV1 + X/M32 Gain Recall)" if gr_url else None,
-          lambda: threading.Thread(target=quit_all, args=(gr_url,), daemon=True).start())],
+         (lambda: quit_all_label(gr_url, reaper_exe),
+          lambda: threading.Thread(target=quit_all, args=(gr_url, reaper_exe), daemon=True).start())],
         icon_path=os.path.join(HERE, "assets", "icon.ico"),
     ).start()
 
@@ -1187,7 +1233,8 @@ class App:
             return 0                                                 # écrasait xtouch_console.txt du 1er (18/10)
         redirect_output_to_log()
         gr_url = None if a.x32.lower() in ("aucun", "none", "off") else a.x32
-        self.tray_icon = start_tray(gr_url) if (getattr(sys, "frozen", False) and not a.dry_run) else None
+        reaper_exe = None if a.sans_reaper_lv1 else reaper_lv1_exe()
+        self.tray_icon = start_tray(gr_url, reaper_exe) if (getattr(sys, "frozen", False) and not a.dry_run) else None
         if self.tray_icon:
             threading.Thread(target=update_loop, args=(self.tray_icon,), daemon=True).start()
         print("  XTouch-LV1 v%s" % VERSION)
