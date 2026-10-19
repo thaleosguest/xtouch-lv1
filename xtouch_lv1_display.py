@@ -700,8 +700,10 @@ def diagonal_problems(state):
     bad = []
     with state.lock:
         size, routing = state.driver_size, state.routing
-        if not size or not routing:
+        if not size or (not routing and state.driver[0] is None):
             return None                    # inconnu (base illisible, pas encore lue)
+        # pilote connu, aucune route : rien n'est branché (20/10 : pilote déplacé dans le rack -> routes B effacées, la
+        # carte ne s'affichait pas) -> tous les canaux sont décalés
         row = 0
         for (g, ch), t in sorted(state.tracks.items()):
             if g != 0:

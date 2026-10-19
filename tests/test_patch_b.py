@@ -126,6 +126,12 @@ check("In 1 stéréo : diagonale cassée dès la notification", D.diagonal_probl
 D.handle(st, "/Notify/StemFormatForSource", [("i", 0), ("i", 0), ("i", 100), ("i", 1)])
 check("retour mono : OK", D.diagonal_problems(st) == [])
 
+# pilote connu mais AUCUNE route (déplacé dans le rack : routes effacées) -> tout est décalé ; pilote inconnu -> None
+st.routing, st.driver = {}, ("LV1-PORT", 2)
+check("aucune route, pilote connu : tous décalés", D.diagonal_problems(st) == ["In 1", "In 2", "In 3"])
+st.driver = (None, None)
+check("pilote inconnu : inconnu (None)", D.diagonal_problems(st) is None)
+
 # ── clic REALIGN : message UDP de l'overlay (send_action) -> on_action / on_log, de bout en bout
 import socket, threading, time
 import xtouch_overlay as O
