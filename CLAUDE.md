@@ -127,7 +127,12 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   sur sa capture : `TILE_*`, `PANEL_BG`), anglais : « INPUT B PATCH • LV1-PORT », « 12 CH MISALIGNED », REALIGN /
   WORKING / RETRY / ALIGNED ; seulement page Patch (`patch_alert`, `state.lv1_tab`) et LV1 devant. Clic : l'overlay
   écrit `{"action": "fix_patch"}` sur stdout, `QtOverlay._read_actions` -> `App.on_overlay_action`. Consignes
-  d'échec traduites (`patch_hint`). Test `tests/test_patch_b.py`. Clic de vignette et vitesse : à essayer sur le matériel.
+  d'échec traduites (`patch_hint`). Test `tests/test_patch_b.py`.
+  Essai du 19/10 (journal 234113) : 32 cases en 2,8 s (OK) ; puis refus en série « grille ne correspond pas » -> corrigé
+  (`matches_db` ne compare que les lignes VISIBLES) ; carte pas vue, REALIGN sans effet -> canal retour passé de stdout
+  (exe sans console, douteux) à UDP local (`QtOverlay.rx`, overlay `--retour=port`, `send_action`) ; traces au journal :
+  « page Patch : onglet …, carte … » (pont) et « overlay : … » (démarré / carte affichée / cachée + raison).
+  L'exe demande l'élévation (uac-admin) : impossible de le lancer depuis Claude pour tester.
 - **Trim et phase LV1 (19/10, choix de Joseph)** : TRACK = normal -> gain X32 -> trim -> normal (sans Gain Recall : normal
   -> trim). `GainControl.trim_mode` : encodeur = `/SetTrackTrim g ch stéréo f` (0,5 dB/cran, 3e arg 1 si stéréo), appui
   = `/SetTrackPhaseState g ch stéréo 0|1` ; état lu dans `/Notify/TrackTrim` / `PhaseState` (`track["trim"|"phase"][voie]`).

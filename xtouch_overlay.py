@@ -183,19 +183,40 @@ class QtOverlay:
         else:
             args = [sys.executable, os.path.join(here, "xtouch_overlay_qt.py")]
         args += ["--mixer=2"] if mixer == 2 else []
+        # Canal retour overlay -> pont (clics à l'écran, traces) : UDP local, port donné à l'overlay (--retour=). Pas sa
+        # sortie standard : l'exe compilé n'a pas de console (19/10, bouton REALIGN sans effet chez Joseph).
+        import socket
+        self.rx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.rx.bind(("127.0.0.1", 0))
+        args += ["--retour=%d" % self.rx.getsockname()[1]]
         flags = 0x08000000 if sys.platform == "win32" else 0          # CREATE_NO_WINDOW
-        self.proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, creationflags=flags)
+        self.proc = subprocess.Popen(args, stdin=subprocess.PIPE, creationflags=flags)
         self.last = object()
         self.on_action = None            # appelé avec "fix_patch" (bouton REALIGN de l'écran), branché par le pont
+        self.on_log = None               # traces de l'overlay (journal du pont)
         threading.Thread(target=self._read_actions, daemon=True).start()
 
     def _read_actions(self):
-        """Lignes JSON {"action": ...} envoyées par l'overlay (clics à l'écran) ; le reste est ignoré."""
-        for line in self.proc.stdout:
+        """Messages JSON de l'overlay : {"action": ...} (clics à l'écran), {"log": ...} (traces) ; le reste est ignoré."""
+        while True:
             try:
-                act = json.loads(line.decode("utf-8", "replace")).get("action")
+                data, _ = self.rx.recvfrom(65536)
+            except OSError:
+                return
+            self.handle_back(data)
+
+    def handle_back(self, data):
+        for line in data.splitlines():
+            try:
+                msg = json.loads(line.decode("utf-8", "replace"))
+                act = msg.get("action")
             except (ValueError, AttributeError):
                 continue
+            if msg.get("log") and self.on_log:
+                try:
+                    self.on_log(msg["log"])
+                except Exception:
+                    pass
             if act and self.on_action:
                 try:
                     self.on_action(act)

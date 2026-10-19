@@ -200,12 +200,13 @@ def select_tile(grid, tile, name=None):
 
 def matches_db(grid, expect):
     """Les cases patchées à l'écran sont-elles celles que la base donne pour le pilote ? expect = {ligne: colonne}
-    (lignes de l'entrée B branchées sur le pilote). Vide : rien à comparer (True). Garde-fou contre une vignette
-    défilée ou mal numérotée : au moins la moitié des lignes attendues doivent correspondre."""
-    if not expect:
+    (lignes de l'entrée B branchées sur le pilote). Seules les lignes VISIBLES comptent ; aucune : True. Garde-fou contre
+    une vignette défilée ou mal numérotée : au moins la moitié des lignes visibles attendues doivent correspondre."""
+    seen = {r: c for r, c in expect.items() if r < len(grid["rows"]) and c < len(grid["cols"])}
+    if not seen:                       # 19/10 : comparer des lignes hors de l'écran les comptait fausses -> refus en série
         return True
-    same = sum(1 for r, c in expect.items() if grid["on"].get(r) == [c])
-    return same * 2 >= len(expect)
+    same = sum(1 for r, c in seen.items() if grid["on"].get(r) == [c])
+    return same * 2 >= len(seen)
 
 
 def click_fast(grid, cells):

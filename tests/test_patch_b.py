@@ -3,7 +3,7 @@
 - refus SANS clic si la grille affichée ne correspond pas à la base pour ce pilote (vignette défilée…) ;
 - clics à la suite, puis relecture et 2e passe pour les cases ratées ; pas de dézoom si toutes les lignes sont visibles ;
 - patch_alert : rien hors page Patch, « idle » / « busy » / « failed » + consigne anglaise / « done » ;
-- QtOverlay : une ligne {"action": "fix_patch"} de l'overlay appelle on_action.
+- canal retour UDP : send_action de l'overlay -> on_action (« fix_patch ») / on_log (traces) du pont.
 
     py tests/test_patch_b.py .
 """
@@ -101,14 +101,25 @@ a.fix_result = (True, "2 case(s) corrigée(s)", 99.0)
 check("done tant que la base n'est pas relue", D.patch_alert("Patch", ["In 3"], a, "LV1-PORT", 100.0)["state"] == "done")
 check("done puis disparaît", D.patch_alert("Patch", [], a, "LV1-PORT", 99.0 + D.PATCH_DONE_S + 0.5) is None)
 
-# ── clic REALIGN : ligne JSON de l'overlay -> on_action
+# ── clic REALIGN : message UDP de l'overlay (send_action) -> on_action / on_log, de bout en bout
+import socket, threading, time
 import xtouch_overlay as O
 qo = O.QtOverlay.__new__(O.QtOverlay)
-qo.proc = type("Proc", (), {"stdout": io.BytesIO(b'bruit\n{"action": "fix_patch"}\n')})()
-got = []
-qo.on_action = got.append
-qo._read_actions()
+qo.rx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+qo.rx.bind(("127.0.0.1", 0))
+got, logs = [], []
+qo.on_action, qo.on_log = got.append, logs.append
+threading.Thread(target=qo._read_actions, daemon=True).start()
+from PySide6.QtWidgets import QApplication
+import xtouch_overlay_qt as Q
+Q.RETOUR = qo.rx.getsockname()[1]
+Q.send_action("overlay démarré, canal retour OK", "log")
+Q.send_action("fix_patch")
+time.sleep(0.3)
 check("clic REALIGN transmis au pont", got == ["fix_patch"])
+check("trace de l'overlay transmise", logs == ["overlay démarré, canal retour OK"])
+qo.handle_back(b'bruit')
+check("message illisible ignoré", got == ["fix_patch"])
 
 print("OK" if ok else "ÉCHEC : " + ", ".join(why))
 sys.exit(0 if ok else 1)

@@ -1363,6 +1363,7 @@ class App:
             self.overlay = xtouch_overlay.make_overlay(state.view + 1)   # Qt (style Gain Recall v3) si PySide6, sinon tk
         if self.overlay is not None and hasattr(self.overlay, "on_action"):
             self.overlay.on_action = self.on_overlay_action       # bouton REALIGN de la page Patch
+            self.overlay.on_log = lambda text: JOURNAL.mark("overlay : %s" % text)
         faders.key_of = sends.key_of
         gain.send_aux = lambda: sends.aux
         # master en lecture seule quand il est sur LR (hors sends on fader : là, il règle le master de l'aux)
@@ -1686,7 +1687,12 @@ class App:
                               % (len(bad), ", ".join(bad[:5]) + ("…" if len(bad) > 5 else "")))
                         JOURNAL.mark("diagonale B cassée : %s" % bad)
         if overlay and hasattr(overlay, "set_patch"):
-            overlay.set_patch(patch_alert(state.lv1_tab, self.diag_bad, self.apps, state.driver[0], now))
+            info = patch_alert(state.lv1_tab, self.diag_bad, self.apps, state.driver[0], now)
+            key = (state.lv1_tab, info and info["state"], info and info["bad"])
+            if key != getattr(self, "patch_seen", None):          # trace : onglet lu et carte demandée
+                self.patch_seen = key
+                JOURNAL.mark("page Patch : onglet %s, carte %s" % (state.lv1_tab, info))
+            overlay.set_patch(info)
         ch_at = self.ch_at
         if ch_at != self.ab_seen and now - ch_at > 1.0 and not a.dry_run:              # état renvoyé (Flip A/B…)
             self.ab_seen = ch_at

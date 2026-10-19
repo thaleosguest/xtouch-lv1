@@ -905,16 +905,20 @@ PANEL_BG = QColor(*L.PANEL_BG)
 LV1_RED, LV1_OK = QColor(224, 60, 50), QColor(140, 255, 0)   # alerte ; « vert » des boutons ON de la LV1
 
 
-def send_action(action):
-    """Ligne JSON vers le pont (stdout du processus overlay). Exe fenêtré : sys.stdout peut manquer -> fd 1."""
-    data = (json.dumps({"action": action}) + "\n").encode("utf-8")
+RETOUR = None          # port UDP local du pont (--retour=), pour les clics à l'écran et les traces
+
+
+def send_action(action, key="action"):
+    """Message JSON vers le pont, en UDP local (port --retour= donné par le pont ; pas la sortie standard : l'exe
+    compilé n'a pas de console). key="log" : simple trace, écrite dans le journal du pont."""
+    if not RETOUR:
+        return
+    import socket
     try:
-        if sys.stdout is not None:
-            sys.stdout.buffer.write(data)
-            sys.stdout.flush()
-        else:
-            os.write(1, data)
-    except (OSError, ValueError, AttributeError):
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.sendto(json.dumps({key: action}).encode("utf-8"), ("127.0.0.1", RETOUR))
+        s.close()
+    except OSError:
         pass
 
 
@@ -1152,7 +1156,14 @@ class Overlay:
         if not self.patch_info or not self.rect or not self.front:
             if self.patch.isVisible():
                 self.patch.hide()
+                send_action("carte Patch cachée (%s)" % ("plus demandée" if not self.patch_info else
+                                                          "LV1 pas au premier plan" if not self.front else "LV1 introuvable"), "log")
+            elif self.patch_info and getattr(self, "patch_why", None) != self.front:
+                self.patch_why = self.front              # demandée mais pas montrée : dire pourquoi (une fois)
+                send_action("carte Patch demandée, pas affichée : %s" % ("LV1 pas au premier plan" if not self.front
+                                                                        else "LV1 introuvable"), "log")
             return
+        self.patch_why = None
         x, y, w, h = self.rect
         sx, sy = w / 1920.0, h / 1080.0
         ax, ay, aw, ah = L.PATCH_ALERT
@@ -1161,6 +1172,7 @@ class Overlay:
             self.patch.setGeometry(*geo)
         if not self.patch.isVisible():
             self.patch.show()
+            send_action("carte Patch affichée %s (%s)" % (geo, self.patch_info.get("state")), "log")
         self.patch.raise_()
 
     def on_msg(self, m):
@@ -1252,6 +1264,10 @@ def main():
     app.setQuitOnLastWindowClosed(False)
     demo = "--demo" in sys.argv
     mixer = 2 if "--mixer=2" in sys.argv else 1
+    global RETOUR
+    for arg in sys.argv:
+        if arg.startswith("--retour="):
+            RETOUR = int(arg.split("=", 1)[1])
     if "--taille" in sys.argv:                       # bascule petit / grand (le pont la prend en compte à chaud)
         i = sys.argv.index("--taille")
         want = sys.argv[i + 1] if i + 1 < len(sys.argv) else ""
@@ -1297,6 +1313,8 @@ def main():
                     pass
             bus.msg.emit({"quit": True})
     threading.Thread(target=script, daemon=True).start()
+    if not demo:
+        send_action("overlay démarré, canal retour OK", "log")
     return app.exec()
 
 
