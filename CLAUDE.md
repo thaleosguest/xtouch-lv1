@@ -557,6 +557,7 @@ Messages vérifiés :
   sur la LV1. LED FLIP = entrées sur B, lue dans la base (`lv1_db.input_ab`, param 0, 1 = B) au démarrage et ~1 s
   après chaque /Channels (`state.channels_at`). Test dans `tests/test_fkeys.py`.
   Le Flip A/B de la LV1 demande une CONFIRMATION à l'écran (Joseph clique lui-même, ok pour lui).
+  Décision de Joseph (19/10) : Flip A/B n'existe dans la LV1 qu'en User Key -> on garde la User Key, pas d'autre voie.
   **Indicateur A/B à l'écran** (Qt, demande de Joseph) : pastille qui RECOUVRE la User Key « FlipAB » (rangée des User
   Keys, visible sur toutes les pages ; touche k = x 145+96k..229+96k, y 62..90) : « FLIP » + A bleu (56,201,255) /
   B rouge 48 V, TOUJOURS OPAQUE (la respiration en semi-transparence a été refusée) ; recopie la touche au pixel
