@@ -147,6 +147,9 @@
     main C B0 42 20
     main C B0 41 20
     main C B0 40 20
+    main C 90 73 00
+    main C 90 5A 00
+    main C 90 32 00
 # msg 3 /Channels | couche=In 1-16 (par défaut)
     main C E8 7F 5F
     ext  S f000006615123820202d696e662020202d696e662020202d696e662020202d696e662020202d696e662020202d696e662020202d696e662020202d696e6620f7

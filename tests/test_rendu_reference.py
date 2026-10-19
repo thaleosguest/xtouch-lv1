@@ -8,7 +8,8 @@ Le but n'est pas de dire si l'affichage est JUSTE (les autres tests s'en chargen
 le refactor : un seul octet de différence et le test échoue en nommant la ligne.
 
 Pas de matériel, pas de fil, pas de socket : horloge figée (`Clock`, avance de TICK par tour comme la vraie boucle),
-`Surface` branchée sur une sortie MIDI qui enregistre. Deux exécutions donnent le même fichier.
+`Surface` branchée sur une sortie MIDI qui enregistre, rendu = `App.tick_render` (étape 9). Deux exécutions
+donnent le même fichier.
 
     py tests/test_rendu_reference.py .            # compare
     py tests/test_rendu_reference.py . --maj      # réenregistre la référence (changement VOULU seulement)
@@ -106,56 +107,24 @@ gain = D.GainControl(state, None, write=False, lv1=None)
 sends = D.SendControl(state, None, write=False, gain=gain)
 buttons = D.ButtonControl(state, None, write=False, page=0)
 MASTER_CIBLE = (3, 0)          # fader master -> LR, comme le défaut --master 3:0
-entries = [None] * xt.strips
+# Étape 9 : le VRAI tour de rendu du pont (App.tick_render), plus une imitation. App(None) ne démarre rien : on y
+# branche nos objets (pas de REAPER, de Gain Recall, d'overlay ni de bascule d'appli, comme dans le test d'avant).
+app = D.App(None)
+app.state, app.xt, app.gain, app.sends, app.buttons = state, xt, gain, sends, buttons
+app.master_target = MASTER_CIBLE
+app.entries = [None] * xt.strips
+app.shown_view = state.view
 sortie = []
 
 
 def rendu(etiquette):
-    """Un tour de la boucle principale, côté affichage : mêmes appels, même ordre (xtouch_lv1_display.main)."""
-    global entries
+    """Un tour de rendu de la boucle principale (App.tick_render), sans doigt sur un fader."""
     Clock.now += D.TICK
-    now = Clock.now
     avant = len(midi.log)
-    view = state.view
-    top, bot, cols, lvls, fads, layer_name, entries = D.build_frame(state, view, xt.strips, {})
-    send_leds = sends.frame(entries, top, bot, cols, fads, {})
-    master_now = sends.aux_track() or MASTER_CIBLE
-    entries = list(entries) + [None] * (D.MASTER - len(entries)) + [master_now]
-    master_fv = None
-    if master_now:
-        with state.lock:
-            connecte = state.connected
-            mdb = state.tracks.get(master_now, {}).get("fader")
-        master_fv = D.db_to_fader(mdb) if connecte and mdb is not None else None
-    rings, recs = gain.frame(entries[:xt.strips], bot)
-    xt.push(top, bot, cols, lvls, fads, now, (), master_fv)
-    xt.push_leds(*send_leds, recs=recs)
-    xt.push_rings(rings)
-    xt.set_main_led(D.NOTE_TRACK, gain.mode)
-    xt.set_main_led(D.NOTE_PAN, gain.pan_mode)
-    xt.set_main_led(D.NOTE_SEND, sends.aux is not None or (sends.picking and int(now * 3) % 2 == 0))
-    for k, on in enumerate(sends.fkey_leds()):
-        xt.set_main_led(D.NOTE_F1 + k, on)
-    with state.lock:
-        lmode, ltab, lspill = state.layer_mode.get(state.view), state.lv1_tab, state.spill_lit
-        sel = state.selected
-        lr_db = state.tracks.get(master_now, {}).get("fader") if master_now else None
-    for note, on in D.view_leds(lmode, ltab, lspill).items():
-        xt.set_main_led(note, on)
-    xt.set_main_led(D.NOTE_SMPTE, buttons.reaper_tc)
-    xt.set_main_led(D.NOTE_LED_SMPTE, False)          # REAPER absent dans le test
-    if sends.picking:
-        assign, timecode = D.seg_codes("SE", 2), D.seg_codes("SEL", 5) + D.seg_codes("", 5)
-    elif sends.aux is not None:
-        assign, timecode = D.master_display(sel, None, 0, False, lr_db)
-        assign = D.seg_codes("SE", 2)
-        timecode = D.seg_codes(sends.label() or "--", 5) + timecode[5:]
-    else:
-        assign, timecode = D.time_display(None, Clock.FIXE)
-    xt.push_master_display(assign, timecode)
+    app.tick_render(Clock.now, ())
     nouveau = midi.log[avant:]
     if nouveau:                                            # Surface n'envoie que ce qui change : rien = rien à noter
-        sortie.append("# %s | couche=%s" % (etiquette, layer_name))
+        sortie.append("# %s | couche=%s" % (etiquette, app.last_layer))
         sortie.extend("    " + l for l in nouveau)
 
 

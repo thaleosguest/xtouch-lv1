@@ -1052,7 +1052,7 @@ def start_tray():
     ).start()
 
 
-def main():
+def parse_args():
     ap = argparse.ArgumentParser(description="LV1 sur X-Touch + Extender : affichage + faders (étape 1).")
     ap.add_argument("--mixer", choices=["auto", "1", "2"], default="auto",
                     help="Mixer suivi : auto = l'onglet / la fenêtre Mixer affiché (défaut), ou 1 / 2 imposé")
@@ -1094,119 +1094,203 @@ def main():
     argv = sys.argv[1:]
     if getattr(sys, "frozen", False) and not argv:      # exe lancé d'un double-clic : réglage de Joseph
         argv = ["--clic-lv1", "--attendre"]
-    a = ap.parse_args(argv)
-    if getattr(sys, "frozen", False) and already_running():      # AVANT le journal de sortie : un 2e lancement
-        return 0                                                 # écrasait xtouch_console.txt du 1er (18/10)
-    redirect_output_to_log()
-    tray_icon = start_tray() if (getattr(sys, "frozen", False) and not a.dry_run) else None
-    if tray_icon:
-        threading.Thread(target=update_loop, args=(tray_icon,), daemon=True).start()
-    print("  XTouch-LV1 v%s" % VERSION)
-    if not a.dry_run and not a.sans_reaper_lv1:
-        threading.Thread(target=start_reaper_lv1, daemon=True).start()
-    if not a.dry_run and not a.sans_gain_recall and a.x32.lower() not in ("aucun", "none", "off"):
-        threading.Thread(target=start_gain_recall, daemon=True).start()
+    return ap.parse_args(argv)
 
-    if not a.no_journal:
-        jpath = os.path.join(HERE, "xtouch_journal_%s.txt" % time.strftime("%Y%m%d_%H%M%S"))
-        JOURNAL.current = Journal(jpath)          # emplacement partagé avec bridge/ (étape 8a)
-        print("  Journal des messages LV1 : %s" % jpath)
 
-    if a.dry_run:
-        midi = X.DryOut()
-    elif sys.platform != "win32":
-        print("Windows uniquement (ou --dry-run).")
-        return 2
-    else:
-        midi = X.WinMidiOut()
-    midi = SafeMidi(midi)
+class App:
+    """Le pont en marche (étape 9 du refactor, 19/10/2026 : remplace le corps de main()).
 
-    units = open_units(midi, a, wait=a.attendre)
-    if units is None:                                  # « Quitter » pendant l'attente des X-Touch
-        if tray_icon:
-            tray_icon.stop()
-        return 0
-    if not units:
-        print("Aucune X-Touch utilisable. Liste des ports : py xtouch_probe.py --list")
-        return 3
+    setup() = démarrage ; puis à chaque tour : check_ports() (X-Touch perdue / revenue), tick_input() (MIDI reçu ->
+    contrôleurs), tick_render() (TOUT ce qui part vers la X-Touch, dans l'ordre d'avant), tick_integrations() (scènes
+    REAPER, overlay, relecture de la base après un Flip A/B), tick_wait() ; shutdown() à la fin. Les « mémoires » de
+    la boucle (dernière couche notifiée, rappel affiché…) sont des attributs. __init__ ne fait rien d'autre que poser
+    les valeurs par défaut : le test de référence crée une App, y branche ses objets et appelle tick_render()."""
 
-    events = EVENTS
-    midi_in = None
-    wanted = [label for label, _, _ in units]          # unités du démarrage : on les veut toutes après une coupure
-    inputs_open = 0
-    if not a.dry_run:
-        midi_in = WinMidiIn(events)
-        inputs_open = open_inputs(midi_in, units)
-    ports_check = [time.time()]
-    load_fader_curve()
+    def __init__(self, a):
+        self.a = a
+        self.tray_icon = None
+        self.midi = None
+        self.midi_in = None
+        self.units = []
+        self.wanted = []                 # unités du démarrage : on les veut toutes après une coupure
+        self.inputs_open = 0
+        self.ports_check = 0.0
+        self.events = EVENTS
+        self.overrides = {}
+        self.state = None
+        self.fixed_view = None
+        self.link = None
+        self.xt = None
+        self.faders = self.buttons = self.gain = self.sends = None
+        self.xlink = self.reaper = self.transport = self.apps = self.scene_bridge = self.overlay = None
+        self.master_target = None
+        self.entries = []
+        self.master_now = None
+        self.last_layer = object()
+        self.last_toast = None           # dernier (Mixer, nom) notifié (pas deux notifs pour la même couche)
+        self.shown_view = None
+        self.woke = []                   # message reçu pendant l'attente de fin de tour, traité au début du suivant
+        self.tracks_sent = 0.0
+        self.diag_t, self.diag_warn = 0.0, None   # dernière vérification de la diagonale B, alerte affichée
+        self.recall_until, self.recall_sent, self.recall_touched = 0.0, 0.0, None
+        self.ab_seen = 0.0
+        self.ch_at = 0.0
+        self.t_end = None
 
-    overrides = load_color_overrides()
-    if overrides:
-        print("  Couleurs personnalisées : %d entrées (xtouch_couleurs.json)" % len(overrides))
+    # ── démarrage ──────────────────────────────────────────────────────────────────────────────────────────────
 
-    state = LV1State()
-    fixed_view = None if a.mixer == "auto" else int(a.mixer) - 1
-    state.view = fixed_view or 0
-    link = LV1Link(state, a.host, a.port)
-    link.start()
-    xt = Surface(midi, units)
-    faders = FaderControl(state, link, write=not a.lecture_seule)
-    buttons = ButtonControl(state, link, write=not a.lecture_seule, page=state.view,
-                            busy=lambda: bool(faders.held(time.time())))
-    xlink = None
-    if a.x32.lower() not in ("aucun", "none", "off"):
-        import xgr_link
-        xlink = xgr_link.GainRecallLink(a.x32)
-        xlink.start()
-        print("  Gain X32 via X/M32 Gain Recall (%s) : TRACK = encodeurs sur le gain, Rec tenu 1 s = 48 V." % a.x32)
-    gain = GainControl(state, xlink, write=not a.lecture_seule, lv1=link)
-    sends = SendControl(state, link, write=not a.lecture_seule, gain=gain)
-    reaper = None
-    import reaper_link
-    if a.reaper is None:                  # défaut : Reaper local ; rien en --dry-run (tests), sauf s'il est demandé
-        a.reaper = "aucun" if a.dry_run else "127.0.0.1:8000:9000"
-    target = reaper_link.parse_target(a.reaper)
-    if target:
-        reaper = reaper_link.ReaperLink(*target, journal=lambda m: JOURNAL.mark(m))
-        print("  Reaper (OSC %s:%d, retours sur %d) : transport, marqueurs, zoom, jog hors plugin LV1." % target)
-    transport = TransportControl(reaper)
-    apps = AppControl(state, link, reaper, state.view + 1, write=not a.lecture_seule) if not a.dry_run else None
-    scene_bridge = None
-    if reaper:                       # scènes LV1 <-> marqueurs Reaper (script reaper/lv1_scenes.lua dans Reaper)
-        import reaper_scenes
-        scene_bridge = reaper_scenes.SceneBridge(folder=a.dossier_reaper, journal=lambda m: JOURNAL.mark(m))
+    def setup(self):
+        """Tout le démarrage. Renvoie un code de sortie s'il faut s'arrêter là, sinon None."""
+        a = self.a
+        if getattr(sys, "frozen", False) and already_running():      # AVANT le journal de sortie : un 2e lancement
+            return 0                                                 # écrasait xtouch_console.txt du 1er (18/10)
+        redirect_output_to_log()
+        self.tray_icon = start_tray() if (getattr(sys, "frozen", False) and not a.dry_run) else None
+        if self.tray_icon:
+            threading.Thread(target=update_loop, args=(self.tray_icon,), daemon=True).start()
+        print("  XTouch-LV1 v%s" % VERSION)
+        if not a.dry_run and not a.sans_reaper_lv1:
+            threading.Thread(target=start_reaper_lv1, daemon=True).start()
+        if not a.dry_run and not a.sans_gain_recall and a.x32.lower() not in ("aucun", "none", "off"):
+            threading.Thread(target=start_gain_recall, daemon=True).start()
+
+        if not a.no_journal:
+            jpath = os.path.join(HERE, "xtouch_journal_%s.txt" % time.strftime("%Y%m%d_%H%M%S"))
+            JOURNAL.current = Journal(jpath)          # emplacement partagé avec bridge/ (étape 8a)
+            print("  Journal des messages LV1 : %s" % jpath)
+
+        if a.dry_run:
+            midi = X.DryOut()
+        elif sys.platform != "win32":
+            print("Windows uniquement (ou --dry-run).")
+            return 2
+        else:
+            midi = X.WinMidiOut()
+        self.midi = midi = SafeMidi(midi)
+
+        units = open_units(midi, a, wait=a.attendre)
+        if units is None:                                  # « Quitter » pendant l'attente des X-Touch
+            if self.tray_icon:
+                self.tray_icon.stop()
+            return 0
+        if not units:
+            print("Aucune X-Touch utilisable. Liste des ports : py xtouch_probe.py --list")
+            return 3
+        self.units = units
+
+        self.wanted = [label for label, _, _ in units]
         if not a.dry_run:
-            def watch_routing():          # patch vers le pilote SoundGrid : la LV1 ne l'annonce pas, on relit la base
-                last = None
-                while True:
-                    try:
-                        import lv1_db
-                        drv, rt = lv1_db.routing(driver=a.pilote)
-                        size = lv1_db.driver_size(driver=a.pilote)
-                        if rt != last:
-                            last = rt
-                            JOURNAL.mark("routage pilote %s : %s" % (drv, rt))
-                        with state.lock:
-                            state.routing = rt
-                            state.driver_size = size
-                    except Exception as e:
-                        JOURNAL.mark("routage illisible : %r" % e)
-                    time.sleep(5.0)
-            threading.Thread(target=watch_routing, daemon=True).start()
-        print("  Scènes LV1 <-> marqueurs Reaper : charger reaper/lv1_scenes.lua dans Reaper (Actions > Load ReaScript).")
-    buttons.transport = transport
-    overlay = OVERLAY_FACTORY(state.view + 1) if OVERLAY_FACTORY else None     # tests : faux affichage d'écran
-    if overlay is None and not a.dry_run and not a.sans_cadre and sys.platform == "win32":
-        import xtouch_overlay
-        overlay = xtouch_overlay.make_overlay(state.view + 1)   # Qt (style Gain Recall v3) si PySide6, sinon tk
-    faders.key_of = sends.key_of
-    gain.send_aux = lambda: sends.aux
-    # master en lecture seule quand il est sur LR (hors sends on fader : là, il règle le master de l'aux)
-    faders.readonly = lambda strip: strip == MASTER and sends.aux_track() is None
+            self.midi_in = WinMidiIn(self.events)
+            self.inputs_open = open_inputs(self.midi_in, units)
+        self.ports_check = time.time()
+        load_fader_curve()
 
-    def load_pans(force=False):
+        self.overrides = load_color_overrides()
+        if self.overrides:
+            print("  Couleurs personnalisées : %d entrées (xtouch_couleurs.json)" % len(self.overrides))
+
+        self.state = state = LV1State()
+        self.fixed_view = fixed_view = None if a.mixer == "auto" else int(a.mixer) - 1
+        state.view = fixed_view or 0
+        self.link = link = LV1Link(state, a.host, a.port)
+        link.start()
+        self.xt = Surface(midi, units)
+        self.faders = faders = FaderControl(state, link, write=not a.lecture_seule)
+        self.buttons = buttons = ButtonControl(state, link, write=not a.lecture_seule, page=state.view,
+                                               busy=lambda: bool(faders.held(time.time())))
+        if a.x32.lower() not in ("aucun", "none", "off"):
+            import xgr_link
+            self.xlink = xgr_link.GainRecallLink(a.x32)
+            self.xlink.start()
+            print("  Gain X32 via X/M32 Gain Recall (%s) : TRACK = encodeurs sur le gain, Rec tenu 1 s = 48 V." % a.x32)
+        self.gain = gain = GainControl(state, self.xlink, write=not a.lecture_seule, lv1=link)
+        self.sends = sends = SendControl(state, link, write=not a.lecture_seule, gain=gain)
+        import reaper_link
+        if a.reaper is None:                  # défaut : Reaper local ; rien en --dry-run (tests), sauf s'il est demandé
+            a.reaper = "aucun" if a.dry_run else "127.0.0.1:8000:9000"
+        target = reaper_link.parse_target(a.reaper)
+        if target:
+            self.reaper = reaper_link.ReaperLink(*target, journal=lambda m: JOURNAL.mark(m))
+            print("  Reaper (OSC %s:%d, retours sur %d) : transport, marqueurs, zoom, jog hors plugin LV1." % target)
+        reaper = self.reaper
+        self.transport = transport = TransportControl(reaper)
+        self.apps = AppControl(state, link, reaper, state.view + 1, write=not a.lecture_seule) if not a.dry_run else None
+        if reaper:                       # scènes LV1 <-> marqueurs Reaper (script reaper/lv1_scenes.lua dans Reaper)
+            import reaper_scenes
+            self.scene_bridge = reaper_scenes.SceneBridge(folder=a.dossier_reaper, journal=lambda m: JOURNAL.mark(m))
+            if not a.dry_run:
+                threading.Thread(target=self.watch_routing, daemon=True).start()
+            print("  Scènes LV1 <-> marqueurs Reaper : charger reaper/lv1_scenes.lua dans Reaper (Actions > Load ReaScript).")
+        buttons.transport = transport
+        self.overlay = OVERLAY_FACTORY(state.view + 1) if OVERLAY_FACTORY else None     # tests : faux affichage d'écran
+        if self.overlay is None and not a.dry_run and not a.sans_cadre and sys.platform == "win32":
+            import xtouch_overlay
+            self.overlay = xtouch_overlay.make_overlay(state.view + 1)   # Qt (style Gain Recall v3) si PySide6, sinon tk
+        faders.key_of = sends.key_of
+        gain.send_aux = lambda: sends.aux
+        # master en lecture seule quand il est sur LR (hors sends on fader : là, il règle le master de l'aux)
+        faders.readonly = lambda strip: strip == MASTER and sends.aux_track() is None
+
+        if not a.dry_run:
+            link.on_connect = self.load_pans
+            with state.lock:
+                already = state.connected
+            if already:                           # connectée avant ce branchement : on lit tout de suite
+                threading.Thread(target=self.load_pans, daemon=True).start()
+        if not a.dry_run:
+            LayerModeWatcher(state, state.view).start()           # voyants INPUTS / BUSES / USER / GROUP
+            if sys.platform == "win32":
+                ViewFollower(state, fixed_view).start()           # Mixer suivi (onglet / fenêtre) + voyant GLOBAL VIEW
+        if a.lecture_seule:
+            print("  Mode lecture seule : rien n'est envoyé à la LV1.")
+        if a.clic_lv1 and not a.lecture_seule:
+            import lv1_clic
+            if not lv1_clic.is_admin():
+                print("  --clic-lv1 : PAS administrateur, Windows bloquera les clics (relancer en administrateur).")
+            buttons.lv1 = LV1Clicker(state, state.view, jog_method=a.jog_methode)
+            if reaper:
+                buttons.lv1.jog_fallback = transport.jog
+            buttons.lv1.start()
+            LV1SelectionWatcher(state, state.view).start()
+            print("  Clics LV1 : la LV1 suit BANK et la sélection, la X-Touch suit la sélection LV1 (Mixer suivi : %s)."
+                  % ("onglet affiché" if fixed_view is None else "Mixer %d" % (fixed_view + 1)))
+        print("Recherche de la LV1… (Ctrl+C pour arrêter)")
+        self.entries = [None] * self.xt.strips
+        if a.master.lower() not in ("aucun", "none", "off"):
+            try:
+                g_, c_ = (int(x) for x in a.master.split(":"))
+                self.master_target = (g_, c_)
+            except ValueError:
+                print("  --master %r invalide (attendu groupe:canal, ex. 3:0) : master désactivé." % a.master)
+        if self.master_target and self.xt.master_unit is not None:
+            print("  Fader master -> %s" % default_label(*self.master_target))
+        self.shown_view = state.view
+        self.t_end = time.time() + a.seconds if a.seconds else None
+        return None
+
+    def watch_routing(self):
+        """Patch vers le pilote SoundGrid : la LV1 ne l'annonce pas, on relit la base."""
+        state, a = self.state, self.a
+        last = None
+        while True:
+            try:
+                import lv1_db
+                drv, rt = lv1_db.routing(driver=a.pilote)
+                size = lv1_db.driver_size(driver=a.pilote)
+                if rt != last:
+                    last = rt
+                    JOURNAL.mark("routage pilote %s : %s" % (drv, rt))
+                with state.lock:
+                    state.routing = rt
+                    state.driver_size = size
+            except Exception as e:
+                JOURNAL.mark("routage illisible : %r" % e)
+            time.sleep(5.0)
+
+    def load_pans(self, force=False):
         """Pans et envois des entrées (le réseau ne les donne pas) : copie de la base de la LV1. force : après un
         état complet (rappel de scène, Flip A/B), les valeurs de la base remplacent celles qu'on avait."""
+        state = self.state
         try:
             import lv1_db
             pans = lv1_db.input_pans()
@@ -1233,9 +1317,8 @@ def main():
                 if s["on"] is None or force:
                     s["on"] = on
         JOURNAL.mark("envois de départ lus dans la base LV1 : %d" % len(snd))
-    ab_seen = [0.0]
 
-    def load_ab():
+    def load_ab(self):
         """LED FLIP : entrées sur B ? (la LV1 ne l'annonce pas ; elle renvoie tout son état à chaque Flip A/B)."""
         try:
             import lv1_db
@@ -1244,236 +1327,246 @@ def main():
             JOURNAL.mark("A/B illisible : %r" % e)
             return
         n_b = sum(1 for v in ab.values() if v)
-        with state.lock:
-            state.on_b = n_b > 0
+        with self.state.lock:
+            self.state.on_b = n_b > 0
         JOURNAL.mark("entrées sur B : %d / %d" % (n_b, len(ab)))
-    if not a.dry_run:
-        link.on_connect = load_pans
-        with state.lock:
-            already = state.connected
-        if already:                           # connectée avant ce branchement : on lit tout de suite
-            threading.Thread(target=load_pans, daemon=True).start()
-    if not a.dry_run:
-        LayerModeWatcher(state, state.view).start()           # voyants INPUTS / BUSES / USER / GROUP
-        if sys.platform == "win32":
-            ViewFollower(state, fixed_view).start()           # Mixer suivi (onglet / fenêtre) + voyant GLOBAL VIEW
-    if a.lecture_seule:
-        print("  Mode lecture seule : rien n'est envoyé à la LV1.")
-    if a.clic_lv1 and not a.lecture_seule:
-        import lv1_clic
-        if not lv1_clic.is_admin():
-            print("  --clic-lv1 : PAS administrateur, Windows bloquera les clics (relancer en administrateur).")
-        buttons.lv1 = LV1Clicker(state, state.view, jog_method=a.jog_methode)
-        if reaper:
-            buttons.lv1.jog_fallback = transport.jog
-        buttons.lv1.start()
-        LV1SelectionWatcher(state, state.view).start()
-        print("  Clics LV1 : la LV1 suit BANK et la sélection, la X-Touch suit la sélection LV1 (Mixer suivi : %s)."
-              % ("onglet affiché" if fixed_view is None else "Mixer %d" % (fixed_view + 1)))
-    print("Recherche de la LV1… (Ctrl+C pour arrêter)")
-    entries = [None] * xt.strips
-    master_target = None
-    if a.master.lower() not in ("aucun", "none", "off"):
+
+    # ── boucle ─────────────────────────────────────────────────────────────────────────────────────────────────
+
+    def run(self):
+        code = self.setup()
+        if code is not None:
+            return code
         try:
-            g_, c_ = (int(x) for x in a.master.split(":"))
-            master_target = (g_, c_)
-        except ValueError:
-            print("  --master %r invalide (attendu groupe:canal, ex. 3:0) : master désactivé." % a.master)
-    if master_target and xt.master_unit is not None:
-        print("  Fader master -> %s" % default_label(*master_target))
-    last_layer = object()
-    last_toast = [None]                   # dernier (Mixer, nom) notifié (pas deux notifs pour la même couche)
-    shown_view = [state.view]
-    woke = []
-    tracks_sent = [0.0]
-    diag_t = [0.0, None]                    # message reçu pendant l'attente de fin de tour, traité au début du suivant
-    recall_until, recall_sent, recall_touched = [0.0], [0.0], [None]
-    t_end = time.time() + a.seconds if a.seconds else None
-    try:
-        while not (t_end and time.time() > t_end) and not STOP.is_set():
-            if not midi.lost and time.time() - ports_check[0] > 3.0 and not a.dry_run:
-                ports_check[0] = time.time()
-                what, why_missing = ports_missing(midi, midi_in, a, wanted, units, inputs_open)
-                if what == "sorties":
-                    midi.lost = why_missing
-                elif what == "entrées":
-                    JOURNAL.mark("nouvel essai des entrées MIDI : %s" % why_missing)
-                    midi_in.close_all()
-                    inputs_open = open_inputs(midi_in, units)
-            if midi.lost:                                # X-Touch disparue : on attend qu'elle revienne, puis on rouvre
-                print("  X-Touch perdue (%s) : en attente de son retour..." % midi.lost)
-                JOURNAL.mark("X-Touch perdue : %s" % midi.lost)
-                for _, _, h in units:
-                    midi.close(h)
-                if midi_in:
-                    midi_in.close_all()
-                again = None if STOP.wait(1) else open_units(midi, a, wait=True)   # pas de boucle folle
-                t_all = time.time() + 20                 # 18/10 : reconnectée avec 1 unité sur 2 -> attendre les deux
-                while again is not None and len(again) < len(wanted) and time.time() < t_all:
-                    for _, _, h in again:
-                        midi.close(h)
-                    again = None if STOP.wait(2) else open_units(midi, a, wait=True)
-                if again is None:
-                    units = []
+            while not (self.t_end and time.time() > self.t_end) and not STOP.is_set():
+                step = self.check_ports()
+                if step == "stop":
                     break
-                units[:] = again
-                midi.lost = None
-                inputs_open = open_inputs(midi_in, units) if (midi_in and units) else 0
-                ports_check[0] = time.time()
-                xt = Surface(midi, units)           # caches vides : tout est renvoyé (écrans, LED, moteurs)
-                JOURNAL.mark("X-Touch reconnectée (%d unité(s))" % len(units))
-                print("  X-Touch reconnectée.")
-                if not units:
+                if step == "skip":
                     continue
-            now = time.time()
-            while True:
-                if woke:
-                    unit, st, d1, d2, t = woke.pop()
-                else:
-                    try:
-                        unit, st, d1, d2, t = events.get_nowait()
-                    except queue.Empty:
-                        break
-                if not (faders.on_midi(unit, st, d1, d2, t, entries, xt)
-                        or sends.on_midi(unit, st, d1, d2, t, entries, xt)
-                        or gain.on_midi(unit, st, d1, d2, t, entries, xt)
-                        or transport.on_midi(unit, st, d1, d2, t, entries, xt)
-                        or (apps is not None and apps.on_midi(unit, st, d1, d2, t, entries, xt))
-                        or buttons.on_midi(unit, st, d1, d2, t, entries, xt)):
-                    JOURNAL.mark("MIDI unité %d : %02X %02X %02X" % (unit, st, d1, d2))
-            held = faders.flush(now)
-            view = state.view
-            if view != shown_view[0]:                       # autre Mixer : overlay (fenêtre détachée) et bascule d'appli
-                shown_view[0] = view
-                if overlay and hasattr(overlay, "set_mixer"):
-                    overlay.set_mixer(view + 1)
-                if apps is not None:
-                    apps.mixer = view + 1
-            top, bot, cols, lvls, fads, layer_name, entries = build_frame(state, view, xt.strips, overrides)
-            send_leds = sends.frame(entries, top, bot, cols, fads, overrides)
-            master_now = sends.aux_track() or master_target      # mode SEND : fader master = master de l'aux
-            entries = list(entries) + [None] * (MASTER - len(entries)) + [master_now]
-            master_fv = None
-            if master_now:
-                with state.lock:
-                    connected = state.connected
-                    mdb = state.tracks.get(master_now, {}).get("fader")
-                master_fv = db_to_fader(mdb) if connected and mdb is not None else None
-            if layer_name != last_layer:
-                if layer_name:
-                    print("  Couche affichée : %s" % layer_name)
-                    JOURNAL.mark("affiché : %s" % layer_name)
-                    toast = layer_toast(layer_name)
-                    if overlay and toast and (view, toast) != last_toast[0]:   # banque X-Touch puis LV1 : une notif
-                        last_toast[0] = (view, toast)                          # (re-notifiée en changeant de Mixer)
-                        overlay.set_layer(toast)
-                last_layer = layer_name
-            rings, recs = gain.frame(entries[:xt.strips], bot)
-            xt.push(top, bot, cols, lvls, fads, now, held, master_fv)
-            xt.push_leds(*send_leds, recs=recs)
-            xt.push_rings(rings)
-            xt.set_main_led(NOTE_TRACK, gain.mode)
-            xt.set_main_led(NOTE_PAN, gain.pan_mode)
-            xt.set_main_led(NOTE_SEND, sends.aux is not None or (sends.picking and int(now * 3) % 2 == 0))
-            if scene_bridge:
-                scene_relay(state, scene_bridge, link, now, write=not a.lecture_seule)
-                if now - tracks_sent[0] >= 1.0:                  # liste des entrées pour la synchro des pistes Reaper
-                    tracks_sent[0] = now
-                    scene_bridge.write_tracks(input_list(state))
+                now = time.time()
+                held = self.tick_input(now)
+                self.tick_render(now, held)
+                self.tick_integrations(now)
+                self.tick_wait()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            self.shutdown()
+        return 0
+
+    def check_ports(self):
+        """X-Touch perdue / revenue, entrée MIDI à rouvrir. "stop" = « Quitter » pendant l'attente, "skip" = tour
+        sans unité, None = tour normal."""
+        midi, midi_in, a = self.midi, self.midi_in, self.a
+        if not midi.lost and time.time() - self.ports_check > 3.0 and not a.dry_run:
+            self.ports_check = time.time()
+            what, why_missing = ports_missing(midi, midi_in, a, self.wanted, self.units, self.inputs_open)
+            if what == "sorties":
+                midi.lost = why_missing
+            elif what == "entrées":
+                JOURNAL.mark("nouvel essai des entrées MIDI : %s" % why_missing)
+                midi_in.close_all()
+                self.inputs_open = open_inputs(midi_in, self.units)
+        if midi.lost:                                # X-Touch disparue : on attend qu'elle revienne, puis on rouvre
+            print("  X-Touch perdue (%s) : en attente de son retour..." % midi.lost)
+            JOURNAL.mark("X-Touch perdue : %s" % midi.lost)
+            for _, _, h in self.units:
+                midi.close(h)
+            if midi_in:
+                midi_in.close_all()
+            again = None if STOP.wait(1) else open_units(midi, a, wait=True)   # pas de boucle folle
+            t_all = time.time() + 20                 # 18/10 : reconnectée avec 1 unité sur 2 -> attendre les deux
+            while again is not None and len(again) < len(self.wanted) and time.time() < t_all:
+                for _, _, h in again:
+                    midi.close(h)
+                again = None if STOP.wait(2) else open_units(midi, a, wait=True)
+            if again is None:
+                self.units = []
+                return "stop"
+            self.units[:] = again
+            midi.lost = None
+            self.inputs_open = open_inputs(midi_in, self.units) if (midi_in and self.units) else 0
+            self.ports_check = time.time()
+            self.xt = Surface(midi, self.units)           # caches vides : tout est renvoyé (écrans, LED, moteurs)
+            JOURNAL.mark("X-Touch reconnectée (%d unité(s))" % len(self.units))
+            print("  X-Touch reconnectée.")
+            if not self.units:
+                return "skip"
+        return None
+
+    def tick_input(self, now):
+        """Messages MIDI reçus -> contrôleurs (le 1er qui le prend) ; renvoie les faders tenus (faders.flush)."""
+        xt, entries, woke = self.xt, self.entries, self.woke
+        while True:
+            if woke:
+                unit, st, d1, d2, t = woke.pop()
+            else:
+                try:
+                    unit, st, d1, d2, t = self.events.get_nowait()
+                except queue.Empty:
+                    break
+            if not (self.faders.on_midi(unit, st, d1, d2, t, entries, xt)
+                    or self.sends.on_midi(unit, st, d1, d2, t, entries, xt)
+                    or self.gain.on_midi(unit, st, d1, d2, t, entries, xt)
+                    or self.transport.on_midi(unit, st, d1, d2, t, entries, xt)
+                    or (self.apps is not None and self.apps.on_midi(unit, st, d1, d2, t, entries, xt))
+                    or self.buttons.on_midi(unit, st, d1, d2, t, entries, xt)):
+                JOURNAL.mark("MIDI unité %d : %02X %02X %02X" % (unit, st, d1, d2))
+        return self.faders.flush(now)
+
+    def tick_render(self, now, held):
+        """Tout ce qui part vers la X-Touch, dans l'ordre d'avant l'étape 9 : écrans, couleurs, moteurs, vumètres, LED
+        des tranches, couronnes, touches TRACK / PAN / SEND / DISPLAY / transport / F1-F8 / View / SMPTE, 7 segments,
+        RUDE SOLO, SOLO, FLIP ; plus la notification de couche (overlay). Testé tel quel par test_rendu_reference."""
+        state, xt, sends, gain, buttons = self.state, self.xt, self.sends, self.gain, self.buttons
+        overlay, apps, reaper, xlink = self.overlay, self.apps, self.reaper, self.xlink
+        view = state.view
+        if view != self.shown_view:                     # autre Mixer : overlay (fenêtre détachée) et bascule d'appli
+            self.shown_view = view
+            if overlay and hasattr(overlay, "set_mixer"):
+                overlay.set_mixer(view + 1)
             if apps is not None:
-                xt.set_main_led(NOTE_DISPLAY, apps.front == "reaper")      # LED DISPLAY = Reaper devant
-            if reaper:
-                for note, on in transport.leds().items():
-                    xt.set_main_led(note, on)
-            for k, on in enumerate(sends.fkey_leds()):
-                xt.set_main_led(NOTE_F1 + k, on)
+                apps.mixer = view + 1
+        top, bot, cols, lvls, fads, layer_name, entries = build_frame(state, view, xt.strips, self.overrides)
+        send_leds = sends.frame(entries, top, bot, cols, fads, self.overrides)
+        master_now = sends.aux_track() or self.master_target      # mode SEND : fader master = master de l'aux
+        entries = list(entries) + [None] * (MASTER - len(entries)) + [master_now]
+        self.entries, self.master_now = entries, master_now
+        master_fv = None
+        if master_now:
             with state.lock:
-                lmode, ltab, lspill = state.layer_mode.get(state.view), state.lv1_tab, state.spill_lit
-            for note, on in view_leds(lmode, ltab, lspill).items():       # touches View = mode de couche / onglet All
+                connected = state.connected
+                mdb = state.tracks.get(master_now, {}).get("fader")
+            master_fv = db_to_fader(mdb) if connected and mdb is not None else None
+        if layer_name != self.last_layer:
+            if layer_name:
+                print("  Couche affichée : %s" % layer_name)
+                JOURNAL.mark("affiché : %s" % layer_name)
+                toast = layer_toast(layer_name)
+                if overlay and toast and (view, toast) != self.last_toast:   # banque X-Touch puis LV1 : une notif
+                    self.last_toast = (view, toast)                          # (re-notifiée en changeant de Mixer)
+                    overlay.set_layer(toast)
+            self.last_layer = layer_name
+        rings, recs = gain.frame(entries[:xt.strips], bot)
+        xt.push(top, bot, cols, lvls, fads, now, held, master_fv)
+        xt.push_leds(*send_leds, recs=recs)
+        xt.push_rings(rings)
+        xt.set_main_led(NOTE_TRACK, gain.mode)
+        xt.set_main_led(NOTE_PAN, gain.pan_mode)
+        xt.set_main_led(NOTE_SEND, sends.aux is not None or (sends.picking and int(now * 3) % 2 == 0))
+        if apps is not None:
+            xt.set_main_led(NOTE_DISPLAY, apps.front == "reaper")      # LED DISPLAY = Reaper devant
+        if reaper:
+            for note, on in self.transport.leds().items():
                 xt.set_main_led(note, on)
-            xt.set_main_led(NOTE_SMPTE, buttons.reaper_tc)   # SMPTE : timecode choisi ; LED SMPTE : affiché
-            xt.set_main_led(NOTE_LED_SMPTE, bool(buttons.reaper_tc and reaper and reaper.alive()))
-            with state.lock:
-                sel = state.selected
-                any_solo = any(t.get("solo") for t in state.tracks.values())
-                lr_db = state.tracks.get(master_now, {}).get("fader") if master_now else None
-            if sends.picking:                                # choix de l'aux : « SE » + « SEL »
-                assign = seg_codes("SE", 2)
-                timecode = seg_codes("SEL", 5) + seg_codes("", 5)
-            elif sends.aux is not None:                      # envois : « SE » + aux + niveau du master de l'aux
-                side = gain.side.get(sel, 0)
-                g_sel = xlink.gain(sel, side) if (xlink and sel) else None
-                stereo = bool(xlink and sel and len(xlink.preamps(sel)) == 2)
-                assign, timecode = master_display(sel, g_sel, side, stereo, lr_db)
-                assign = seg_codes("SE", 2)
-                timecode = seg_codes(sends.label() or "--", 5) + timecode[5:]
-            else:                                            # position de REAPER LV1, sinon heure (Joseph, 16/10)
-                tc = reaper.time if (buttons.reaper_tc and reaper and reaper.alive()) else None
-                assign, timecode = time_display(tc, time.localtime())
-            xt.push_master_display(assign, timecode)
-            if overlay:
-                if faders.held(now):                       # touché, ou bougé sans toucher (ongle) : bandeau affiché
-                    recall_until[0] = now + RECALL_HOLD
-                # point / contour de toucher : le doigt SEULEMENT (disparaît au relâchement, demande de Joseph du
-                # 15/10), ou un geste sans toucher détecté (ongle) tant qu'il bouge
-                touched = faders.touch_display(now)
-                if now < recall_until[0]:
-                    if now - recall_sent[0] >= RECALL_EVERY or touched != recall_touched[0]:
-                        recall_sent[0], recall_touched[0] = now, touched
-                        overlay.set_recall(recall_payload(state, entries, sends, touched, xlink, gain))
-                elif recall_sent[0]:
-                    recall_sent[0] = 0.0
-                    overlay.set_recall(None)
-                overlay.set_info(*sends.overlay_info())
-                with state.lock:
-                    fk = [k for k, (_s, func, on) in sorted(state.user_keys.items())
-                          if on and "flip ab" in (func or "").lower()]
-                    ab_now = state.on_b         # lu ici : on_b n'est défini que plus bas dans la boucle (bug du 15/10)
-                overlay.set_ab(None if ab_now is None else ("B" if ab_now else "A"), fk[0] if fk else None)
-                if now - diag_t[0] >= 1.0:                   # diagonale B cassée ? (patch relu toutes les 5 s)
-                    diag_t[0] = now
-                    bad = diagonal_problems(state)
-                    warn = ("B PATCH\n%d OFF" % len(bad)) if bad else None
-                    if warn != diag_t[1]:
-                        diag_t[1] = warn
-                        overlay.set_warn(warn)
-                        if bad:
-                            print("  Diagonale B cassée (%d canaux : %s) : page Patch > Input B, puis ENTER."
-                                  % (len(bad), ", ".join(bad[:5]) + ("…" if len(bad) > 5 else "")))
-                            JOURNAL.mark("diagonale B cassée : %s" % bad)
-            xt.set_main_led(NOTE_RUDE_SOLO, any_solo and int(now * 2) % 2 == 0)   # clignote si un solo
-            xt.set_main_led(NOTE_SOLO_ALL, any_solo)                                # SOLO : allumé si un solo
-            with state.lock:
-                on_b, ch_at = state.on_b, state.channels_at
-            xt.set_main_led(NOTE_FLIP, bool(on_b))                                  # FLIP : entrées sur B
-            if ch_at != ab_seen[0] and now - ch_at > 1.0 and not a.dry_run:              # état renvoyé (Flip A/B…)
-                ab_seen[0] = ch_at
-                def reload_all():
-                    load_ab()
-                    load_pans(force=True)      # rappel de scène : pans et envois rechargés (non vérifié)
-                threading.Thread(target=reload_all, daemon=True).start()
-            # Attente : réveil DÈS qu'un message X-Touch arrive (plus de sommeil fixe de 50 ms). L'écho d'un fader
-            # bougé part ainsi en ~1 ms : moins de résistance du moteur quand le toucher n'est pas détecté (ongle)
-            # ou en retard (geste très rapide) — remarque de Joseph du 15/10.
-            try:
-                woke.append(events.get(timeout=0.01 if faders.pending else TICK))
-            except queue.Empty:
-                pass
-    except KeyboardInterrupt:
-        pass
-    finally:
-        link.stop_flag = True
+        for k, on in enumerate(sends.fkey_leds()):
+            xt.set_main_led(NOTE_F1 + k, on)
+        with state.lock:
+            lmode, ltab, lspill = state.layer_mode.get(state.view), state.lv1_tab, state.spill_lit
+        for note, on in view_leds(lmode, ltab, lspill).items():       # touches View = mode de couche / onglet All
+            xt.set_main_led(note, on)
+        xt.set_main_led(NOTE_SMPTE, buttons.reaper_tc)   # SMPTE : timecode choisi ; LED SMPTE : affiché
+        xt.set_main_led(NOTE_LED_SMPTE, bool(buttons.reaper_tc and reaper and reaper.alive()))
+        with state.lock:
+            sel = state.selected
+            any_solo = any(t.get("solo") for t in state.tracks.values())
+            lr_db = state.tracks.get(master_now, {}).get("fader") if master_now else None
+        if sends.picking:                                # choix de l'aux : « SE » + « SEL »
+            assign = seg_codes("SE", 2)
+            timecode = seg_codes("SEL", 5) + seg_codes("", 5)
+        elif sends.aux is not None:                      # envois : « SE » + aux + niveau du master de l'aux
+            side = gain.side.get(sel, 0)
+            g_sel = xlink.gain(sel, side) if (xlink and sel) else None
+            stereo = bool(xlink and sel and len(xlink.preamps(sel)) == 2)
+            assign, timecode = master_display(sel, g_sel, side, stereo, lr_db)
+            assign = seg_codes("SE", 2)
+            timecode = seg_codes(sends.label() or "--", 5) + timecode[5:]
+        else:                                            # position de REAPER LV1, sinon heure (Joseph, 16/10)
+            tc = reaper.time if (buttons.reaper_tc and reaper and reaper.alive()) else None
+            assign, timecode = time_display(tc, time.localtime())
+        xt.push_master_display(assign, timecode)
+        xt.set_main_led(NOTE_RUDE_SOLO, any_solo and int(now * 2) % 2 == 0)   # clignote si un solo
+        xt.set_main_led(NOTE_SOLO_ALL, any_solo)                                # SOLO : allumé si un solo
+        with state.lock:
+            on_b, self.ch_at = state.on_b, state.channels_at
+        xt.set_main_led(NOTE_FLIP, bool(on_b))                                  # FLIP : entrées sur B
+
+    def tick_integrations(self, now):
+        """Ce qui ne part pas vers la X-Touch : scènes et pistes vers REAPER, overlay (rappel des pistes, info sends,
+        A/B, alerte de la diagonale B), relecture de la base après un état complet (Flip A/B, rappel de scène).
+        Avant l'étape 9, intercalé dans le rendu : même tour de boucle, juste après."""
+        state, a, overlay, sends = self.state, self.a, self.overlay, self.sends
+        if self.scene_bridge:
+            scene_relay(state, self.scene_bridge, self.link, now, write=not a.lecture_seule)
+            if now - self.tracks_sent >= 1.0:                  # liste des entrées pour la synchro des pistes Reaper
+                self.tracks_sent = now
+                self.scene_bridge.write_tracks(input_list(state))
         if overlay:
-            overlay.stop()
-        if midi_in:
-            midi_in.close_all()
-        xt.clear()
-        for _, _, h in units:
-            midi.close(h)
+            faders = self.faders
+            if faders.held(now):                       # touché, ou bougé sans toucher (ongle) : bandeau affiché
+                self.recall_until = now + RECALL_HOLD
+            # point / contour de toucher : le doigt SEULEMENT (disparaît au relâchement, demande de Joseph du
+            # 15/10), ou un geste sans toucher détecté (ongle) tant qu'il bouge
+            touched = faders.touch_display(now)
+            if now < self.recall_until:
+                if now - self.recall_sent >= RECALL_EVERY or touched != self.recall_touched:
+                    self.recall_sent, self.recall_touched = now, touched
+                    overlay.set_recall(recall_payload(state, self.entries, sends, touched, self.xlink, self.gain))
+            elif self.recall_sent:
+                self.recall_sent = 0.0
+                overlay.set_recall(None)
+            overlay.set_info(*sends.overlay_info())
+            with state.lock:
+                fk = [k for k, (_s, func, on) in sorted(state.user_keys.items())
+                      if on and "flip ab" in (func or "").lower()]
+                ab_now = state.on_b         # lu ici : on_b n'est défini que plus bas dans la boucle (bug du 15/10)
+            overlay.set_ab(None if ab_now is None else ("B" if ab_now else "A"), fk[0] if fk else None)
+            if now - self.diag_t >= 1.0:                   # diagonale B cassée ? (patch relu toutes les 5 s)
+                self.diag_t = now
+                bad = diagonal_problems(state)
+                warn = ("B PATCH\n%d OFF" % len(bad)) if bad else None
+                if warn != self.diag_warn:
+                    self.diag_warn = warn
+                    overlay.set_warn(warn)
+                    if bad:
+                        print("  Diagonale B cassée (%d canaux : %s) : page Patch > Input B, puis ENTER."
+                              % (len(bad), ", ".join(bad[:5]) + ("…" if len(bad) > 5 else "")))
+                        JOURNAL.mark("diagonale B cassée : %s" % bad)
+        ch_at = self.ch_at
+        if ch_at != self.ab_seen and now - ch_at > 1.0 and not a.dry_run:              # état renvoyé (Flip A/B…)
+            self.ab_seen = ch_at
+
+            def reload_all():
+                self.load_ab()
+                self.load_pans(force=True)      # rappel de scène : pans et envois rechargés (non vérifié)
+            threading.Thread(target=reload_all, daemon=True).start()
+
+    def tick_wait(self):
+        # Attente : réveil DÈS qu'un message X-Touch arrive (plus de sommeil fixe de 50 ms). L'écho d'un fader
+        # bougé part ainsi en ~1 ms : moins de résistance du moteur quand le toucher n'est pas détecté (ongle)
+        # ou en retard (geste très rapide) — remarque de Joseph du 15/10.
+        try:
+            self.woke.append(self.events.get(timeout=0.01 if self.faders.pending else TICK))
+        except queue.Empty:
+            pass
+
+    def shutdown(self):
+        self.link.stop_flag = True
+        if self.overlay:
+            self.overlay.stop()
+        if self.midi_in:
+            self.midi_in.close_all()
+        self.xt.clear()
+        for _, _, h in self.units:
+            self.midi.close(h)
         print("\nArrêté, écrans remis à zéro.")
-        if tray_icon:
-            tray_icon.stop()
-    return 0
+        if self.tray_icon:
+            self.tray_icon.stop()
+
+
+def main():
+    return App(parse_args()).run()
 
 
 if __name__ == "__main__":

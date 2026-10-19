@@ -193,7 +193,15 @@ Règle : une étape = un commit, les 28 tests verts + compilation après chacune
   identique (arbre syntaxique), pont réexporte tout (`D.GainControl`…). Test de référence : l'horloge figée est
   aussi posée dans chaque module `bridge.*` (qui ont leur propre `import time`). Pont : 3 080 -> 1 490 lignes.
   `test_banque` a échoué une fois (écran de démarrage noté avant les couches : timing), puis 4/4 **Validé sur le matériel par Joseph le 19/10** (faders, moteurs, journal : RAS).
-- Étapes suivantes : 9 classe `App` (fin de `main()`), 10 désynchronisations (change le comportement : à valider une par une).
+- **Étape 9 faite** : `main()` = `App(parse_args()).run()`. `App` : `setup()` (démarrage, renvoie un code de sortie ou
+  None), `watch_routing` / `load_pans` / `load_ab` (ex fonctions internes), boucle `run()` = `check_ports()` ("stop" /
+  "skip" / None) -> `tick_input(now)` (MIDI -> contrôleurs, renvoie `faders.flush`) -> `tick_render(now, held)` (TOUT
+  ce qui part vers la X-Touch, ordre d'avant, + notification de couche) -> `tick_integrations(now)` (scènes / pistes
+  REAPER, overlay, relecture A/B ; avant : intercalés dans le rendu, aucun envoi MIDI) -> `tick_wait()` ; `shutdown()`.
+  « Mémoires » de boucle = attributs (`last_toast`, `recall_until`, `diag_t` / `diag_warn`, `ab_seen`, `ch_at`…).
+  `App(None)` ne démarre rien. Test de référence rebranché sur `App.tick_render` : nouvelle référence = ancienne + 3
+  LED (RUDE SOLO, SOLO, FLIP, que l'imitation omettait) — prouvé : sans ces lignes, identique ligne à ligne.
+- Étape suivante : 10 désynchronisations (change le comportement : à valider une par une).
 
 ## Fichiers
 
