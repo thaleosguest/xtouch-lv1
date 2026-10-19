@@ -32,28 +32,7 @@ HOP_WAIT = 0.6        # s max pour que la LV1 affiche l'onglet cliqué
 
 WM_MOUSEMOVE, WM_LBUTTONDOWN, WM_LBUTTONUP, MK_LBUTTON = 0x0200, 0x0201, 0x0202, 0x0001
 
-_u32 = None
-
-
-def u32():
-    global _u32
-    if _u32 is None:
-        u = ctypes.windll.user32
-        vp = ctypes.c_void_p
-        u.IsWindowVisible.argtypes = u.IsIconic.argtypes = u.GetWindowTextLengthW.argtypes = [vp]
-        u.GetWindowTextW.argtypes = [vp, ctypes.c_wchar_p, ctypes.c_int]
-        u.GetWindow.argtypes = [vp, ctypes.c_uint]
-        u.GetWindow.restype = vp
-        u.GetClientRect.argtypes = u.ClientToScreen.argtypes = u.ScreenToClient.argtypes = [vp, vp]
-        u.ChildWindowFromPointEx.argtypes = [vp, wt.POINT, ctypes.c_uint]
-        u.ChildWindowFromPointEx.restype = vp
-        u.PostMessageW.argtypes = [vp, ctypes.c_uint, ctypes.c_size_t, ctypes.c_ssize_t]
-        u.GetDC.argtypes = [vp]
-        u.GetDC.restype = vp
-        u.ReleaseDC.argtypes = [vp, vp]
-        u.GetForegroundWindow.restype = vp
-        _u32 = u
-    return _u32
+from lv1.screen import user32 as u32, lv1_window, client_rect, pixel, screen_rows, close as _close
 
 
 def is_admin():
@@ -61,57 +40,6 @@ def is_admin():
         return bool(ctypes.windll.shell32.IsUserAnAdmin())
     except (AttributeError, OSError):
         return False
-
-
-def lv1_window(mixer=1):
-    """Fenêtre Mixer détachée (« MIXER1 »/« MIXER2 ») si elle existe, sinon la fenêtre principale."""
-    u = u32()
-    wins = []
-    proto = ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
-
-    def cb(h, _):
-        if u.IsWindowVisible(h) and not u.GetWindow(h, 4):
-            n = u.GetWindowTextLengthW(h)
-            if n:
-                b = ctypes.create_unicode_buffer(n + 1)
-                u.GetWindowTextW(h, b, n + 1)
-                wins.append((h, b.value))
-        return True
-    u.EnumWindows(proto(cb), 0)
-    for h, t in wins:
-        if t.upper().replace(" ", "") == "MIXER%d" % mixer:
-            return h, True
-    for h, t in wins:
-        if t.startswith("eMotion LV1"):
-            return h, False
-    return None, False
-
-
-def client_rect(h):
-    u = u32()
-    r, pt = wt.RECT(), wt.POINT(0, 0)
-    if not u.GetClientRect(h, ctypes.byref(r)) or not u.ClientToScreen(h, ctypes.byref(pt)):
-        return None
-    return pt.x, pt.y, r.right - r.left, r.bottom - r.top
-
-
-def pixel(x, y):
-    """Couleur d'un pixel de l'ÉCRAN (ce qui est vraiment affiché)."""
-    g32 = ctypes.windll.gdi32
-    g32.GetPixel.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int]
-    g32.GetPixel.restype = ctypes.c_uint32
-    dc = u32().GetDC(None)
-    try:
-        c = g32.GetPixel(dc, x, y)
-    finally:
-        u32().ReleaseDC(None, dc)
-    if c == 0xFFFFFFFF:
-        return None
-    return c & 0xFF, (c >> 8) & 0xFF, (c >> 16) & 0xFF
-
-
-def _close(a, b, tol=12):
-    return a is not None and all(abs(x - y) <= tol for x, y in zip(a, b))
 
 
 class Target:
@@ -298,41 +226,6 @@ def yellow_column(rows, w):
     return None
 
 
-def screen_rows(x, ys, w):
-    """Lignes d'écran ys (absolues), largeur w, en une capture GDI : [[(r, g, b)...] par ligne]."""
-    g32, u = ctypes.windll.gdi32, u32()
-    vp = ctypes.c_void_p
-    for f in (g32.CreateCompatibleDC, g32.CreateCompatibleBitmap, g32.SelectObject):
-        f.restype = vp
-    g32.CreateCompatibleDC.argtypes = [vp]
-    g32.CreateCompatibleBitmap.argtypes = [vp, ctypes.c_int, ctypes.c_int]
-    g32.SelectObject.argtypes = [vp, vp]
-    g32.BitBlt.argtypes = [vp, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, vp, ctypes.c_int,
-                           ctypes.c_int, ctypes.c_uint]
-    g32.GetDIBits.argtypes = [vp, vp, ctypes.c_uint, ctypes.c_uint, vp, vp, ctypes.c_uint]
-    g32.DeleteObject.argtypes = g32.DeleteDC.argtypes = [vp]
-    y0, h = min(ys), max(ys) - min(ys) + 1
-    dc = u.GetDC(None)
-    mem = g32.CreateCompatibleDC(dc)
-    bmp = g32.CreateCompatibleBitmap(dc, w, h)
-    old = g32.SelectObject(mem, bmp)
-    try:
-        g32.BitBlt(mem, 0, 0, w, h, dc, x, y0, 0x00CC0020)
-        bmi = (ctypes.c_uint32 * 10)(40, w, (-h) & 0xFFFFFFFF, 1 | (32 << 16), 0, 0, 0, 0, 0, 0)
-        buf = (ctypes.c_ubyte * (4 * w * h))()
-        g32.GetDIBits(mem, bmp, 0, h, buf, bmi, 0)
-    finally:
-        g32.SelectObject(mem, old)
-        g32.DeleteObject(bmp)
-        g32.DeleteDC(mem)
-        u.ReleaseDC(None, dc)
-    out = []
-    for yy in ys:
-        o = 4 * (yy - y0) * w
-        out.append([(buf[o + 4 * i + 2], buf[o + 4 * i + 1], buf[o + 4 * i]) for i in range(w)])
-    return out
-
-
 def selected_strip(mixer=1):
     """Tranche 0..15 sélectionnée sur la LV1 (lue à l'écran), ou (None, raison). Pas besoin d'administrateur."""
     t = Target(mixer)
@@ -478,14 +371,12 @@ def click_mode(name, n_inputs, mixer=1, method="message"):
 def view_hint():
     """Pour suivre le Mixer affiché : (onglet actif de la fenêtre PRINCIPALE ou None, n° du Mixer détaché au premier plan
     ou None). Target(0) : il n'y a pas de fenêtre « MIXER0 », donc c'est la fenêtre principale."""
+    from lv1 import screen
     u = u32()
     front = None
-    fg = u.GetForegroundWindow()
+    fg = screen.foreground()
     if fg:
-        n = u.GetWindowTextLengthW(fg)
-        b = ctypes.create_unicode_buffer(n + 1)
-        u.GetWindowTextW(fg, b, n + 1)
-        title = b.value.upper().replace(" ", "")
+        title = screen.window_title(fg).upper().replace(" ", "")
         if title in ("MIXER1", "MIXER2"):
             front = int(title[-1])
     t = Target(0)

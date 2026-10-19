@@ -13,47 +13,11 @@ import sys
 REAPER_EXE = "reaper.exe"
 
 
-def _u32():
-    u = ctypes.windll.user32
-    vp = ctypes.c_void_p
-    u.GetForegroundWindow.restype = vp
-    u.GetWindowThreadProcessId.argtypes = [vp, ctypes.POINTER(ctypes.c_ulong)]
-    u.GetWindowThreadProcessId.restype = wt.DWORD
-    u.IsWindowVisible.argtypes = u.GetWindowTextLengthW.argtypes = u.IsIconic.argtypes = [vp]
-    u.GetWindow.argtypes = [vp, ctypes.c_uint]
-    u.GetWindow.restype = vp
-    u.SetForegroundWindow.argtypes = u.BringWindowToTop.argtypes = [vp]
-    u.ShowWindow.argtypes = [vp, ctypes.c_int]
-    u.AttachThreadInput.argtypes = [wt.DWORD, wt.DWORD, wt.BOOL]
-    u.GetWindowRect.argtypes = [vp, ctypes.POINTER(wt.RECT)]
-    return u
-
-
-def pid_of(hwnd):
-    pid = ctypes.c_ulong(0)
-    _u32().GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-    return pid.value
-
-
-def exe_of(pid):
-    k = ctypes.windll.kernel32
-    k.OpenProcess.restype = ctypes.c_void_p
-    k.QueryFullProcessImageNameW.argtypes = [ctypes.c_void_p, wt.DWORD, ctypes.c_wchar_p, ctypes.POINTER(wt.DWORD)]
-    k.CloseHandle.argtypes = [ctypes.c_void_p]
-    h = k.OpenProcess(0x1000, False, pid)            # PROCESS_QUERY_LIMITED_INFORMATION
-    if not h:
-        return ""
-    try:
-        buf, n = ctypes.create_unicode_buffer(520), wt.DWORD(520)
-        return buf.value.rsplit("\\", 1)[-1].lower() if k.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(n)) else ""
-    finally:
-        k.CloseHandle(h)
+from lv1.screen import user32 as _u32, window_pid as pid_of, exe_of, windows, lv1_window   # étape 4
 
 
 def lv1_hwnd(mixer=1):
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    import lv1_clic
-    h, _ = lv1_clic.lv1_window(mixer)
+    h, _ = lv1_window(mixer)
     return h
 
 
@@ -61,16 +25,11 @@ def main_window(exe):
     """Plus grande fenêtre visible, avec titre et sans propriétaire, du programme exe (ex. reaper.exe)."""
     u = _u32()
     found = []
-    proto = ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
-
-    def cb(h, _):
-        if u.IsWindowVisible(h) and not u.GetWindow(h, 4) and u.GetWindowTextLengthW(h):
-            if exe_of(pid_of(h)) == exe:
-                rc = wt.RECT()
-                u.GetWindowRect(h, ctypes.byref(rc))
-                found.append(((rc.right - rc.left) * (rc.bottom - rc.top), h))
-        return True
-    u.EnumWindows(proto(cb), 0)
+    for h, _titre in windows():                       # visibles, avec titre, sans propriétaire (même filtre qu'avant)
+        if exe_of(pid_of(h)) == exe:
+            rc = wt.RECT()
+            u.GetWindowRect(h, ctypes.byref(rc))
+            found.append(((rc.right - rc.left) * (rc.bottom - rc.top), h))
     return max(found)[1] if found else None
 
 

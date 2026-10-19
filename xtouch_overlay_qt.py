@@ -29,6 +29,7 @@ from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainterPath
 from PySide6.QtWidgets import QApplication, QWidget
 
 from lv1 import layout as L
+from lv1 import screen
 from lv1.layout import UK_PITCH, KEY_L, KEY_T, KEY_W, KEY_H, KEY_R, TOAST_RIGHT, TOAST_BOTTOM, BTN_RECT
 
 PANEL, LINE2, TXT, MUT = "#111213", "#3a3e43", "#e9edf0", "#8c939a"
@@ -55,33 +56,18 @@ def lv1_rect(mixer=1):
         return None
 
 
-def window_pid(hwnd):
-    import ctypes
-    pid = ctypes.c_ulong(0)
-    u = ctypes.windll.user32
-    u.GetWindowThreadProcessId.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong)]
-    u.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-    return pid.value
-
-
 def foreground_pid():
     """Processus de la fenêtre au premier plan (0 si inconnu)."""
     try:
-        import ctypes
-        u = ctypes.windll.user32
-        u.GetForegroundWindow.restype = ctypes.c_void_p
-        h = u.GetForegroundWindow()
-        return window_pid(h) if h else 0
+        return screen.foreground_pid()
     except Exception:
         return 0
 
 
 def lv1_pid(mixer=1):
     try:
-        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-        import lv1_clic
-        h, _ = lv1_clic.lv1_window(mixer)
-        return window_pid(h) if h else None
+        h, _ = screen.lv1_window(mixer)
+        return screen.window_pid(h) if h else None
     except Exception:
         return None
 

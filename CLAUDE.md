@@ -146,9 +146,16 @@ Règle : une étape = un commit, les 28 tests verts + compilation après chacune
   `lv1_clic` (et donc `lv1_patch`) et par `xtouch_overlay_qt`. Couleurs en RVB : pas de Qt dans `layout.py`
   (l'overlay refait les QColor). Inutilisés mais gardés (pur déplacement) : `TAB_X`, `UK_X0/UK_W/UK_Y0/UK_H`.
   Restent dans l'overlay : durées, tailles de nos fenêtres, `RECALL_DEFAULT` (réglage ADJUST), palette `LV1_*`.
-- Étapes suivantes : 4 `lv1/screen.py` (fenêtres +
-  lectures), 5 `osc.py`, 6 `surface/` (MIDI + rendu), 7 découpe de `LV1State`, 8 `bridge/` (contrôleurs),
+- **Étape 4 faite** : `lv1/screen.py` = fenêtres + lecture d'écran en un seul endroit : `user32()` (UN réglage des
+  types ctypes, au lieu de `lv1_clic.u32` + `fenetres._u32` qui modifiaient le même objet partagé — identiques le
+  19/10, donc pas de bug, mais un piège), `windows()`, `window_title`, `window_pid`, `exe_of`, `foreground()`,
+  `foreground_pid()`, `lv1_window`, `client_rect`, `pixel`, `screen_rows`, `close`. Réexportés par `lv1_clic` (`u32`,
+  `_close`…) et `fenetres` (`_u32`, `pid_of`). Vérifié en direct (LV1 ouverte) : 9 mesures identiques avant/après.
+  Volontairement à part : capture de `lv1_patch` (PrintWindow, autre technique) et `tracks_live.py` (essai inutilisé).
+  `Target` reste dans `lv1_clic` (conversion de coordonnées + clics).
+- Étapes suivantes : 5 `osc.py`, 6 `surface/` (MIDI + rendu), 7 découpe de `LV1State`, 8 `bridge/` (contrôleurs),
   9 classe `App` (fin de `main()`), 10 désynchronisations (change le comportement : à valider une par une).
+
 ## Fichiers
 
 - **V0.1 = installeur « Total Control for LV1 » (16/10/2026, ex « LV1 Suite » : nom choisi par Joseph ; « Total Control »
