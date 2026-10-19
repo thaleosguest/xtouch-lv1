@@ -1,11 +1,13 @@
 """Géométrie de l'écran de la LV1 : positions, tailles et couleurs relevées sur des captures.
 
-C'est LE fichier à revérifier après une mise à jour de la LV1 : tout ce que le pont clique ou lit à l'écran
-passe par ces valeurs. Déplacé tel quel de `lv1_clic.py` (étape 3a du refactor, 19/10/2026) : AUCUNE valeur
-n'a changé, les commentaires d'origine suivent (date et capture de chaque relevé).
+C'est LE fichier à revérifier après une mise à jour de la LV1 : tout ce que le pont clique ou lit à l'écran, et
+tout ce que l'overlay pose dessus, passe par ces valeurs. Déplacé tel quel de `lv1_clic.py` (étape 3a du
+refactor, 19/10/2026) et de `xtouch_overlay_qt.py` (étape 3b) : AUCUNE valeur n'a changé, les commentaires
+d'origine suivent (date et capture de chaque relevé).
 
 Repère : pixels d'un écran 1920x1080 en plein écran. `lv1_clic.Target` les met à l'échelle de la zone client
-réelle (fenêtre réduite, autre résolution) : x * largeur / REF_W, y * hauteur / REF_H.
+réelle (fenêtre réduite, autre résolution) : x * largeur / REF_W, y * hauteur / REF_H. Couleurs en RVB simples :
+ce fichier ne dépend pas de Qt (l'overlay en fait des QColor).
 """
 
 REF_W, REF_H = 1920.0, 1080.0
@@ -60,3 +62,22 @@ SEL_X0, SEL_PITCH = 143, 96        # /1920
 BOTTOM_Y = 1044
 BOTTOM_X = (690, 1572)
 BOTTOM_GREY = (54, 54, 54)
+
+# ── Barre du haut : User Keys (pastille A/B de l'overlay, posée sur la touche « FlipAB ») ─────────────────────────
+# Pastille A/B posée sur la User Key « FlipAB » de la LV1 (demande de Joseph, 15/10 : voir à tout moment si les
+# entrées sont sur A ou B). Rangée des User Keys, visible sur toutes les pages : touche k = x 145+96k .. 229+96k,
+# y 62..90 (1920x1080, relevé du 15/10). Pastille dans la partie droite de la touche.
+UK_X0, UK_PITCH, UK_W, UK_Y0, UK_H = 145, 96, 84, 62, 28   # seul UK_PITCH sert ; les 4 autres : relevé gardé
+# Touche d'origine relevée au pixel (15/10) : contour clair (160) x 144+96k .. 230+96k, y 61..90, coins ~5 px, intérieur
+# (17,17,17), fond de la rangée (71,71,71).
+KEY_L, KEY_T, KEY_W, KEY_H, KEY_R = 144, 61, 87, 30, 5
+ROW_BG, KEY_BG, KEY_LINE = (71, 71, 71), (17, 17, 17), (160, 160, 160)
+A_BLUE = (56, 201, 255)          # bouton A/B actif de la LV1 (même bleu que l'onglet actif, TAB_ACTIVE)
+
+# ── Zones libres de l'écran où l'overlay se pose ──────────────────────────────────────────────────────────────
+# Notification de couche : coin bas-droit = juste à gauche de la colonne des couches (x 1785) et au-dessus de la
+# rangée SOLO (y 1018).
+TOAST_RIGHT, TOAST_BOTTOM = 1772, 1010
+# Boutons du rappel de pistes : zone vide en bas à gauche de la LV1 (sous Output L/R, endroit montré par Joseph sur
+# sa capture du 15/10) : x, y, largeur, hauteur des deux boutons ensemble.
+BTN_RECT = (38, 862, 54, 134)

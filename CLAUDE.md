@@ -132,7 +132,13 @@ Règle : une étape = un commit, les 28 tests verts + compilation après chacune
   `surface/` ; à renommer `xt` à l'étape 6.
 - **Étape 2 faite** : mixin `FollowsView` (une seule propriété `page` -> `state.view`) hérité par LV1Clicker,
   LayerModeWatcher, LV1SelectionWatcher et ButtonControl, au lieu de 4 copies.
-- Étapes suivantes : 3 `lv1/layout.py` (positions écran), 4 `lv1/screen.py` (fenêtres +
+- **Étape 3 faite** (3a + 3b) : `lv1/layout.py` = TOUTE la géométrie de l'écran LV1 (onglets, couches, boutons de
+  mode, Spill, bande du nom, sélection, fader du bas, User Keys / touche FLIP, emplacements de la notification et
+  des boutons du rappel), relevés sur captures, à revérifier après une mise à jour de la LV1. Réexportée par
+  `lv1_clic` (et donc `lv1_patch`) et par `xtouch_overlay_qt`. Couleurs en RVB : pas de Qt dans `layout.py`
+  (l'overlay refait les QColor). Inutilisés mais gardés (pur déplacement) : `TAB_X`, `UK_X0/UK_W/UK_Y0/UK_H`.
+  Restent dans l'overlay : durées, tailles de nos fenêtres, `RECALL_DEFAULT` (réglage ADJUST), palette `LV1_*`.
+- Étapes suivantes : 4 `lv1/screen.py` (fenêtres +
   lectures), 5 `osc.py`, 6 `surface/` (MIDI + rendu), 7 découpe de `LV1State`, 8 `bridge/` (contrôleurs),
   9 classe `App` (fin de `main()`), 10 désynchronisations (change le comportement : à valider une par une).
 ## Fichiers

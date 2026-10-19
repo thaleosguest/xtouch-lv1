@@ -28,6 +28,9 @@ from PySide6.QtCore import QObject, QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QApplication, QWidget
 
+from lv1 import layout as L
+from lv1.layout import UK_PITCH, KEY_L, KEY_T, KEY_W, KEY_H, KEY_R, TOAST_RIGHT, TOAST_BOTTOM, BTN_RECT
+
 PANEL, LINE2, TXT, MUT = "#111213", "#3a3e43", "#e9edf0", "#8c939a"
 RED_TOP, RED_BOT = QColor(255, 120, 105), QColor(225, 22, 32)
 FADE_MS = 260
@@ -35,9 +38,9 @@ BANNER_MS = 2500
 BREATH_S = 2.4                      # période de la respiration du cadre
 FRAME_MIN, FRAME_MAX = 0.35, 0.95
 BORDER = 5
-# Notification de couche : taille (px) ; coin bas-droit en pixels de référence 1920x1080 de la LV1 = juste à gauche
-# de la colonne des couches (x 1785) et au-dessus de la rangée SOLO (y 1018) ; visible TOAST_MS puis fondu.
-TOAST_W, TOAST_H, TOAST_RIGHT, TOAST_BOTTOM, TOAST_MS = 260, 64, 1772, 1010, 2500
+# Notification de couche : taille (px), visible TOAST_MS puis fondu ; son coin bas-droit (TOAST_RIGHT,
+# TOAST_BOTTOM) est une position de l'écran LV1 : lv1/layout.py.
+TOAST_W, TOAST_H, TOAST_MS = 260, 64, 2500
 FLAGS = (Qt.FramelessWindowHint | Qt.Tool | Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus
          | Qt.WindowTransparentForInput)
 
@@ -217,14 +220,11 @@ class Frame(QWidget):
 
 
 # Pastille A/B posée sur la User Key « FlipAB » de la LV1 (demande de Joseph, 15/10 : voir à tout moment si les
-# entrées sont sur A ou B). Rangée des User Keys, visible sur toutes les pages : touche k = x 145+96k .. 229+96k,
-# y 62..90 (1920x1080, relevé du 15/10). Pastille dans la partie droite de la touche.
-UK_X0, UK_PITCH, UK_W, UK_Y0, UK_H = 145, 96, 84, 62, 28
-# Touche d'origine relevée au pixel (15/10) : contour clair (160) x 144+96k .. 230+96k, y 61..90, coins ~5 px, intérieur
-# (17,17,17), fond de la rangée (71,71,71). La pastille la recopie en débordant de PAD px : rien ne transparaît.
-KEY_L, KEY_T, KEY_W, KEY_H, KEY_R, PAD = 144, 61, 87, 30, 5, 2
-ROW_BG, KEY_BG, KEY_LINE = QColor(71, 71, 71), QColor(17, 17, 17), QColor(160, 160, 160)
-A_BLUE = QColor(56, 201, 255)          # bouton A/B actif de la LV1
+# entrées sont sur A ou B). Position et couleurs de la touche d'origine : lv1/layout.py. La pastille la recopie en
+# débordant de PAD px : rien ne transparaît.
+PAD = 2
+ROW_BG, KEY_BG, KEY_LINE = QColor(*L.ROW_BG), QColor(*L.KEY_BG), QColor(*L.KEY_LINE)
+A_BLUE = QColor(*L.A_BLUE)             # bouton A/B actif de la LV1
 
 
 class AbBadge(QWidget):
@@ -837,11 +837,11 @@ class RecallSetup(QWidget):
 # Boutons du rappel de pistes (demande de Joseph, 15/10 : basculer petit / grand et entrer dans le réglage depuis
 # l'écran ; base du futur bouton « agrandir / rapetisser » de l'appli). Deux boutons l'un sous l'autre dans la zone
 # vide en bas à gauche de la LV1 (sous Output L/R, endroit montré par Joseph sur sa capture ; bandeau grand : ils
-# remontent au-dessus), BTN_RECT en pixels de référence 1920x1080 (zone rouge de Joseph, capture du 15/10).
+# remontent au-dessus), BTN_RECT en pixels de référence 1920x1080 (zone rouge de Joseph, capture du 15/10) :
+# lv1/layout.py.
 # Ils font PARTIE DU BANDEAU (Joseph) : même apparition, même disparition, même fondu ; pour les atteindre, on tient
 # un fader et on appuie sur le bouton à l'écran tactile. Seule fenêtre du rappel qui reçoit les clics, sans prendre
 # le focus de la LV1.
-BTN_RECT = (38, 862, 54, 134)         # x, y, largeur, hauteur des deux boutons ensemble
 
 
 class RecallButtons(QWidget):
