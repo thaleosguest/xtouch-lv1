@@ -50,6 +50,8 @@ def serve(n):
     lay = [("i", 0), ("i", 0), ("i", 1), ("s", "Ch 1-16"), ("i", 16)]
     for k in range(16): lay += [("i", 0), ("i", k)]
     send("/Notify/Layers", lay); send("/Notify/CurrentLayer", [("i", 0), ("i", 0)])
+    for k in range(16):              # une vraie LV1 envoie ses 16 User Keys, même non assignées (journal du 17/10)
+        send("/Notify/UserKeyInfo", [("i", k), ("s", "None"), ("s", "None"), ("i", 0)])
     time.sleep(5)
 
 

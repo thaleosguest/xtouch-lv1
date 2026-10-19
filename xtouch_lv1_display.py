@@ -545,9 +545,20 @@ class LV1Link(threading.Thread):
     # mais n'envoie PAS son état (/Channels, /Notify/Layers, couleurs) -> plus de couleurs ni de banques. Si rien
     # n'arrive : on redemande à STATE_ASK s, puis on se reconnecte à STATE_GIVEUP s (nouvelle poignée de main).
     # État complet = /Channels ET /Notify/Layers (journal 230733 du 15/10 : après un « /Device/LinkSettings/NewSession »
-    # la LV1 a envoyé canaux et couleurs puis PLUS RIEN — ni couches, ni scènes, ni User Keys -> SAVE sans « Store »).
-    STATE_MSGS = ("/Channels", "/Notify/Layers")
+    # la LV1 a envoyé canaux et couleurs puis PLUS RIEN — ni couches, ni scènes, ni User Keys -> SAVE sans « Store »)
+    # ET /Notify/UserKeyInfo (19/10, journal 113310 : couches reçues sur /Get/Layers, User Keys JAMAIS -> FLIP sans
+    # effet, « aucune User Key Flip AB »). La LV1 envoie les 16 User Keys même non assignées (« None », 17/10), mais
+    # aucune demande connue ne les fait renvoyer : seule une reconnexion. Si elles manquent encore après KEYS_TRIES
+    # reconnexions, l'état est accepté sans elles (pas de boucle de reconnexion sur une LV1 qui ne les enverrait pas).
+    STATE_MSGS = ("/Channels", "/Notify/Layers", "/Notify/UserKeyInfo")
     STATE_ASK, STATE_GIVEUP = 5.0, 10.0
+    KEYS_TRIES = 2
+
+    def state_complete(self, seen):
+        """Canaux + couches reçus, et User Keys reçues (ou déjà KEYS_TRIES reconnexions pour elles seules)."""
+        if "/Channels" not in seen or "/Notify/Layers" not in seen:
+            return False
+        return "/Notify/UserKeyInfo" in seen or self.keys_missing >= self.KEYS_TRIES
 
     def __init__(self, state, host=None, port=None, name="XTouch-Display"):
         super().__init__(daemon=True)
@@ -558,6 +569,7 @@ class LV1Link(threading.Thread):
         self.sock = None
         self.send_lock = threading.Lock()
         self.on_connect = None    # appelée (sur un fil à part) à chaque connexion : pans de départ…
+        self.keys_missing = 0     # reconnexions faites pour les seules User Keys (remis à 0 quand elles arrivent)
 
     def send(self, address, args):
         """Envoie un message à la LV1 (ignoré si pas connectée)."""
@@ -630,7 +642,9 @@ class LV1Link(threading.Thread):
                         else:
                             if address in self.STATE_MSGS:
                                 seen.add(address)
-                                got_state = len(seen) == len(self.STATE_MSGS)
+                                got_state = self.state_complete(seen)
+                                if address == "/Notify/UserKeyInfo":
+                                    self.keys_missing = 0
                             handle(self.state, address, args)
                 if ack.is_set() and not asked:
                     asked = True
@@ -646,6 +660,10 @@ class LV1Link(threading.Thread):
                 if t_conn and not got_state:
                     waited = time.time() - t_conn
                     if waited > self.STATE_GIVEUP:
+                        if "/Channels" in seen and "/Notify/Layers" in seen:     # seules les User Keys manquent
+                            self.keys_missing += 1
+                            JOURNAL.mark("User Keys LV1 non reçues : reconnexion %d / %d" % (self.keys_missing,
+                                                                                            self.KEYS_TRIES))
                         JOURNAL.mark("état initial LV1 non reçu en %.0f s : reconnexion" % waited)
                         raise OSError("la LV1 n'envoie pas son état (en cours de chargement ?) : reconnexion")
                     if waited > self.STATE_ASK and not reasked:

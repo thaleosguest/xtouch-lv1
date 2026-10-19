@@ -116,6 +116,14 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   re-montrée en changeant de Mixer. Limite : Mixer détaché -> onglets de la fenêtre principale décalés (mal lus).
   Test `tests/test_mixer_suivi.py`. Vérifié en direct : onglet Mixer 2 lu.
 
+- **User Keys absentes (19/10, journal 113310, essai de l'étape 3)** : FLIP sans effet, « aucune User Key Flip AB »
+  alors que la User Key 16 = Flip A/B. Après « NewSession » la LV1 n'a envoyé que les canaux ; les couches sont
+  arrivées sur /Get/Layers, donc l'état passait pour complet, mais AUCUN /Notify/UserKeyInfo (aucune demande connue
+  ne les fait renvoyer). Correctif : `STATE_MSGS` exige aussi /Notify/UserKeyInfo -> reconnexion à 10 s (la LV1
+  renvoie alors tout) ; après `KEYS_TRIES` (2) reconnexions pour elles seules, état accepté sans elles (pas de
+  boucle). `LV1Link.state_complete`, `keys_missing`. Test `tests/test_user_keys_absentes.py` (échoue sur l'ancien
+  code : 1 connexion, FLIP muet). Hors refactor : commit à part.
+
 ## Refactor en cours (depuis le 19/10/2026)
 
 Plan en 11 étapes validé par Joseph ; étapes 0 à 9 SANS changement de comportement, étape 10 = correctifs.
