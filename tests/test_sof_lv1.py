@@ -4,7 +4,8 @@ Séquences relevées dans le journal 195719 (/Notify/InternalAssign, type 7 = bu
 - menu Mon « Mon 3 » -> aux 10 (Mon 3) ; LED F de la User Key « Flip Sends: MX1: Mon 1 » seulement pour Mon 1 ;
 - états de passage (F6 : LR off, Fx 1 on, Fx 2 on, Fx 1 off) : seul l'état final compte, après SOF_SETTLE ;
 - aucun appui de User Key envoyé par le suivi ; fader tenu : attendre le lâcher ;
-- mode SEND local de la X-Touch (LV1 restée sur LR) : pas touché.
+- mode SEND local de la X-Touch (LV1 restée sur LR) : pas touché ;
+- Mixer 2 affiché : même état (la LV1 envoie le même message, 4e nombre 0).
 
     py tests/test_sof_lv1.py .
 """
@@ -74,6 +75,14 @@ check("fader tenu : pas encore", sends.aux is None)
 suivre()
 check("lâché : Fx 4", sends.aux == 3)
 ia(2, 3, 0); ia(3, 0, 1); suivre()
+
+# Mixer 2 affiché (essai de Joseph) : même message, 4e nombre 0 -> suivi aussi
+st.view = 1
+ia(3, 0, 0); ia(25, 3, 1); suivre()
+check("Mixer 2 : Mon 4 suivi", sends.aux == 11)
+ia(25, 3, 0); ia(3, 0, 1); suivre()
+check("Mixer 2 : retour normal", sends.aux is None)
+st.view = 0
 
 check("le suivi n'a envoyé aucune User Key", envoyes == [])
 

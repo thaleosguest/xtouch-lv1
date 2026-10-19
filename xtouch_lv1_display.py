@@ -147,10 +147,11 @@ class LV1Model:
         self.channels_at = 0.0    # instant du dernier /Channels (état complet renvoyé : connexion, Flip A/B…)
         self.custom_on = {}       # vue -> bouton Custom allumé ? (/Notify/CustomButton, hypothèse)
         self.spill_on = {}        # vue -> bouton Spill allumé ? (/Notify/SpillButton, hypothèse)
-        # Sends on Fader de la LV1 (/Notify/InternalAssign type 7, 19/10) : vue -> (g, ch) du bus sur les faders
-        # (LR (3, 0) = normal, Fx / Mon = sends) ou None ; instant du dernier changement (suivi après stabilisation)
-        self.sof = {}
-        self.sof_t = {}
+        # Sends on Fader de la LV1 (/Notify/InternalAssign type 7, 19/10) : (g, ch) du bus sur les faders (LR (3, 0) =
+        # normal, Fx / Mon = sends), None, ou « ? » pas encore reçu ; instant du dernier changement. UN SEUL état pour
+        # les deux Mixers (essai de Joseph sur Mixer 2 : même message, 4e nombre toujours 0).
+        self.sof = "?"
+        self.sof_t = 0.0
         self.version = ""
 
     def send(self, g, ch, aux):
@@ -432,14 +433,14 @@ def handle(state, address, args):
             # ,iiiiii [groupe, canal, type, vue ?, actif, ?] ; type 7 = bus sur les faders (Sends on Fader), relevé le
             # 19/10 (journal 195719 : menu Fx « Reverb Hall » -> 2 0 7 0 1, Mon 3 -> 25 2 7 0 1, retour LR -> 3 0 7 0 1).
             # Un changement envoie des états de passage (LR off, Fx 1 on, Fx 2 on, Fx 1 off) : un « off » n'efface que
-            # le bus en cours, l'état final est donc le bon. 4e nombre = vue : hypothèse (toujours 0 relevé, Mixer 1).
-            g, c, kind, view, on = (a[1] for a in args[:5])
+            # le bus en cours, l'état final est donc le bon. 4e nombre : PAS la vue (0 aussi sur Mixer 2), sens inconnu.
+            g, c, kind, _x, on = (a[1] for a in args[:5])
             if kind == 7:
                 if on:
-                    state.sof[view] = (g, c)
-                elif state.sof.get(view) == (g, c):
-                    state.sof[view] = None
-                state.sof_t[view] = time.time()
+                    state.sof = (g, c)
+                elif state.sof == (g, c):
+                    state.sof = None
+                state.sof_t = time.time()
         elif address == "/Notify/ServiceVersion" and args and args[0][0] == "s":
             state.version = args[0][1]
 

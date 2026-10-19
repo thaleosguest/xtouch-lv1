@@ -64,7 +64,7 @@ class SendControl:
         self.picking = False
         self.flip_key = None              # User Key (0..7) qui a mis la LV1 en Flip Sends (touches F1..F8)
         self.page = 0                     # choix : 0 = aux 0..15, 1 = aux 16..31
-        self.lv1_sof = {}                 # vue -> dernier bus « sur les faders » de la LV1 déjà suivi
+        self.lv1_sof = "?"                # dernier bus « sur les faders » de la LV1 déjà suivi (les 2 Mixers)
 
     def key_of(self, strip, e):
         """Clé réglée par un fader (branchée sur FaderControl.key_of). Pendant le choix de l'aux, les faders
@@ -153,15 +153,14 @@ class SendControl:
         (la LV1 reste sur LR) n'est pas touché. Jamais d'appui de User Key ici (il rebasculerait la LV1).
         busy (fader sous le doigt) : attendre le lâcher, comme le changement de Mixer."""
         with self.state.lock:
-            view = self.state.view
-            if view not in self.state.sof or now - self.state.sof_t.get(view, 0) < self.SOF_SETTLE:
+            bus = self.state.sof
+            if bus == "?" or now - self.state.sof_t < self.SOF_SETTLE:
                 return
-            bus = self.state.sof[view]
             aux = self.state.aux_tracks
             keys = dict(self.state.user_keys)
-        if bus == self.lv1_sof.get(view, "?") or busy:
+        if bus == self.lv1_sof or busy:
             return
-        self.lv1_sof[view] = bus
+        self.lv1_sof = bus
         target = next((k for k, (g, ch, _n) in enumerate(aux) if (g, ch) == bus), None)
         if target is None:                       # LR (ou autre bus) : mode normal
             if self.aux is not None:
