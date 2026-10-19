@@ -176,7 +176,14 @@ Règle : une étape = un commit, les 28 tests verts + compilation après chacune
   Variable locale `surface` de `main()` (et du test de référence) renommée `xt`. Restés dans le pont : noms LV1
   (`short_name`, `GROUP_TAG`), `master_display`, `pan_label`, `send_label` (courbe de fader), `layer_toast` ;
   `open_units` / `open_inputs` / `ports_missing` (journal + STOP) partiront avec `App` (étape 9).
-- Étapes suivantes : 7 découpe de `LV1State`, 8 `bridge/` (contrôleurs),
+- **Étape 7 faite** : `LV1State(LV1Model, ScreenModel, BridgeState)` : `LV1Model` = ce que la LV1 dit par le réseau
+  (pistes, vumètres, envois, couches, User Keys, scènes ; méthodes `send`, `meter`, `fader_of`, `set_fader`, `track`,
+  `layer_set`), `ScreenModel` = lu par le pont à l'écran / dans la base (`view`, `lv1_tab`, `spill_lit`, `layer_mode`,
+  `n_inputs`, `on_b`, `routing`, `driver_size`), `BridgeState` = propre au pont (`local`, `selected`, `held_tracks`,
+  `stale`, `pan_hold`, `scene_events` ; `bank`, `layer_entries`). Noms d'accès inchangés (`state.xxx`), un seul verrou.
+  Vérifié : mêmes 32 champs, mêmes valeurs, mêmes méthodes (arbre syntaxique). `handle()` et l'état restent dans le
+  pont : les tests remplacent `D.time` (le déplacer ailleurs fausserait le test de référence).
+- Étapes suivantes : 8 `bridge/` (contrôleurs),
   9 classe `App` (fin de `main()`), 10 désynchronisations (change le comportement : à valider une par une).
 
 ## Fichiers

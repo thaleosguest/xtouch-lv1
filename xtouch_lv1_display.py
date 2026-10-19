@@ -184,9 +184,11 @@ def load_color_overrides():
 
 # ─── État de la LV1 ───────────────────────────────────────────────────────────
 
-class LV1State:
-    def __init__(self):
-        self.lock = threading.Lock()
+class LV1Model:
+    """Ce que la LV1 dit par le réseau (MyFOH) : pistes, vumètres, envois, couches, User Keys, scènes. Rempli par
+    handle() sous state.lock. Étape 7 du refactor (19/10/2026) : une des trois parties de LV1State."""
+
+    def _init_lv1(self):
         self.connected = False
         self.tracks = {}          # (g, ch) -> {"name", "rgb", "pal", "fader"}
         self.meters = {}          # (g, ch, sub) -> dB
@@ -197,32 +199,16 @@ class LV1State:
         self.last_flag = {}       # vue -> 2e nombre de ce paquet (1 = custom d'après le module Companion)
         self.pending_set = {}     # vue -> (jeu, flag) reçu, adopté au /Notify/CurrentLayer qui le suit
         self.current = {}         # vue -> index de couche (/Notify/CurrentLayer)
-        self.local = {}           # vue -> index choisi par ◄ BANK ► sur la X-Touch (effacé au clic LV1)
-        self.selected = None      # (g, ch) sélectionné dans le pont (Select / ◄ CHANNEL ►), local comme MyFOH
-        self.pan_hold = {}        # (g, ch) -> instant jusqu'auquel les /Notify/Track/Pan sont ignorés (geste PAN)
         self.sends = {}           # (g, ch, aux) -> {"fader": dB, "on": bool, "pan": -1..1} (envois aux)
         self.aux_tracks = []      # /Aux/Tracks : [(groupe, canal, nom)] dans l'ordre des index aux (Fx 1-8, Mon 1-16)
         self.user_keys = {}       # n° 0..15 -> (nom court, fonction, assignée) : /Notify/UserKeyInfo
-        self.on_b = None          # entrées sur B ? (base LV1, relue après chaque Flip A/B) ; None = inconnu
         self.scenes = {}          # index -> nom (/Notify/SceneList, /Notify/Scene/Name)
         self.cur_scene = None     # index de la scène courante (/Notify/CurSceneIndex), -1 = aucune
-        self.routing = {}         # canal -> {"rec": [...], "play": [...]} (pilote SoundGrid de ce PC, base LV1)
-        self.driver_size = None   # nb de canaux de lecture du pilote (diagonale B : lignes 1..n)
         self.scene_last = (None, 0.0)   # (index, instant) du dernier rappel retenu
-        self.scene_events = []    # [(index, instant)] scènes rappelées sur la LV1, à transmettre à Reaper
         self.channels_at = 0.0    # instant du dernier /Channels (état complet renvoyé : connexion, Flip A/B…)
         self.custom_on = {}       # vue -> bouton Custom allumé ? (/Notify/CustomButton, hypothèse)
         self.spill_on = {}        # vue -> bouton Spill allumé ? (/Notify/SpillButton, hypothèse)
-        self.view = 0             # Mixer suivi : 0 = Mixer 1, 1 = Mixer 2 (ViewFollower : onglet affiché, 18/10)
-        self.layer_mode = {}      # vue -> mode de couche lu dans la base (lv1_db.MODE_* ; touches View de la X-Touch)
-        self.lv1_tab = None       # onglet affiché par la LV1, lu à l'écran (« Mixer 1 », « All »…)
-        self.spill_lit = False    # bouton Spill allumé sur la LV1, lu à l'écran (la base ne l'écrit pas)
-        self.n_inputs = None      # canaux d'entrée configurés (16 / 32 / 64 / 80), base LV1
         self.version = ""
-        self.held_tracks = set()  # (g, ch) dont le fader X-Touch est sous le doigt : retours LV1 ignorés
-        # (g, ch) -> (valeurs « périmées » en dB arrondi, instant de fin) : après le relâchement, un retour
-        # LV1 égal à l'ancienne valeur ou à une valeur intermédiaire du geste est ignoré (retour tardif).
-        self.stale = {}
 
     def send(self, g, ch, aux):
         return self.sends.setdefault((g, ch, aux), {"fader": None, "on": None, "pan": None})
@@ -247,6 +233,49 @@ class LV1State:
         return self.tracks.setdefault((g, ch), {"name": None, "rgb": None, "pal": None, "fader": None,
                                                 "mute": None, "solo": None, "pan": None})
 
+    def layer_set(self, page):
+        """Jeu de couches affiché sur cette vue.
+
+        Constat du journal du 14/10/2026 (LV1 17.6) : à chaque clic de couche, la LV1 envoie
+        d'abord /Notify/Layers (le jeu affiché : usine, custom ou autre) puis /Notify/CurrentLayer.
+        Le 2e nombre de /Notify/Layers ne dit PAS toujours « custom », et /Notify/CustomButton ne
+        change pas quand on allume Custom. On suit donc simplement le dernier jeu reçu pour la vue."""
+        if page in self.last_set:
+            return self.last_set[page], "custom" if self.last_flag.get(page) else "usine"
+        if (1 - page) in self.last_set:
+            return self.last_set[1 - page], "usine"
+        return None, None
+
+
+class ScreenModel:
+    """Ce que le pont lit lui-même, à l'écran ou dans la base de la LV1 (CurrentLV1.dat, sur copie) : Mixer suivi,
+    onglet, voyant Spill, mode de couche, nombre de canaux, entrées A/B, routing du pilote. Partie de LV1State."""
+
+    def _init_screen(self):
+        self.view = 0             # Mixer suivi : 0 = Mixer 1, 1 = Mixer 2 (ViewFollower : onglet affiché, 18/10)
+        self.lv1_tab = None       # onglet affiché par la LV1, lu à l'écran (« Mixer 1 », « All »…)
+        self.spill_lit = False    # bouton Spill allumé sur la LV1, lu à l'écran (la base ne l'écrit pas)
+        self.layer_mode = {}      # vue -> mode de couche lu dans la base (lv1_db.MODE_* ; touches View de la X-Touch)
+        self.n_inputs = None      # canaux d'entrée configurés (16 / 32 / 64 / 80), base LV1
+        self.on_b = None          # entrées sur B ? (base LV1, relue après chaque Flip A/B) ; None = inconnu
+        self.routing = {}         # canal -> {"rec": [...], "play": [...]} (pilote SoundGrid de ce PC, base LV1)
+        self.driver_size = None   # nb de canaux de lecture du pilote (diagonale B : lignes 1..n)
+
+
+class BridgeState:
+    """Ce qui n'existe que dans le pont : banque ◄ BANK ► locale, sélection, faders tenus et retours périmés, pan
+    bloqué après un geste, scènes à transmettre à REAPER. Partie de LV1State."""
+
+    def _init_bridge(self):
+        self.local = {}           # vue -> index choisi par ◄ BANK ► sur la X-Touch (effacé au clic LV1)
+        self.selected = None      # (g, ch) sélectionné dans le pont (Select / ◄ CHANNEL ►), local comme MyFOH
+        self.held_tracks = set()  # (g, ch) dont le fader X-Touch est sous le doigt : retours LV1 ignorés
+        # (g, ch) -> (valeurs « périmées » en dB arrondi, instant de fin) : après le relâchement, un retour
+        # LV1 égal à l'ancienne valeur ou à une valeur intermédiaire du geste est ignoré (retour tardif).
+        self.stale = {}
+        self.pan_hold = {}        # (g, ch) -> instant jusqu'auquel les /Notify/Track/Pan sont ignorés (geste PAN)
+        self.scene_events = []    # [(index, instant)] scènes rappelées sur la LV1, à transmettre à Reaper
+
     def bank(self, page, step):
         """◄ BANK ► : couche précédente / suivante du jeu affiché, en sautant les couches vides.
 
@@ -265,19 +294,6 @@ class LV1State:
             k += step
         return None
 
-    def layer_set(self, page):
-        """Jeu de couches affiché sur cette vue.
-
-        Constat du journal du 14/10/2026 (LV1 17.6) : à chaque clic de couche, la LV1 envoie
-        d'abord /Notify/Layers (le jeu affiché : usine, custom ou autre) puis /Notify/CurrentLayer.
-        Le 2e nombre de /Notify/Layers ne dit PAS toujours « custom », et /Notify/CustomButton ne
-        change pas quand on allume Custom. On suit donc simplement le dernier jeu reçu pour la vue."""
-        if page in self.last_set:
-            return self.last_set[page], "custom" if self.last_flag.get(page) else "usine"
-        if (1 - page) in self.last_set:
-            return self.last_set[1 - page], "usine"
-        return None, None
-
     def layer_entries(self, mixer_page):
         """Les 16 tranches de la couche affichée, ou (None, None) si inconnue."""
         idx = self.local.get(mixer_page, self.current.get(mixer_page))
@@ -292,6 +308,17 @@ class LV1State:
                 name += " (banque X-Touch)"
             return name, entries
         return None, None
+
+
+class LV1State(LV1Model, ScreenModel, BridgeState):
+    """Tout l'état partagé du pont (un seul objet `state`, un seul verrou). Les trois parties disent d'où vient chaque
+    valeur ; on y accède toujours par `state.xxx` (noms inchangés à l'étape 7)."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self._init_lv1()
+        self._init_screen()
+        self._init_bridge()
 
 
 class FollowsView:
