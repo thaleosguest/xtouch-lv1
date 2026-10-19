@@ -239,8 +239,8 @@ class SendControl:
                 JOURNAL.mark("XT Mute tranche %d -> envoi %s %s" % (strip + 1, key, "ON" if new else "OFF"))
             return True
         # En sends on fader, les encodeurs règlent le pan de l'ENVOI, PAN allumé ou non (journal 184559 : PAN allumé,
-        # ils réglaient le pan du canal). Seul TRACK (gain X32) les garde.
-        busy = self.gain is not None and self.gain.mode
+        # ils réglaient le pan du canal). Seul TRACK (gain X32, ou trim LV1) les garde.
+        busy = self.gain is not None and (self.gain.mode or self.gain.trim_mode)
         if not busy and kind == 0x90 and NOTE_VPOT_PUSH <= d1 < NOTE_VPOT_PUSH + 8:
             strip = 8 * unit + (d1 - NOTE_VPOT_PUSH)
             e = entries[strip] if strip < len(entries) else None

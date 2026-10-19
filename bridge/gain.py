@@ -9,6 +9,11 @@ from surface.display import SIDE_NAMES, gain_label
 from surface.notes import CC_VPOT, NOTE_PAN, NOTE_REC, NOTE_TRACK, NOTE_VPOT_PUSH
 
 
+def trim_label(db):
+    """Ligne du bas en mode trim (7 car.) : « T+3.5 », « T-12.0 », « T  -» si inconnu."""
+    return "T  -" if db is None else ("T%+.1f" % db)[:7]
+
+
 class GainControl:
     """Étape 4 : TRACK = encodeurs sur le gain des préamplis X32 ; Rec tenu 1 s = 48 V. Via x32-gain-recall.
 
@@ -21,12 +26,15 @@ class GainControl:
     PAN_STEP = 3.0 / 45.0             # 1 cran = 3 pas de l'échelle LV1 (L45..R45) ; « pas assez sensible » à 1
     PAN_FAST = 0.08                   # s : crans plus rapprochés -> pas doublé
     PAN_HOLD = 0.5                    # s : retours LV1 de pan ignorés après notre envoi
+    TRIM_STEP = 0.5                   # dB par cran (comme le gain X32)
+    TRIM_RANGE = (-30.0, 30.0)        # bornes locales ; la LV1 borne elle-même et renvoie la vraie valeur
 
     def __init__(self, state, link, write=True, lv1=None):
         self.state, self.link, self.write = state, link, write
         self.lv1 = lv1                    # LV1Link (envoi /Set/Track/Pan)
         self.mode = False                 # mode gain (TRACK)
         self.pan_mode = False             # mode pan (PAN) ; exclusif avec le mode gain
+        self.trim_mode = False            # mode trim LV1 (2e appui sur TRACK, Joseph 19/10) ; appui encodeur = phase
         self.pan_last = {}                # tranche -> instant du dernier cran (accélération)
         self.rec_down = {}                # tranche -> instant d'appui sur Rec
         self.side = {}                    # piste stéréo -> 0 (L, défaut) / 1 (R) : appui encodeur ; jamais les deux
@@ -36,18 +44,24 @@ class GainControl:
     def on_midi(self, unit, status, d1, d2, t, entries, surface):
         kind = status & 0xF0
         if kind == 0x90 and d1 == NOTE_TRACK:
-            if d2:
-                self.mode = not self.mode
+            if d2:                                # TRACK : normal -> gain X32 -> trim LV1 -> normal (Joseph, 19/10)
+                if self.mode or (not self.trim_mode and not self.link):      # sans Gain Recall : directement trim
+                    self.mode, self.trim_mode = False, True
+                elif self.trim_mode:
+                    self.trim_mode = False
+                else:
+                    self.mode = True
                 self.pan_mode = False
                 if not self.mode:
                     self.side.clear()             # en sortant du mode gain : stéréo de nouveau sur L
-                JOURNAL.mark("XT bouton Track -> mode gain %s" % ("ON" if self.mode else "OFF"))
+                JOURNAL.mark("XT bouton Track -> mode %s" % ("gain" if self.mode else "trim" if self.trim_mode
+                                                              else "normal"))
             return True
         if kind == 0x90 and d1 == NOTE_PAN:
             if d2:
                 self.pan_mode = not self.pan_mode
                 if self.pan_mode:
-                    self.mode = False
+                    self.mode = self.trim_mode = False
                     self.side.clear()
                 JOURNAL.mark("XT bouton Pan -> mode pan %s" % ("ON" if self.pan_mode else "OFF"))
             return True
@@ -74,6 +88,42 @@ class GainControl:
             step = self.PAN_STEP * (2 if fast else 1)
             self._set_pan(e, max(-1.0, min(1.0, round((cur + delta * step) * 45) / 45.0)),
                           "encodeur %d %+d%s" % (strip + 1, delta, " rapide" if fast else ""))
+            return True
+        if self.trim_mode and kind == 0x90 and NOTE_VPOT_PUSH <= d1 < NOTE_VPOT_PUSH + 8:
+            strip = 8 * unit + (d1 - NOTE_VPOT_PUSH)
+            e = entries[strip] if strip < len(entries) else None
+            if d2 and e is not None:              # appui encodeur en trim : phase inversée / normale
+                with self.state.lock:
+                    t = self.state.track(*e)
+                    new = not t.get("phase", {}).get(0, False)
+                    t.setdefault("phase", {})[0] = new
+                    if t.get("stereo"):
+                        t["phase"][1] = new
+                    stereo = 1 if t.get("stereo") else 0
+                if self.write and self.lv1:
+                    self.lv1.send("/SetTrackPhaseState", [("i", e[0]), ("i", e[1]), ("i", stereo), ("i", int(new))])
+                JOURNAL.mark("XT appui encodeur %d -> phase %s %s" % (strip + 1, "inversée" if new else "normale", e))
+            return True
+        if self.trim_mode and kind == 0xB0 and CC_VPOT <= d1 < CC_VPOT + 8:
+            strip = 8 * unit + (d1 - CC_VPOT)
+            n = d2 & 0x0F
+            delta = -n if d2 & 0x40 else n
+            e = entries[strip] if strip < len(entries) else None
+            if e is None or not delta:
+                return True
+            with self.state.lock:
+                t = self.state.track(*e)
+                cur = t.get("trim", {}).get(0)
+                if cur is None:
+                    cur = 0.0                     # pas encore reçu : la LV1 l'envoie à la connexion ; 0 par défaut
+                new = max(self.TRIM_RANGE[0], min(self.TRIM_RANGE[1], round((cur + delta * self.TRIM_STEP) * 2) / 2))
+                t.setdefault("trim", {})[0] = new
+                if t.get("stereo"):
+                    t["trim"][1] = new
+                stereo = 1 if t.get("stereo") else 0
+            if self.write and self.lv1:
+                self.lv1.send("/SetTrackTrim", [("i", e[0]), ("i", e[1]), ("i", stereo), ("f", new)])
+            JOURNAL.mark("XT encodeur %d %+d -> trim %s %+.1f dB" % (strip + 1, delta, e, new))
             return True
         if kind == 0x90 and NOTE_VPOT_PUSH <= d1 < NOTE_VPOT_PUSH + 8:
             strip = 8 * unit + (d1 - NOTE_VPOT_PUSH)
@@ -107,6 +157,9 @@ class GainControl:
             t0 = self.rec_down.pop(strip, None)
             e = entries[strip] if strip < len(entries) else None
             if t0 is None or e is None or not self.link:
+                return True
+            if self.trim_mode:                    # en trim, la LED Rec montre la phase : pas de 48 V ici
+                self._warn("48 V : en mode gain (TRACK) seulement, pas en trim")
                 return True
             if t - t0 < self.PHANTOM_HOLD:
                 JOURNAL.mark("XT Rec tranche %d : appui bref (%.1f s), 48 V inchangé" % (strip + 1, t - t0))
@@ -144,6 +197,20 @@ class GainControl:
                             for e in entries]
                 else:
                     pans = [self.state.tracks.get(e, {}).get("pan") if e is not None else None for e in entries]
+        if self.trim_mode:                       # trim LV1 : « T+3.5 », couronne depuis le centre, LED Rec = phase
+            with self.state.lock:
+                vals = [(self.state.tracks.get(e, {}).get("trim", {}).get(0),
+                         self.state.tracks.get(e, {}).get("phase", {}).get(0, False)) if e is not None else (None, False)
+                        for e in entries]
+            for i, (e, (tr, ph)) in enumerate(zip(entries, vals)):
+                recs.append(bool(ph))
+                if tr is None:
+                    rings.append(0)
+                else:
+                    rings.append(0x10 | max(1, min(11, 6 + int(round(tr / 3.0)))))   # mode 1 : depuis le centre
+                if e is not None and i < len(bot):
+                    bot[i] = trim_label(tr)
+            return rings, recs
         for i, e in enumerate(entries):
             if self.pan_mode:
                 p = pans[i]

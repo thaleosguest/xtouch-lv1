@@ -429,6 +429,13 @@ def handle(state, address, args):
                 state.last_set[args[0][1]], state.last_flag[args[0][1]] = pend
             state.current[args[0][1]] = args[1][1]
             state.local.pop(args[0][1], None)   # clic de couche sur la LV1 : elle reprend la main
+        elif address in ("/Notify/TrackTrim", "/Notify/PhaseState") and len(args) >= 4 and args[2][0] == "i":
+            # ,iiifi [groupe, canal, voie (0 = L / mono, 1 = R), trim dB | phase 0|1, ?] (capture MyFOH du 19/10)
+            t = state.track(args[0][1], args[1][1])
+            if address == "/Notify/TrackTrim" and args[3][0] in "fd":
+                t.setdefault("trim", {})[args[2][1]] = float(args[3][1])
+            elif address == "/Notify/PhaseState" and args[3][0] == "i":
+                t.setdefault("phase", {})[args[2][1]] = args[3][1] != 0
         elif address == "/Notify/InternalAssign" and len(args) >= 5 and all(a[0] == "i" for a in args[:5]):
             # ,iiiiii [groupe, canal, type, vue ?, actif, ?] ; type 7 = bus sur les faders (Sends on Fader), relevé le
             # 19/10 (journal 195719 : menu Fx « Reverb Hall » -> 2 0 7 0 1, Mon 3 -> 25 2 7 0 1, retour LR -> 3 0 7 0 1).
@@ -1547,7 +1554,7 @@ class App:
         xt.push(top, bot, cols, lvls, fads, now, held, master_fv)
         xt.push_leds(*send_leds, recs=recs)
         xt.push_rings(rings)
-        xt.set_main_led(NOTE_TRACK, gain.mode)
+        xt.set_main_led(NOTE_TRACK, gain.mode or (gain.trim_mode and int(now * 2) % 2 == 0))   # trim : clignote
         xt.set_main_led(NOTE_PAN, gain.pan_mode)
         xt.set_main_led(NOTE_SEND, sends.aux is not None or (sends.picking and int(now * 3) % 2 == 0))
         if apps is not None:

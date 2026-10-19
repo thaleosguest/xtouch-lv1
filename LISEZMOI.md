@@ -201,7 +201,8 @@ Elle servira à l'étape 4 (gain X32, EQ…).
 (il connaît déjà quel préampli X32 alimente quel canal LV1).
 - **TRACK** : encodeurs en mode **gain** (LED TRACK allumée). Chaque encodeur règle le gain du préampli
   de sa tranche, 0,5 dB par cran (canal stéréo : les deux préamplis ensemble). La ligne du bas affiche le
-  gain, la couronne le montre. Re-TRACK : retour à l'affichage des faders.
+  gain, la couronne le montre. 2e appui sur TRACK : mode **trim** de la LV1 (LED TRACK qui clignote, « T+3.5 »,
+  appui encodeur = **phase**, LED Rec = phase inversée). 3e appui : retour à l'affichage des faders.
 - **Canal stéréo** : on règle **un seul côté à la fois** (gain comme 48 V). L'encodeur règle **L** ; un appui
   sur l'encodeur passe à **R**, un autre revient à L. Écran : « L+12.0 » / « R+11.5 ». Rec (tenu 1 s) agit
   sur le côté affiché, et la LED Rec montre le 48 V de ce côté.
