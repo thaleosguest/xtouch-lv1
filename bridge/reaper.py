@@ -11,6 +11,9 @@ from surface.notes import (NOTE_CLICK, NOTE_CYCLE, NOTE_DISPLAY, NOTE_DOWN, NOTE
                            NOTE_SAVE, NOTE_SCRUB, NOTE_STOP, NOTE_UP, NOTE_ZOOM, TRANSPORT_NOTES)
 
 
+# ─── Transport X-Touch -> REAPER (demande de Joseph, 15/10 : la surface coupée en deux, tranches = LV1,
+# transport / navigation = Reaper pour le virtual soundcheck). Notes : surface/notes.py.
+
 class TransportControl:
     """◄◄ ►► ■ ► ● -> transport Reaper (◄◄ / ►► tenus) ; CYCLE = boucle, CLICK = métronome ; DROP / REPLACE =
     In / Out de la boucle (position jouée en lecture).

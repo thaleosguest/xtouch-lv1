@@ -620,14 +620,6 @@ def layer_toast(layer_name):
     return layer_name
 
 
-# Le négatif (couleur + 0x20) n'a AUCUN effet en mode Mackie (essai de Joseph, 15/10) : à la place, la ligne du
-# bas affiche l'aux devant le niveau d'envoi.
-
-
-# ─── Transport X-Touch -> REAPER (demande de Joseph, 15/10 : la surface coupée en deux, tranches = LV1,
-# transport / navigation = Reaper pour le virtual soundcheck). Notes : surface/notes.py.
-
-
 def build_frame(state, mixer_page, n_strips, overrides):
     """Calcule ce que chaque tranche doit afficher."""
     with state.lock:

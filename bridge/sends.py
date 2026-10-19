@@ -21,6 +21,10 @@ def flip_target(func, aux_tracks):
     return None
 
 
+# Le négatif (couleur + 0x20) n'a AUCUN effet en mode Mackie (essai de Joseph, 15/10) : à la place, la ligne du
+# bas affiche l'aux devant le niveau d'envoi.
+
+
 def send_label(short, db):
     """Ligne du bas en mode sends (7 car.) : « F1 -12 », « M12 -6 », « F3 -inf », « F1 ? »."""
     if db is None:
