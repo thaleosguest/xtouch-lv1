@@ -217,7 +217,10 @@ Règle : une étape = un commit, les 28 tests verts + compilation après chacune
     depuis < HOLD_AFTER) : changement de Mixer DIFFÉRÉ pendant un toucher (journal « Mixer N affiché : changement
     différé (fader touché) », une fois), fait au lâcher si la LV1 montre toujours l'autre Mixer ; `lv1_tab` (GLOBAL
     VIEW) suivi quand même. Test `tests/test_mixer_toucher.py` ; **validé par Joseph le 19/10**.
-  - Reste : 2 file de clics vidée au changement de Mixer.
+  - **Correctif 2 fait** : chaque demande de `LV1Clicker` retient le Mixer de l'appui (`(kind, arg, view)` dans la file) ;
+    exécutée alors que `self.page` a changé -> abandonnée (« clic LV1 … annulé : Mixer changé (Mixer 1 -> 2) »).
+    Regroupements (sélection, appuis répétés, crans de jog) seulement entre demandes du même Mixer. Plutôt que vider
+    la file au changement (course entre fils). Test `tests/test_clics_mixer_change.py`.
 
 ## Fichiers
 

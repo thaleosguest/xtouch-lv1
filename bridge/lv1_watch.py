@@ -32,7 +32,9 @@ class LV1Clicker(FollowsView, threading.Thread):
     L'API réseau n'a pas ces commandes (Companion, capture MyFOH du 14/10). lv1_clic.py clique dans la fenêtre
     LV1 (message Windows, la souris ne bouge pas), avec ses garde-fous (administrateur, onglet Mixer lu à
     l'écran, case présente). Une file à part : jamais de clic dans la boucle MIDI. Une tranche n'est cliquée
-    que si la LV1 affiche la couche qui la contient (sinon le clic sélectionnerait un autre canal)."""
+    que si la LV1 affiche la couche qui la contient (sinon le clic sélectionnerait un autre canal).
+    Chaque demande retient le Mixer suivi au moment de l'appui : exécutée sur un autre Mixer (changé entre-temps), elle
+    est abandonnée (étape 10, 19/10 : un clic en attente partait sur le nouveau Mixer, donc au mauvais endroit)."""
     WAIT_LAYER = 1.0     # s d'attente de /Notify/CurrentLayer après un clic de couche
 
     def __init__(self, state, page, click_layer=None, click_strip=None, jog=None, jog_method="message",
@@ -60,24 +62,24 @@ class LV1Clicker(FollowsView, threading.Thread):
         self.last_why = None
 
     def layer(self, k):
-        self.q.put(("couche", k))
+        self.q.put(("couche", k, self.page))
 
     def mode(self, name):
         """Bouton de mode de couche de la LV1 : input, mix, factory, custom, spill."""
-        self.q.put(("mode", name))
+        self.q.put(("mode", name, self.page))
 
     def all_tab(self):
         """Onglet All de la LV1, ou retour sur Mixer N si All est déjà affiché."""
-        self.q.put(("onglet", None))
+        self.q.put(("onglet", None, self.page))
 
     def jog(self, notches):
         """Jog wheel : crans de molette sur le fader de plugin du bas de la page Channel."""
         if notches:
-            self.q.put(("jog", notches))
+            self.q.put(("jog", notches, self.page))
 
     def select(self, track):
         if track is not None:
-            self.q.put(("sélection", track))
+            self.q.put(("sélection", track, self.page))
 
     def _refused(self, what, why):
         JOURNAL.mark("clic LV1 %s refusé : %s" % (what, why))
@@ -87,20 +89,20 @@ class LV1Clicker(FollowsView, threading.Thread):
 
     def run(self):
         while True:
-            kind, arg = self.q.get()
-            if kind == "sélection":          # on ne garde que la dernière sélection en attente
+            kind, arg, view = self.q.get()
+            if kind == "sélection":          # on ne garde que la dernière sélection en attente (du même Mixer)
                 try:
                     while True:
                         nxt = self.q.queue[0]
-                        if nxt[0] != "sélection":
+                        if nxt[0] != "sélection" or nxt[2] != view:
                             break
-                        kind, arg = self.q.get_nowait()
+                        kind, arg, view = self.q.get_nowait()
                 except IndexError:
                     pass
             if kind in ("mode", "onglet"):       # appuis répétés en attente (journal du 16/10 : 12 appuis sur GROUP
                 n = 1                            # exécutés un par un pendant 30 s) : regroupés
                 try:
-                    while self.q.queue and self.q.queue[0] == (kind, arg):
+                    while self.q.queue and self.q.queue[0] == (kind, arg, view):
                         self.q.get_nowait()
                         n += 1
                 except (IndexError, queue.Empty):
@@ -110,10 +112,14 @@ class LV1Clicker(FollowsView, threading.Thread):
                     continue                     # bascule : un nombre pair d'appuis revient au même
             if kind == "jog":                    # crans rapides regroupés en un seul envoi
                 try:
-                    while self.q.queue and self.q.queue[0][0] == "jog":
+                    while self.q.queue and self.q.queue[0][0] == "jog" and self.q.queue[0][2] == view:
                         arg += self.q.get_nowait()[1]
                 except (IndexError, queue.Empty):
                     pass
+            if view != self.page:                # Mixer changé depuis l'appui : ce clic tomberait au mauvais endroit
+                JOURNAL.mark("clic LV1 %s annulé : Mixer changé (Mixer %d -> %d)"
+                             % (kind if arg is None else "%s %s" % (kind, arg), view + 1, self.page + 1))
+                continue
             try:
                 if kind == "jog":
                     if arg:
