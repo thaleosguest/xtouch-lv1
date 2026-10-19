@@ -116,6 +116,23 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   re-montrée en changeant de Mixer. Limite : Mixer détaché -> onglets de la fenêtre principale décalés (mal lus).
   Test `tests/test_mixer_suivi.py`. Vérifié en direct : onglet Mixer 2 lu.
 
+## Refactor en cours (depuis le 19/10/2026)
+
+Plan en 11 étapes validé par Joseph ; étapes 0 à 9 SANS changement de comportement, étape 10 = correctifs.
+Règle : une étape = un commit, les 28 tests verts + compilation après chacune.
+
+- **Étape 0 faite** : `tests/test_rendu_reference.py` + `tests/data/` = filet de sécurité. Rejoue un vrai journal
+  (1740 messages, 22 adresses utiles) et compare les 1328 envois MIDI vers la X-Touch à une référence. Horloge
+  figée (`Clock` remplace `D.time`, +TICK par tour), `Surface` sur une sortie qui enregistre. Reproductible, 0,5 s.
+  Il IMITE le bloc de rendu de `main()` (il ne l'appelle pas) : à rebrancher sur `tick_render()` à l'étape 9.
+  Référence à refaire après un changement VOULU : `py tests/test_rendu_reference.py . --maj`.
+- **Étape 1 faite** : `surface/notes.py` (53 constantes : notes MIDI, CC, couleurs `XT`), réexportées par
+  `xtouch_lv1_display` (`from surface.notes import (...)`) -> `D.NOTE_TRACK` et les tests marchent pareil.
+  Attention : `main()` a une variable locale `surface` (l'objet `Surface`) qui n'a rien à voir avec le paquet
+  `surface/` ; à renommer `xt` à l'étape 6.
+- Étapes suivantes : 2 propriété `page` unique, 3 `lv1/layout.py` (positions écran), 4 `lv1/screen.py` (fenêtres +
+  lectures), 5 `osc.py`, 6 `surface/` (MIDI + rendu), 7 découpe de `LV1State`, 8 `bridge/` (contrôleurs),
+  9 classe `App` (fin de `main()`), 10 désynchronisations (change le comportement : à valider une par une).
 ## Fichiers
 
 - **V0.1 = installeur « Total Control for LV1 » (16/10/2026, ex « LV1 Suite » : nom choisi par Joseph ; « Total Control »
