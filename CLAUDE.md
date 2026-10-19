@@ -167,7 +167,8 @@ Règle : une étape = un commit, les 28 tests verts + compilation après chacune
   19/10, donc pas de bug, mais un piège), `windows()`, `window_title`, `window_pid`, `exe_of`, `foreground()`,
   `foreground_pid()`, `lv1_window`, `client_rect`, `pixel`, `screen_rows`, `close`. Réexportés par `lv1_clic` (`u32`,
   `_close`…) et `fenetres` (`_u32`, `pid_of`). Vérifié en direct (LV1 ouverte) : 9 mesures identiques avant/après.
-  Volontairement à part : capture de `lv1_patch` (PrintWindow, autre technique) et `tracks_live.py` (essai inutilisé).
+  Volontairement à part : capture de `lv1_patch` (PrintWindow, autre technique). (`tracks_live.py`, essai Tracks Live 2,
+  supprimé le 19/10 : Joseph a choisi REAPER, bien plus personnalisable.)
   `Target` reste dans `lv1_clic` (conversion de coordonnées + clics).
 - **Étape 5 faite** : `osc.py` = OSC minimal + trames TCP de la LV1 (`osc_encode`, `osc_decode`, `frame`,
   `split_frames`, `TX_HEADER`, `HEADER_LEN`), code identique à celui de `lv1_probe` (vérifié). `lv1_probe` les réexporte
@@ -423,7 +424,7 @@ Messages vérifiés :
   que s'il change. `reaper_scenes.py` (SceneBridge) <-> `reaper/lv1_scenes.lua` (defer) par fichiers
   lv1_to_reaper.txt / reaper_to_lv1.txt (« n°	index	nom ») : enregistrement = marqueur vert (couleur = signature),
   lecture = marqueur franchi (pas de saut > 0,5 s) -> rappel par NOM, arrêt = curseur sur le marqueur. Tracks Live
-  lui-même n'est pas pilotable (ni MIDI ni OSC ; raccourcis envoyés refusés, `tracks_live.py`).
+  lui-même n'est pas pilotable (ni MIDI ni OSC ; raccourcis envoyés refusés, essai `tracks_live.py` supprimé le 19/10).
 - **Synchro des pistes Reaper (a) (codée le 15/10, scripts Lua non essayés)** : le pont écrit `reaper/lv1_tracks.txt`
   (entrées g=0 : canal, nom, r g b, stéréo = 12e entier de /Channels == 2, vérifié) chaque seconde s'il change ;
   `reaper/lv1_sync_tracks.lua` (à la main, OUI = toutes, NON = renommées seulement) crée / met à jour les pistes,

@@ -9,8 +9,8 @@ Avant, ce code existait en plusieurs exemplaires :
 Le code est déplacé tel quel ; les anciens noms sont réexportés par leurs modules d'origine.
 
 Rien ici ne clique (les clics restent dans `lv1_clic`) et rien ne dépend de Qt. Tout est en ctypes.
-Restent à part, volontairement : la capture de `lv1_patch` (PrintWindow : photographie la fenêtre LV1 même
-cachée, une autre technique) et `tracks_live.py` (essai autonome du 15/10, utilisé par rien).
+Reste à part, volontairement : la capture de `lv1_patch` (PrintWindow : photographie la fenêtre LV1 même
+cachée, une autre technique).
 """
 import ctypes
 from ctypes import wintypes as wt
