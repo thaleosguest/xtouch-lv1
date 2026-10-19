@@ -430,6 +430,10 @@ def handle(state, address, args):
                 state.last_set[args[0][1]], state.last_flag[args[0][1]] = pend
             state.current[args[0][1]] = args[1][1]
             state.local.pop(args[0][1], None)   # clic de couche sur la LV1 : elle reprend la main
+        elif address == "/Notify/StemFormatForSource" and len(args) >= 4 and all(a[0] == "i" for a in args[:4]):
+            # ,iiii [groupe, canal, 100 mono | 101 stéréo, voies 1 | 2] : envoyé à CHAQUE passage mono <-> stéréo (journal
+            # 002111 du 20/10) ; /Channels ne le donne qu'à la connexion -> la diagonale B restait « OK » après un changement.
+            state.track(args[0][1], args[1][1])["stereo"] = args[3][1] == 2
         elif address in ("/Notify/TrackTrim", "/Notify/PhaseState") and len(args) >= 4 and args[2][0] == "i":
             # ,iiifi [groupe, canal, voie (0 = L / mono, 1 = R), trim dB | phase 0|1, ?] (capture MyFOH du 19/10)
             t = state.track(args[0][1], args[1][1])

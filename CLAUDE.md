@@ -138,6 +138,8 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   drapeaux (comme `RecallButtons`). Vérifié sur le PC de Joseph : overlay `--demo --retour=port`, vrai clic souris
   (SetCursorPos + mouse_event) ET vrai toucher (InjectTouchInput) sur REALIGN -> `{"action": "fix_patch"}` reçu.
   Toute nouvelle fenêtre CLIQUABLE de l'overlay : ne pas utiliser FLAGS.
+  Mono / stéréo (20/10, journal 002111) : `/Notify/StemFormatForSource g ch 100|101 1|2` à chaque changement -> `track["stereo"]`
+  (avant : seulement `/Channels` à la connexion, la diagonale restait « OK » après un passage mono <-> stéréo).
 - **Trim et phase LV1 (19/10, choix de Joseph)** : TRACK = normal -> gain X32 -> trim -> normal (sans Gain Recall : normal
   -> trim). `GainControl.trim_mode` : encodeur = `/SetTrackTrim g ch stéréo f` (0,5 dB/cran, 3e arg 1 si stéréo), appui
   = `/SetTrackPhaseState g ch stéréo 0|1` ; état lu dans `/Notify/TrackTrim` / `PhaseState` (`track["trim"|"phase"][voie]`).

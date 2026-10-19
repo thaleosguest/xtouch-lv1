@@ -3,6 +3,7 @@
 - refus SANS clic si la grille affichée ne correspond pas à la base pour ce pilote (vignette défilée…) ;
 - clics à la suite, puis relecture et 2e passe pour les cases ratées ; pas de dézoom si toutes les lignes sont visibles ;
 - patch_alert : rien hors page Patch, « idle » / « busy » / « failed » + consigne anglaise / « done » ;
+- mono / stéréo changé sur la LV1 (/Notify/StemFormatForSource) -> diagonale cassée détectée aussitôt ;
 - canal retour UDP : send_action de l'overlay -> on_action (« fix_patch ») / on_log (traces) du pont.
 
     py tests/test_patch_b.py .
@@ -100,6 +101,17 @@ check("failed + consigne anglaise", al["state"] == "failed" and al["hint"].start
 a.fix_result = (True, "2 case(s) corrigée(s)", 99.0)
 check("done tant que la base n'est pas relue", D.patch_alert("Patch", ["In 3"], a, "LV1-PORT", 100.0)["state"] == "done")
 check("done puis disparaît", D.patch_alert("Patch", [], a, "LV1-PORT", 99.0 + D.PATCH_DONE_S + 0.5) is None)
+
+# ── mono / stéréo changé sur la LV1 (/Notify/StemFormatForSource) : la diagonale le voit
+st = D.LV1State()
+for ch in range(3):
+    st.track(0, ch)["name"] = "In %d" % (ch + 1)
+st.driver_size, st.routing = 128, {0: {"play": [0]}, 1: {"play": [1]}, 2: {"play": [2]}}
+check("départ : diagonale OK", D.diagonal_problems(st) == [])
+D.handle(st, "/Notify/StemFormatForSource", [("i", 0), ("i", 0), ("i", 101), ("i", 2)])
+check("In 1 stéréo : diagonale cassée dès la notification", D.diagonal_problems(st) == ["In 1", "In 2", "In 3"])
+D.handle(st, "/Notify/StemFormatForSource", [("i", 0), ("i", 0), ("i", 100), ("i", 1)])
+check("retour mono : OK", D.diagonal_problems(st) == [])
 
 # ── clic REALIGN : message UDP de l'overlay (send_action) -> on_action / on_log, de bout en bout
 import socket, threading, time
