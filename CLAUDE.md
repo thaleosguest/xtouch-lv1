@@ -107,7 +107,7 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   = ShellExecute, nécessaire pour l'UAC ; Popen -> erreur 740), seulement si XTouch-LV1 est installé et sans erreur.
 - **Tout quitter (19/10, demande de Joseph)** : menu de l'icône « Tout quitter (XTouch-LV1 + X/M32 Gain Recall) » =
   `quit_all` : POST `<--x32>/api/quit` (Gain Recall l'accepte depuis 127.0.0.1 seulement), puis `STOP`. Masqué si
-  `--x32 aucun`. Test `tests/test_tout_quitter.py` (faux Gain Recall).
+  `--x32 aucun`. Test `tests/test_tout_quitter.py` (faux Gain Recall) ; **validé par Joseph le 19/10**.
 - **Avis de mise à jour (18/10)** : `check_update` (GitHub `releases/latest` de xtouch-lv1, `version_tuple`), 10 s après le
   lancement puis toutes les 24 h (`update_loop`, exe avec icône seulement), bulle une fois par version + entrée du menu
   de l'icône (libellé fonction, None = masquée). Pages / dossiers ouverts par explorer.exe (pont admin : navigateur en
