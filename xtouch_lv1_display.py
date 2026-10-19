@@ -1025,9 +1025,29 @@ def update_loop(tray_icon):
             return
 
 
-def start_tray():
+def quit_gain_recall(url):
+    """Demande à X/M32 Gain Recall de quitter (POST /api/quit, accepté depuis le PC lui-même seulement). True s'il a
+    répondu oui ; False s'il ne tourne pas ou refuse (rien d'autre à faire : on quitte le pont quand même)."""
+    try:
+        import urllib.request
+        req = urllib.request.Request(url.rstrip("/") + "/api/quit", data=b"{}", method="POST",
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=2) as r:
+            return json.loads(r.read()).get("ok") is True
+    except Exception:
+        return False
+
+
+def quit_all(gr_url):
+    """« Tout quitter » (demande de Joseph, 19/10) : X/M32 Gain Recall puis XTouch-LV1 (écrans remis à zéro)."""
+    ok = quit_gain_recall(gr_url)
+    JOURNAL.mark("Tout quitter : X/M32 Gain Recall %s" % ("arrêté" if ok else "pas de réponse (pas lancé ?)"))
+    STOP.set()
+
+
+def start_tray(gr_url=None):
     """Icône près de l'horloge (comme X/M32 Gain Recall) : mise à jour (si disponible), mode d'emploi, dossier des
-    journaux, Quitter."""
+    journaux, Quitter ; « Tout quitter » (avec X/M32 Gain Recall) si le pont est relié à Gain Recall (gr_url)."""
     try:
         import tray
     except ImportError:
@@ -1047,7 +1067,9 @@ def start_tray():
          ("Mode d'emploi", lambda: open_path(os.path.join(HERE, "MODE_EMPLOI.html"))),
          ("Dossier des journaux", lambda: open_path(HERE)),
          None,
-         ("Quitter XTouch-LV1", STOP.set)],
+         ("Quitter XTouch-LV1", STOP.set),
+         (lambda: "Tout quitter (XTouch-LV1 + X/M32 Gain Recall)" if gr_url else None,
+          lambda: threading.Thread(target=quit_all, args=(gr_url,), daemon=True).start())],
         icon_path=os.path.join(HERE, "assets", "icon.ico"),
     ).start()
 
@@ -1145,7 +1167,8 @@ class App:
         if getattr(sys, "frozen", False) and already_running():      # AVANT le journal de sortie : un 2e lancement
             return 0                                                 # écrasait xtouch_console.txt du 1er (18/10)
         redirect_output_to_log()
-        self.tray_icon = start_tray() if (getattr(sys, "frozen", False) and not a.dry_run) else None
+        gr_url = None if a.x32.lower() in ("aucun", "none", "off") else a.x32
+        self.tray_icon = start_tray(gr_url) if (getattr(sys, "frozen", False) and not a.dry_run) else None
         if self.tray_icon:
             threading.Thread(target=update_loop, args=(self.tray_icon,), daemon=True).start()
         print("  XTouch-LV1 v%s" % VERSION)
