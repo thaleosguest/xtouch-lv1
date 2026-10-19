@@ -133,6 +133,11 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   (exe sans console, douteux) à UDP local (`QtOverlay.rx`, overlay `--retour=port`, `send_action`) ; traces au journal :
   « page Patch : onglet …, carte … » (pont) et « overlay : … » (démarré / carte affichée / cachée + raison).
   L'exe demande l'élévation (uac-admin) : impossible de le lancer depuis Claude pour tester.
+  Essai du 20/10 (journal 000955) : la carte ÉTAIT affichée (traces overlay) mais le clic traversait : FLAGS de l'overlay
+  contient `Qt.WindowTransparentForInput` (notifications : jamais de geste perdu sur la LV1). `PatchAlert` a ses propres
+  drapeaux (comme `RecallButtons`). Vérifié sur le PC de Joseph : overlay `--demo --retour=port`, vrai clic souris
+  (SetCursorPos + mouse_event) ET vrai toucher (InjectTouchInput) sur REALIGN -> `{"action": "fix_patch"}` reçu.
+  Toute nouvelle fenêtre CLIQUABLE de l'overlay : ne pas utiliser FLAGS.
 - **Trim et phase LV1 (19/10, choix de Joseph)** : TRACK = normal -> gain X32 -> trim -> normal (sans Gain Recall : normal
   -> trim). `GainControl.trim_mode` : encodeur = `/SetTrackTrim g ch stéréo f` (0,5 dB/cran, 3e arg 1 si stéréo), appui
   = `/SetTrackPhaseState g ch stéréo 0|1` ; état lu dans `/Notify/TrackTrim` / `PhaseState` (`track["trim"|"phase"][voie]`).

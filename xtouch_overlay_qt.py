@@ -924,7 +924,9 @@ def send_action(action, key="action"):
 
 class PatchAlert(QWidget):
     def __init__(self):
-        super().__init__(None, FLAGS)
+        # PAS FLAGS : elle doit recevoir clic et toucher (FLAGS laisse passer les clics vers la LV1 : REALIGN restait
+        # sans effet, 20/10) ; comme les boutons du rappel de pistes. Elle ne couvre que la zone vide des vignettes.
+        super().__init__(None, Qt.FramelessWindowHint | Qt.Tool | Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
         self.setMouseTracking(True)
