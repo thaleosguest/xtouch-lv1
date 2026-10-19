@@ -55,6 +55,7 @@ class SendControl:
     Pendant le choix de l'aux, les faders règlent les masters des aux ; les boutons de tranche sont bloqués."""
     PAN_STEP = 3.0 / 45.0
     PAN_HOLD = 0.5
+    SOF_SETTLE = 0.15     # s sans changement d'InternalAssign avant de suivre (états de passage de la LV1)
 
     def __init__(self, state, link, write=True, gain=None):
         self.state, self.link, self.write = state, link, write
@@ -63,6 +64,7 @@ class SendControl:
         self.picking = False
         self.flip_key = None              # User Key (0..7) qui a mis la LV1 en Flip Sends (touches F1..F8)
         self.page = 0                     # choix : 0 = aux 0..15, 1 = aux 16..31
+        self.lv1_sof = {}                 # vue -> dernier bus « sur les faders » de la LV1 déjà suivi
 
     def key_of(self, strip, e):
         """Clé réglée par un fader (branchée sur FaderControl.key_of). Pendant le choix de l'aux, les faders
@@ -143,6 +145,36 @@ class SendControl:
         self.press_user_key(k)
         self.flip_key, self.aux, self.picking = k, target, False
         JOURNAL.mark("XT F%d -> Flip Sends vers l'aux %d (%s)" % (k + 1, target, self.label()))
+
+    def follow_lv1(self, now, busy=False):
+        """Sends on Fader activé / coupé SUR LA LV1 (menu Fx / Mon, User Key appuyée à l'écran), demande de Joseph du
+        19/10 : la X-Touch et le bandeau à l'écran suivent. Seulement sur un CHANGEMENT de la LV1, stable depuis
+        SOF_SETTLE : un Flip lancé par la X-Touch arrive au même état (rien à faire), le mode SEND local de la X-Touch
+        (la LV1 reste sur LR) n'est pas touché. Jamais d'appui de User Key ici (il rebasculerait la LV1).
+        busy (fader sous le doigt) : attendre le lâcher, comme le changement de Mixer."""
+        with self.state.lock:
+            view = self.state.view
+            if view not in self.state.sof or now - self.state.sof_t.get(view, 0) < self.SOF_SETTLE:
+                return
+            bus = self.state.sof[view]
+            aux = self.state.aux_tracks
+            keys = dict(self.state.user_keys)
+        if bus == self.lv1_sof.get(view, "?") or busy:
+            return
+        self.lv1_sof[view] = bus
+        target = next((k for k, (g, ch, _n) in enumerate(aux) if (g, ch) == bus), None)
+        if target is None:                       # LR (ou autre bus) : mode normal
+            if self.aux is not None:
+                JOURNAL.mark("LV1 : fin du Sends on Fader -> X-Touch en mode normal")
+                self.flip_key, self.aux, self.picking = None, None, False
+            return
+        if target == self.aux and not self.picking:
+            return
+        self.flip_key = next((k for k in range(8) if keys.get(k, (None, None, False))[2]
+                              and flip_target(keys[k][1], aux) == target), None)
+        self.aux, self.picking = target, False
+        JOURNAL.mark("LV1 : Sends on Fader vers l'aux %d (%s) -> X-Touch en sends%s"
+                     % (target, self.label(), " (F%d)" % (self.flip_key + 1) if self.flip_key is not None else ""))
 
     def fkey_leds(self):
         """LED des touches F1..F8 : allumée = son Flip Sends est actif."""

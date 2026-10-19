@@ -147,6 +147,10 @@ class LV1Model:
         self.channels_at = 0.0    # instant du dernier /Channels (état complet renvoyé : connexion, Flip A/B…)
         self.custom_on = {}       # vue -> bouton Custom allumé ? (/Notify/CustomButton, hypothèse)
         self.spill_on = {}        # vue -> bouton Spill allumé ? (/Notify/SpillButton, hypothèse)
+        # Sends on Fader de la LV1 (/Notify/InternalAssign type 7, 19/10) : vue -> (g, ch) du bus sur les faders
+        # (LR (3, 0) = normal, Fx / Mon = sends) ou None ; instant du dernier changement (suivi après stabilisation)
+        self.sof = {}
+        self.sof_t = {}
         self.version = ""
 
     def send(self, g, ch, aux):
@@ -424,6 +428,18 @@ def handle(state, address, args):
                 state.last_set[args[0][1]], state.last_flag[args[0][1]] = pend
             state.current[args[0][1]] = args[1][1]
             state.local.pop(args[0][1], None)   # clic de couche sur la LV1 : elle reprend la main
+        elif address == "/Notify/InternalAssign" and len(args) >= 5 and all(a[0] == "i" for a in args[:5]):
+            # ,iiiiii [groupe, canal, type, vue ?, actif, ?] ; type 7 = bus sur les faders (Sends on Fader), relevé le
+            # 19/10 (journal 195719 : menu Fx « Reverb Hall » -> 2 0 7 0 1, Mon 3 -> 25 2 7 0 1, retour LR -> 3 0 7 0 1).
+            # Un changement envoie des états de passage (LR off, Fx 1 on, Fx 2 on, Fx 1 off) : un « off » n'efface que
+            # le bus en cours, l'état final est donc le bon. 4e nombre = vue : hypothèse (toujours 0 relevé, Mixer 1).
+            g, c, kind, view, on = (a[1] for a in args[:5])
+            if kind == 7:
+                if on:
+                    state.sof[view] = (g, c)
+                elif state.sof.get(view) == (g, c):
+                    state.sof[view] = None
+                state.sof_t[view] = time.time()
         elif address == "/Notify/ServiceVersion" and args and args[0][0] == "s":
             state.version = args[0][1]
 
@@ -1440,6 +1456,7 @@ class App:
                     or (self.apps is not None and self.apps.on_midi(unit, st, d1, d2, t, entries, xt))
                     or self.buttons.on_midi(unit, st, d1, d2, t, entries, xt)):
                 JOURNAL.mark("MIDI unité %d : %02X %02X %02X" % (unit, st, d1, d2))
+        self.sends.follow_lv1(now, busy=bool(self.faders.held(now)))     # Sends on Fader activé sur la LV1
         return self.faders.flush(now)
 
     def tick_render(self, now, held):

@@ -105,6 +105,15 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
 
 - **Installeur, fin (18/10)** : bouton « Lancer XTouch-LV1 » à côté de Fermer (`finish` / `launch_xtouch`, os.startfile
   = ShellExecute, nécessaire pour l'UAC ; Popen -> erreur 740), seulement si XTouch-LV1 est installé et sans erreur.
+- **Sends on Fader activé SUR LA LV1 (19/10, journal 195719)** : `/Notify/InternalAssign i:g i:ch i:7 i:vue? i:actif i:1`
+  = bus sur les faders (type 7) : LR (3,0) = normal, Fx (2,n) / Mon (25,n) = sends ; menu Fx / Mon de la LV1 ET User
+  Keys Flip Sends (aussi celles appuyées par la X-Touch) l'envoient. États de passage (LR off, Fx 1 on, Fx 2 on, Fx 1
+  off) : un « off » n'efface que le bus en cours (`state.sof`, `sof_t`). `SendControl.follow_lv1` (appelé par
+  `tick_input`) : sur un CHANGEMENT stable depuis `SOF_SETTLE` 0,15 s -> X-Touch en sends vers l'aux (bandeau, LED F
+  de la User Key correspondante), LR -> normal ; jamais d'appui de User Key ; attend le lâcher d'un fader. 4e nombre =
+  vue : hypothèse (toujours 0 relevé) — Mixer 2 non vérifié. Type 6 vu au démarrage (7,0 / 3,0) : sens inconnu.
+  Limite : SoF lancé depuis le menu LV1 (pas de User Key) puis SEND / sortie sur la X-Touch -> la LV1 reste en SoF
+  (pas de commande réseau connue pour l'en sortir). Test `tests/test_sof_lv1.py`.
 - **Tout quitter (19/10, demande de Joseph)** : menu de l'icône « Tout quitter (XTouch-LV1 + X/M32 Gain Recall) » =
   `quit_all` : POST `<--x32>/api/quit` (Gain Recall l'accepte depuis 127.0.0.1 seulement), puis `STOP`. Masqué si
   `--x32 aucun`. Test `tests/test_tout_quitter.py` (faux Gain Recall) ; **validé par Joseph le 19/10**.
