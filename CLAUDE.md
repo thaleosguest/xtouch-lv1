@@ -221,6 +221,9 @@ Règle : une étape = un commit, les 28 tests verts + compilation après chacune
     exécutée alors que `self.page` a changé -> abandonnée (« clic LV1 … annulé : Mixer changé (Mixer 1 -> 2) »).
     Regroupements (sélection, appuis répétés, crans de jog) seulement entre demandes du même Mixer. Plutôt que vider
     la file au changement (course entre fils). Test `tests/test_clics_mixer_change.py`.
+    Essai du 19/10 (journal 170326) : BANK, Select, GLOBAL VIEW OK sur les deux Mixers ; cas de course pas provoqué.
+  - Piège d'essai (19/10) : les deux Mixers sur la MÊME couche = mêmes pistes ; un fader tenu bouge aussi « sur l'autre
+    Mixer » (c'est la même piste), ce n'est pas un échec du correctif 1. Essayer avec des couches différentes.
 
 ## Fichiers
 
