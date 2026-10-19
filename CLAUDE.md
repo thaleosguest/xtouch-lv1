@@ -211,7 +211,8 @@ Règle : une étape = un commit, les 28 tests verts + compilation après chacune
   - **Correctif 3 fait** : renvoi complet à la X-Touch toutes les `REFRESH_EVERY` (30 s) : `Surface.refresh()` vide les
     caches écrans / couleurs / LED / couronnes / vumètres / 7 segments, PAS les moteurs (`sent_fader` gardé : pas de
     frémissement, pas de lutte avec un doigt non détecté). `App.refresh_at` (None dans `App(None)` : test de référence
-    inchangé). ~135 messages par renvoi. Test `tests/test_renvoi_complet.py`.
+    inchangé). ~135 messages par renvoi. Test `tests/test_renvoi_complet.py` ; essayé par Joseph le 19/10 : rien ne se voit,
+    faders immobiles. Cas « X-Touch muette » pas reproduit (non vérifié).
   - Restent : 1 pas de changement de Mixer pendant un toucher, 2 file de clics vidée au changement de Mixer.
 
 ## Fichiers
