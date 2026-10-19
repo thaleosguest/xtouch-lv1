@@ -184,8 +184,34 @@ class QtOverlay:
             args = [sys.executable, os.path.join(here, "xtouch_overlay_qt.py")]
         args += ["--mixer=2"] if mixer == 2 else []
         flags = 0x08000000 if sys.platform == "win32" else 0          # CREATE_NO_WINDOW
-        self.proc = subprocess.Popen(args, stdin=subprocess.PIPE, creationflags=flags)
+        self.proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, creationflags=flags)
         self.last = object()
+        self.on_action = None            # appelé avec "fix_patch" (bouton REALIGN de l'écran), branché par le pont
+        threading.Thread(target=self._read_actions, daemon=True).start()
+
+    def _read_actions(self):
+        """Lignes JSON {"action": ...} envoyées par l'overlay (clics à l'écran) ; le reste est ignoré."""
+        for line in self.proc.stdout:
+            try:
+                act = json.loads(line.decode("utf-8", "replace")).get("action")
+            except (ValueError, AttributeError):
+                continue
+            if act and self.on_action:
+                try:
+                    self.on_action(act)
+                except Exception:
+                    pass
+
+    def set_patch(self, info):
+        """Alerte « INPUT B PATCH » de la page Patch : dict {"bad", "device", "state", "hint"}, ou None pour la cacher."""
+        if info == getattr(self, "last_patch", object()):
+            return
+        self.last_patch = info
+        try:
+            self.proc.stdin.write((json.dumps({"patch": info}) + "\n").encode("utf-8"))
+            self.proc.stdin.flush()
+        except OSError:
+            pass
 
     def set_info(self, text, sub=None, color=None):
         info = (text, sub, color) if text else None

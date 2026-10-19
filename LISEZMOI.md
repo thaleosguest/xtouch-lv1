@@ -390,8 +390,9 @@ docker > Attach docker to: Top. Tout se fait au doigt (écran tactile) ; le clic
 Entrée B de la n-ième ligne (voie) de la grille = canal n du pilote SoundGrid de Reaper. Quand un canal passe de mono
 à stéréo, les lignes se décalent : la touche **FLIP** de l'écran prend un contour rouge et devient **« FLIP ! »**. Le plus rapide : refaire la
 diagonale à la main (un glisser de la première case jusqu'en bas à droite).
-Ouvre **Patch › Input › Input B** (vignette du pilote sélectionnée, grille en haut à gauche) et appuie sur **ENTER**
-de la X-Touch : la grille est dézoomée et la diagonale refaite. En ligne de commande (PowerShell administrateur) :
+Ouvre **Patch › Input › Input B** (grille en haut à gauche) : une carte « INPUT B PATCH » apparaît à droite des
+vignettes d'appareils. Bouton **REALIGN** (ou **ENTER** de la X-Touch) : le pont sélectionne la vignette du pilote,
+vérifie que sa grille correspond à la base, puis refait la diagonale (clics à la suite, 2e passe si besoin). En ligne de commande (PowerShell administrateur) :
 `py lv1_patch.py lire`, `py lv1_patch.py diagonale` (voir), `py lv1_patch.py diagonale --go` (faire).
 
 ## DISPLAY et SAVE

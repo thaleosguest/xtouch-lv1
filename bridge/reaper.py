@@ -106,6 +106,7 @@ class AppControl:
         self.state, self.link, self.reaper, self.mixer, self.write = state, link, reaper, mixer, write
         self.front = "autre"
         self.fixing = False
+        self.fix_result = None            # (réussi, message, instant) du dernier ENTER / REALIGN (page Patch)
         self.warned = set()
         threading.Thread(target=self._watch, daemon=True).start()
 
@@ -115,15 +116,48 @@ class AppControl:
             self.front = fenetres.front_app(self.mixer)
             time.sleep(0.4)
 
-    def _fix_diagonal(self):
-        """ENTER : refait la diagonale B par clics (lv1_patch), page Patch > Input B ouverte (sinon refusé, sans clic)."""
+    def patch_target(self):
+        """(vignette, attendu, n, nom) pour lv1_patch.fix_diagonal, tirés de l'état : vignette du pilote (assign + 1),
+        lignes de l'entrée B déjà branchées sur le pilote d'après la base, nombre de voies d'entrée (au plus la taille
+        du pilote). Lignes = voies des entrées dans l'ordre (2 par canal stéréo), comme diagonal_problems."""
+        with self.state.lock:
+            name, assign = self.state.driver
+            size, routing = self.state.driver_size, self.state.routing
+            expect, row = {}, 0
+            for (g, ch), t in sorted(self.state.tracks.items()):
+                if g != 0:
+                    continue
+                legs = 2 if t.get("stereo") else 1
+                for k, c in enumerate(routing.get(ch, {}).get("play", [])[:legs]):
+                    expect[row + k] = c
+                row += legs
+        n = min(row, size) if (row and size) else None
+        return (assign + 1 if assign is not None else None), expect, n, name
+
+    def fix_patch(self, source="XT Enter"):
+        """ENTER de la X-Touch ou bouton REALIGN de l'écran : un seul à la fois, sur un fil à part."""
+        if self.fixing:
+            return False
+        self.fixing, self.fix_result = True, None
+        threading.Thread(target=self._fix_diagonal, args=(source,), daemon=True).start()
+        return True
+
+    def _fix_diagonal(self, source="XT Enter"):
+        """Refait la diagonale B par clics (lv1_patch), page Patch > Input B ouverte (sinon refusé, sans clic), sur la
+        vignette du pilote (sélectionnée au besoin) et seulement si la grille correspond à la base (19/10)."""
         try:
             import lv1_patch
-            ok, msg = lv1_patch.fix_diagonal(log=lambda m: JOURNAL.mark("diagonale B : " + m))
-            JOURNAL.mark("XT Enter -> diagonale B : %s" % msg)
+            tile, expect, n, name = self.patch_target()
+            t0 = time.time()
+            ok, msg = lv1_patch.fix_diagonal(n=n, log=lambda m: JOURNAL.mark("diagonale B : " + m), tile=tile,
+                                             expect=expect, name=name)
+            msg += " (%.1f s)" % (time.time() - t0)
+            self.fix_result = (ok, msg, time.time())
+            JOURNAL.mark("%s -> diagonale B : %s" % (source, msg))
             print("  Diagonale B : %s" % msg)
         except Exception as e:
-            JOURNAL.mark("XT Enter -> diagonale B : erreur %r" % e)
+            self.fix_result = (False, "erreur %r" % e, time.time())
+            JOURNAL.mark("%s -> diagonale B : erreur %r" % (source, e))
             print("  Diagonale B : erreur %r" % e)
         finally:
             self.fixing = False
@@ -141,9 +175,7 @@ class AppControl:
         if not d2:
             return True
         if d1 == NOTE_ENTER:
-            if not self.fixing:
-                self.fixing = True
-                threading.Thread(target=self._fix_diagonal, daemon=True).start()
+            self.fix_patch("XT Enter")
             return True
         if d1 == NOTE_DISPLAY:
             threading.Thread(target=self._switch, daemon=True).start()

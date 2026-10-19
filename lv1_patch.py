@@ -34,6 +34,10 @@ PROBE_YS, PROBE_XS = (700, 806, 910), (1500, 1300)      # rangées / colonnes o�
 SCROLL_THUMB = (231, 231, 231)
 ZOOM_OUT_BTN = (148, 244)          # loupe « − » au-dessus de la liste des canaux (relevé le 16/10)
 VSCROLL_TOP, HSCROLL_LEFT = (1891, 230), (131, 1055)
+TILE_LAST_X = 1700                 # au-delà : vignette ROUTING / flèche (vignettes défilées : refus)
+TILE_CLICK_DX, TILE_CLICK_Y = 45, 175   # clic dans une vignette : à droite de son contour, sous son bandeau
+FAST_GAP = 0.02                    # s entre deux clics de case (19/10 : 0,25 s par case avant, capture comprise)
+CHECK_EVERY = 16                   # clics entre deux contrôles légers de l'onglet
 
 
 class Screen:
@@ -164,7 +168,7 @@ def zoom_out(grid, max_clicks=8):
         if not LC.is_admin():
             return grid, "pas administrateur"
         t.click(*ZOOM_OUT_BTN)
-        time.sleep(0.35)
+        time.sleep(0.25)
         g2, why = read_grid()
         if why:
             return grid, why
@@ -174,28 +178,88 @@ def zoom_out(grid, max_clicks=8):
     return grid, None
 
 
-def fix_diagonal(n=None, log=lambda m: None):
-    """Refait la diagonale (Patch > Input B ouvert) : dézoom, clics des cases fausses, relecture.
-    Rend (réussi, message). Utilisé par `diagonale --go` et par le bouton ENTER de la X-Touch (pont)."""
+def select_tile(grid, tile, name=None):
+    """Vignette `tile` (1-based) sélectionnée, sinon on clique dessus (19/10, demande de Joseph : ENTER ne doit
+    jamais patcher un autre appareil). Rend (grille relue, raison si impossible)."""
+    if grid["tile"] == tile:
+        return grid, None
+    x = TILE_X0 + TILE_PITCH * (tile - 1)
+    if x + TILE_CLICK_DX > TILE_LAST_X:
+        return grid, "vignette %d (%s) hors de vue : la sélectionner à la main" % (tile, name or "pilote")
+    if not LC.is_admin():
+        return grid, "pas administrateur"
+    LC.Target(1).click(x + TILE_CLICK_DX, TILE_CLICK_Y)
+    time.sleep(0.5)
+    g2, why = read_grid()
+    if why:
+        return grid, why
+    if g2["tile"] != tile:
+        return g2, "vignette %d (%s) pas sélectionnée (lu : %s)" % (tile, name or "pilote", g2["tile"])
+    return g2, None
+
+
+def matches_db(grid, expect):
+    """Les cases patchées à l'écran sont-elles celles que la base donne pour le pilote ? expect = {ligne: colonne}
+    (lignes de l'entrée B branchées sur le pilote). Vide : rien à comparer (True). Garde-fou contre une vignette
+    défilée ou mal numérotée : au moins la moitié des lignes attendues doivent correspondre."""
+    if not expect:
+        return True
+    same = sum(1 for r, c in expect.items() if grid["on"].get(r) == [c])
+    return same * 2 >= len(expect)
+
+
+def click_fast(grid, cells):
+    """Clique les cases à la suite (FAST_GAP), contrôle léger de l'onglet toutes les CHECK_EVERY cases. Rend raison
+    ou None."""
+    t = LC.Target(1)
+    if not LC.is_admin():
+        return "pas administrateur (la LV1 l'est : Windows bloquerait le clic)"
+    if not t.hwnd or LC.u32().IsIconic(t.hwnd):
+        return "fenêtre LV1 introuvable ou réduite"
+    t.traverse = True
+    for i, (r, c) in enumerate(cells):
+        if i % CHECK_EVERY == 0 and i and t.active_tab() != "Patch":
+            return "la LV1 n'est plus sur la page Patch"
+        t.click(grid["cols"][c], grid["rows"][r])
+        time.sleep(FAST_GAP)
+    return None
+
+
+def fix_diagonal(n=None, log=lambda m: None, tile=None, expect=None, name=None, passes=3):
+    """Refait la diagonale (Patch > Input B ouvert) : vignette du pilote, dézoom si besoin, clics rapides, relecture,
+    nouvelle passe pour les ratés. Rend (réussi, message). Utilisé par `diagonale --go`, ENTER de la X-Touch et le
+    bouton REALIGN de l'écran (pont). tile : vignette du pilote (assign + 1) ; expect : {ligne: colonne} de la base
+    pour ce pilote ; n : nombre de lignes à patcher (voies des entrées, au plus la taille du pilote)."""
     grid, why = read_grid()
     if why:
         return False, "impossible : " + why
-    grid, why = zoom_out(grid)
-    if why:
-        return False, "dézoom impossible : " + why
-    log("après dézoom : %d colonnes x %d lignes visibles" % (len(grid["cols"]), len(grid["rows"])))
+    if tile:
+        grid, why = select_tile(grid, tile, name)
+        if why:
+            return False, "impossible : " + why
+    if not matches_db(grid, expect):
+        return False, ("impossible : la grille affichée ne correspond pas à %s dans la base (vignette défilée ?)"
+                       % (name or "au pilote"))
+    if not n or len(grid["rows"]) < n:
+        grid, why = zoom_out(grid)
+        if why:
+            return False, "dézoom impossible : " + why
+        log("après dézoom : %d colonnes x %d lignes visibles" % (len(grid["cols"]), len(grid["rows"])))
     add, _ = plan(grid, n)
-    for r, c in add:
-        ok, why = click_cell(grid, r, c)
-        if not ok:
+    total, add2, grid2 = 0, add, grid
+    for _p in range(passes):
+        if not add2:
+            break
+        why = click_fast(grid2, add2)
+        if why:
             return False, "clic refusé : " + why
-        time.sleep(0.15)
-    time.sleep(0.6)
-    grid2, why = read_grid()
-    if why:
-        return False, "relecture impossible : " + why
-    add2, _ = plan(grid2, n)
-    msg = "%d case(s) corrigée(s) ; " % len(add) + ("diagonale OK" if not add2 else
+        total += len(add2)
+        time.sleep(0.4)
+        grid2, why = read_grid()
+        if why:
+            return False, "relecture impossible : " + why
+        add2, _ = plan(grid2, n)
+    msg = "%d case(s) corrigée(s) ; " % total + ("diagonale OK" if not add2 else
                                                      "reste %s" % [(r + 1, c + 1) for r, c in add2])
     if n and n > len(grid2["rows"]):
         msg += " ; ATTENTION : %d lignes demandées, %d seulement visibles même dézoomé" % (n, len(grid2["rows"]))

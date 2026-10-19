@@ -81,3 +81,10 @@ TOAST_RIGHT, TOAST_BOTTOM = 1772, 1010
 # Boutons du rappel de pistes : zone vide en bas à gauche de la LV1 (sous Output L/R, endroit montré par Joseph sur
 # sa capture du 15/10) : x, y, largeur, hauteur des deux boutons ensemble.
 BTN_RECT = (38, 862, 54, 134)
+# Alerte « INPUT B PATCH » : zone vide de la rangée des vignettes d'appareils, page Patch (entre la dernière vignette et
+# ROUTING ; endroit entouré par Joseph sur sa capture du 19/10) : x, y, largeur, hauteur.
+PATCH_ALERT = (1428, 114, 334, 92)
+# Vignettes d'appareils de la page Patch (capture du 19/10, 1920x1080) : bandeau (sélectionnée / non), contour de la
+# sélectionnée, intérieur ; fond du panneau (17,17,17) et de la page (71,71,71).
+TILE_HEAD, TILE_HEAD_SEL, TILE_SEL, TILE_BODY = (68, 120, 148), (68, 138, 255), (56, 201, 255), (44, 44, 46)
+PANEL_BG, PAGE_BG = (17, 17, 17), (71, 71, 71)

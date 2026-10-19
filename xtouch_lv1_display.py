@@ -204,6 +204,7 @@ class ScreenModel:
         self.on_b = None          # entrées sur B ? (base LV1, relue après chaque Flip A/B) ; None = inconnu
         self.routing = {}         # canal -> {"rec": [...], "play": [...]} (pilote SoundGrid de ce PC, base LV1)
         self.driver_size = None   # nb de canaux de lecture du pilote (diagonale B : lignes 1..n)
+        self.driver = (None, None)  # (nom, assign) du pilote : vignette n° assign + 1 de la page Patch (ENTER, REALIGN)
 
 
 class BridgeState:
@@ -708,6 +709,43 @@ def diagonal_problems(state):
                 bad.append((t.get("name") or default_label(g, ch)).strip())
             row += legs
     return bad
+
+
+PATCH_DONE_S = 3.0      # s : « ALIGNED » reste affiché après une diagonale refaite (le temps de relire la base)
+
+
+def patch_hint(msg, device):
+    """Raison d'un échec de lv1_patch (en français, journal) -> consigne courte en anglais pour l'écran."""
+    m = (msg or "").lower()
+    for key, hint in (("input b", "Open Patch \u203a Input \u203a Input B"),
+                      ("défilée", "Scroll the grid to top-left"),
+                      ("ne correspond pas", "Grid doesn't match %s: select its tile" % (device or "the driver")),
+                      ("vignette", "Select the %s tile" % (device or "driver")),
+                      ("page patch", "Stay on the Patch page"),
+                      ("administrateur", "Run XTouch-LV1 as administrator"),
+                      ("plein écran", "LV1 must be full screen (1920x1080)")):
+        if key in m:
+            return hint
+    return "See the XTouch-LV1 log"
+
+
+def patch_alert(tab, bad, apps, device, now):
+    """Alerte « INPUT B PATCH » de la page Patch (demande de Joseph, 19/10) : dict pour l'overlay, ou None. Seulement
+    sur la page Patch ; « busy » pendant ENTER / REALIGN, « failed » + consigne, « done » quelques secondes."""
+    if tab != "Patch":
+        return None
+    n = len(bad) if bad else 0
+    base = {"bad": n, "device": device}
+    if apps is not None and apps.fixing:
+        return dict(base, state="busy")
+    res = apps.fix_result if apps is not None else None
+    if res and res[0] and (n or now - res[2] < PATCH_DONE_S) and now - res[2] < 8.0:
+        return dict(base, state="done")
+    if not n:
+        return None
+    if res and not res[0]:
+        return dict(base, state="failed", hint=patch_hint(res[1], device))
+    return dict(base, state="idle")
 
 
 def input_list(state):
@@ -1225,6 +1263,7 @@ class App:
         self.woke = []                   # message reçu pendant l'attente de fin de tour, traité au début du suivant
         self.tracks_sent = 0.0
         self.diag_t, self.diag_warn = 0.0, None   # dernière vérification de la diagonale B, alerte affichée
+        self.diag_bad = None             # canaux dont l'entrée B sort de la diagonale (None : inconnu)
         self.recall_until, self.recall_sent, self.recall_touched = 0.0, 0.0, None
         self.ab_seen = 0.0
         self.ch_at = 0.0
@@ -1322,6 +1361,8 @@ class App:
         if self.overlay is None and not a.dry_run and not a.sans_cadre and sys.platform == "win32":
             import xtouch_overlay
             self.overlay = xtouch_overlay.make_overlay(state.view + 1)   # Qt (style Gain Recall v3) si PySide6, sinon tk
+        if self.overlay is not None and hasattr(self.overlay, "on_action"):
+            self.overlay.on_action = self.on_overlay_action       # bouton REALIGN de la page Patch
         faders.key_of = sends.key_of
         gain.send_aux = lambda: sends.aux
         # master en lecture seule quand il est sur LR (hors sends on fader : là, il règle le master de l'aux)
@@ -1366,6 +1407,12 @@ class App:
         self.t_end = time.time() + a.seconds if a.seconds else None
         return None
 
+    def on_overlay_action(self, action):
+        """Clic à l'écran (overlay) : « fix_patch » = bouton REALIGN, comme ENTER de la X-Touch."""
+        JOURNAL.mark("écran : %s" % action)
+        if action == "fix_patch" and self.apps is not None:
+            self.apps.fix_patch("Écran REALIGN")
+
     def watch_routing(self):
         """Patch vers le pilote SoundGrid : la LV1 ne l'annonce pas, on relit la base."""
         state, a = self.state, self.a
@@ -1375,12 +1422,14 @@ class App:
                 import lv1_db
                 drv, rt = lv1_db.routing(driver=a.pilote)
                 size = lv1_db.driver_size(driver=a.pilote)
+                info = lv1_db.driver_info(driver=a.pilote)
                 if rt != last:
                     last = rt
                     JOURNAL.mark("routage pilote %s : %s" % (drv, rt))
                 with state.lock:
                     state.routing = rt
                     state.driver_size = size
+                    state.driver = info
             except Exception as e:
                 JOURNAL.mark("routage illisible : %r" % e)
             time.sleep(5.0)
@@ -1627,6 +1676,7 @@ class App:
             if now - self.diag_t >= 1.0:                   # diagonale B cassée ? (patch relu toutes les 5 s)
                 self.diag_t = now
                 bad = diagonal_problems(state)
+                self.diag_bad = bad
                 warn = ("B PATCH\n%d OFF" % len(bad)) if bad else None
                 if warn != self.diag_warn:
                     self.diag_warn = warn
@@ -1635,6 +1685,8 @@ class App:
                         print("  Diagonale B cassée (%d canaux : %s) : page Patch > Input B, puis ENTER."
                               % (len(bad), ", ".join(bad[:5]) + ("…" if len(bad) > 5 else "")))
                         JOURNAL.mark("diagonale B cassée : %s" % bad)
+        if overlay and hasattr(overlay, "set_patch"):
+            overlay.set_patch(patch_alert(state.lv1_tab, self.diag_bad, self.apps, state.driver[0], now))
         ch_at = self.ch_at
         if ch_at != self.ab_seen and now - ch_at > 1.0 and not a.dry_run:              # état renvoyé (Flip A/B…)
             self.ab_seen = ch_at

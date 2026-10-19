@@ -896,6 +896,115 @@ class RecallButtons(QWidget):
             self.on_adjust()
 
 
+# ─── Alerte « INPUT B PATCH » sur la page Patch (demande de Joseph, 19/10) ──────────────────────────────────────
+# Dans la zone vide de la rangée des vignettes d'appareils, à l'allure d'une vignette LV1 (bandeau, intérieur gris,
+# coins arrondis) ; bouton REALIGN au style des boutons LV1 (contour clair, bleu actif). Textes en anglais. Clic sur
+# REALIGN : {"action": "fix_patch"} renvoyé au pont (stdout), qui fait comme ENTER de la X-Touch.
+TILE_HEAD, TILE_SEL, TILE_BODY = QColor(*L.TILE_HEAD), QColor(*L.TILE_SEL), QColor(*L.TILE_BODY)
+PANEL_BG = QColor(*L.PANEL_BG)
+LV1_RED, LV1_OK = QColor(224, 60, 50), QColor(140, 255, 0)   # alerte ; « vert » des boutons ON de la LV1
+
+
+def send_action(action):
+    """Ligne JSON vers le pont (stdout du processus overlay). Exe fenêtré : sys.stdout peut manquer -> fd 1."""
+    data = (json.dumps({"action": action}) + "\n").encode("utf-8")
+    try:
+        if sys.stdout is not None:
+            sys.stdout.buffer.write(data)
+            sys.stdout.flush()
+        else:
+            os.write(1, data)
+    except (OSError, ValueError, AttributeError):
+        pass
+
+
+class PatchAlert(QWidget):
+    def __init__(self):
+        super().__init__(None, FLAGS)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+        self.setMouseTracking(True)
+        self.info = {}
+        self.hover = False
+        self.f_head = QFont("Segoe UI", 9, QFont.Bold)
+        self.f_main = QFont("Segoe UI", 11, QFont.Bold)
+        self.f_sub = QFont("Segoe UI", 8)
+        self.f_btn = QFont("Segoe UI", 10, QFont.Bold)
+
+    def set(self, info):
+        if info != self.info:
+            self.info = dict(info)
+            self.update()
+
+    def button(self):
+        h = self.height()
+        return QRectF(self.width() - 108, h * 0.36, 98, h * 0.42)
+
+    def paintEvent(self, _e):
+        st = self.info.get("state", "idle")
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        r = QRectF(self.rect()).adjusted(1, 1, -1, -1)
+        path = QPainterPath()
+        path.addRoundedRect(r, 4, 4)
+        p.fillPath(path, TILE_BODY)
+        head = QRectF(r.left(), r.top(), r.width(), 20)
+        p.save()
+        p.setClipPath(path)
+        p.fillRect(head, LV1_OK.darker(170) if st == "done" else (TILE_HEAD if st == "busy" else LV1_RED))
+        p.restore()
+        p.setPen(QPen(TILE_SEL if st == "busy" else QColor(0, 0, 0), 1.5))
+        p.setBrush(Qt.NoBrush)
+        p.drawPath(path)
+        p.setPen(QColor("#ffffff"))
+        p.setFont(self.f_head)
+        p.drawText(head.adjusted(8, 0, -8, 0), Qt.AlignLeft | Qt.AlignVCenter,
+                   "INPUT B PATCH" + ("  •  " + self.info["device"] if self.info.get("device") else ""))
+        bad = self.info.get("bad") or 0
+        if st == "done":
+            main, sub = "ALIGNED", "Input B rows = driver channels"
+        elif st == "busy":
+            main, sub = "REALIGNING…", "Hands off the Patch page"
+        elif st == "failed":
+            main, sub = "COULDN'T REALIGN", self.info.get("hint") or "Open Patch › Input › Input B"
+        else:
+            main = "%d CH MISALIGNED" % bad
+            sub = "or ENTER on the X-Touch"
+        text_w = r.width() - (120 if st != "done" else 16)
+        p.setPen(LV1_OK if st == "done" else (LV1_RED if st == "failed" else QColor(TXT)))
+        p.setFont(self.f_main)
+        p.drawText(QRectF(r.left() + 8, head.bottom() + 6, text_w, 28), Qt.AlignLeft | Qt.AlignVCenter, main)
+        p.setPen(QColor(MUT))
+        p.setFont(self.f_sub)
+        p.drawText(QRectF(r.left() + 8, head.bottom() + 36, text_w, 22), Qt.AlignLeft | Qt.AlignVCenter, sub)
+        if st == "done":
+            return
+        b = self.button()
+        active = st == "busy" or self.hover
+        p.setPen(QPen(TILE_SEL if active else QColor(*L.KEY_LINE), 1.5))
+        p.setBrush(TILE_SEL if st == "busy" else PANEL_BG)
+        p.drawRoundedRect(b, L.KEY_R, L.KEY_R)
+        p.setPen(PANEL_BG if st == "busy" else QColor("#ffffff"))
+        p.setFont(self.f_btn)
+        p.drawText(b, Qt.AlignCenter, "RETRY" if st == "failed" else ("WORKING" if st == "busy" else "REALIGN"))
+
+    def mouseMoveEvent(self, e):
+        h = self.button().contains(e.position())
+        if h != self.hover:
+            self.hover = h
+            self.update()
+
+    def leaveEvent(self, _e):
+        self.hover = False
+        self.update()
+
+    def mousePressEvent(self, e):
+        if self.info.get("state") in ("idle", "failed") and self.button().contains(e.position()):
+            self.info["state"] = "busy"            # retour immédiat ; le pont confirme
+            self.update()
+            send_action("fix_patch")
+
+
 class Bus(QObject):
     msg = Signal(dict)
 
@@ -913,6 +1022,7 @@ class Overlay:
         self.badge, self.ab, self.ab_key = AbBadge(), None, None
         self.warn_text = None
         self.toast, self.toast_since = LayerToast(), None
+        self.patch, self.patch_info = PatchAlert(), None
         self.recall, self.recall_on = StripRecall(), False
         self.recall_alpha, self.cfg_mtime, self.cfg_t = 0.0, None, 0.0
         self.buttons = RecallButtons(self.set_taille, self.open_setup)
@@ -1036,6 +1146,23 @@ class Overlay:
             self.toast.show()
         self.toast.raise_()                          # au-dessus du rappel de pistes
 
+    def tick_patch(self):
+        """Alerte de la page Patch : seulement si le pont la demande (page Patch affichée, diagonale B cassée) et LV1
+        au premier plan ; posée dans la zone vide de la rangée des vignettes (lv1/layout.PATCH_ALERT)."""
+        if not self.patch_info or not self.rect or not self.front:
+            if self.patch.isVisible():
+                self.patch.hide()
+            return
+        x, y, w, h = self.rect
+        sx, sy = w / 1920.0, h / 1080.0
+        ax, ay, aw, ah = L.PATCH_ALERT
+        geo = (x + round(ax * sx), y + round(ay * sy), round(aw * sx), round(ah * sy))
+        if self.patch.geometry().getRect() != geo:
+            self.patch.setGeometry(*geo)
+        if not self.patch.isVisible():
+            self.patch.show()
+        self.patch.raise_()
+
     def on_msg(self, m):
         if m.get("quit"):
             QApplication.quit()
@@ -1064,6 +1191,11 @@ class Overlay:
             self.badge.alert = bool(self.warn_text)  # -> contour rouge + « FLIP ! » sur la touche FLIP
             self.badge.update()
             return
+        if "patch" in m:                             # {"patch": {"bad", "device", "state", "hint"} | null} : page Patch
+            self.patch_info = m["patch"]
+            if self.patch_info:
+                self.patch.set(self.patch_info)
+            return
         if "ab" in m:                                # {"ab": "A" | "B" | null, "key": n° de la User Key 0..15}
             self.ab, self.ab_key = m.get("ab"), m.get("key")
             if self.ab:
@@ -1088,6 +1220,7 @@ class Overlay:
         self.tick_recall()
         self.tick_buttons(now)
         self.tick_toast(now)
+        self.tick_patch()
         if not self.state or not self.rect:
             for w in (self.banner, self.frame):
                 if w.isVisible():
@@ -1148,7 +1281,12 @@ def main():
             bus.msg.emit({"ab": "A", "key": 15})
             time.sleep(3)
             bus.msg.emit({"ab": "B", "key": 15})
+            bus.msg.emit({"patch": {"bad": 12, "device": "LV1-PORT", "state": "idle"}})
             time.sleep(3)
+            bus.msg.emit({"patch": {"bad": 12, "device": "LV1-PORT", "state": "busy"}})
+            time.sleep(2)
+            bus.msg.emit({"patch": {"bad": 0, "device": "LV1-PORT", "state": "done"}})
+            time.sleep(2)
             bus.msg.emit({"quit": True})
     else:
         def script():                              # lignes JSON sur stdin ; fin de stdin = le pont est arrêté

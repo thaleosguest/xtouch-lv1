@@ -116,6 +116,18 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   - Sends on Fader : MyFOH passe par les User Keys (`/Set/UserKey k T` puis `F`), PAS de commande dédiée trouvée.
   - **`InternalAssign` type 7 suit le SOLO**, pas SoF : `/Set/Solo` d'une entrée -> `InternalAssign 0 n 7 0 1` ; un Flip
     Sends met l'aux en solo (`/Notify/Solo 2 n 1`). D'où le filtre de `follow_lv1` (aux ou LR seulement).
+- **Patch Input B sécurisé + plus rapide + alerte Patch (19/10, demande de Joseph)** : rien n'est figé sur LV1-PORT
+  (pilote = `device_daw.is_local`, ou `--pilote`). `lv1_db.driver_info` -> (nom, assign) ; vignette de la page Patch
+  n° assign + 1 (« 2. LV1-PORT »). `lv1_patch.fix_diagonal(n, tile, expect, name)` : `select_tile` (clic dans la
+  vignette si une autre est sélectionnée, refus si hors de vue), `matches_db` (cases à l'écran = routes B de la base
+  pour ce pilote, au moins la moitié, sinon refus SANS clic), dézoom seulement si lignes visibles < n, `click_fast`
+  (20 ms entre clics, onglet contrôlé toutes les 16 ; avant : capture PrintWindow + 0,15 s PAR case), relecture et
+  jusqu'à 3 passes. `AppControl.patch_target()` / `fix_patch(source)` (ENTER et écran), `fix_result` (ok, msg, t).
+  Overlay : `PatchAlert` dans `L.PATCH_ALERT` (zone vide entourée par Joseph), style vignette LV1 (couleurs relevées
+  sur sa capture : `TILE_*`, `PANEL_BG`), anglais : « INPUT B PATCH • LV1-PORT », « 12 CH MISALIGNED », REALIGN /
+  WORKING / RETRY / ALIGNED ; seulement page Patch (`patch_alert`, `state.lv1_tab`) et LV1 devant. Clic : l'overlay
+  écrit `{"action": "fix_patch"}` sur stdout, `QtOverlay._read_actions` -> `App.on_overlay_action`. Consignes
+  d'échec traduites (`patch_hint`). Test `tests/test_patch_b.py`. Clic de vignette et vitesse : à essayer sur le matériel.
 - **Trim et phase LV1 (19/10, choix de Joseph)** : TRACK = normal -> gain X32 -> trim -> normal (sans Gain Recall : normal
   -> trim). `GainControl.trim_mode` : encodeur = `/SetTrackTrim g ch stéréo f` (0,5 dB/cran, 3e arg 1 si stéréo), appui
   = `/SetTrackPhaseState g ch stéréo 0|1` ; état lu dans `/Notify/TrackTrim` / `PhaseState` (`track["trim"|"phase"][voie]`).

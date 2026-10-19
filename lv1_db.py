@@ -183,6 +183,15 @@ def driver_size(path=DB_PATH, driver=None):
     return None
 
 
+def driver_info(path=DB_PATH, driver=None):
+    """(nom, assign) du pilote SoundGrid (driver donné, sinon celui du PC de la LV1), ou (None, None). La page Patch
+    numérote ses vignettes dans l'ordre de l'inventaire : vignette n° assign + 1 (« 2. LV1-PORT » = assign 1)."""
+    for name, _g, assign, local in devices(path):
+        if (driver and name.lower() == driver.lower()) or (not driver and local):
+            return name, assign
+    return None, None
+
+
 def routing(path=DB_PATH, driver=None):
     """Pour le pilote SoundGrid de ce PC : {canal 0-based: {"rec": [n° de canal du pilote, 0-based, L puis R],
     "play": [...]}}. rec = canaux du pilote qui reçoivent la source de l'entrée A du canal (à ENREGISTRER) ;
