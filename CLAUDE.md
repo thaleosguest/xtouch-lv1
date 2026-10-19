@@ -192,7 +192,7 @@ Règle : une étape = un commit, les 28 tests verts + compilation après chacune
   LV1SelectionWatcher), `buttons.py` (ButtonControl, view_leds), `reaper.py` (TransportControl, AppControl). Code
   identique (arbre syntaxique), pont réexporte tout (`D.GainControl`…). Test de référence : l'horloge figée est
   aussi posée dans chaque module `bridge.*` (qui ont leur propre `import time`). Pont : 3 080 -> 1 490 lignes.
-  `test_banque` a échoué une fois (écran de démarrage noté avant les couches : timing), puis 4/4.
+  `test_banque` a échoué une fois (écran de démarrage noté avant les couches : timing), puis 4/4 **Validé sur le matériel par Joseph le 19/10** (faders, moteurs, journal : RAS).
 - Étapes suivantes : 9 classe `App` (fin de `main()`), 10 désynchronisations (change le comportement : à valider une par une).
 
 ## Fichiers
