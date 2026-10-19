@@ -119,3 +119,11 @@ Chaque ligne correspond à un ou plusieurs commits git (`git log` pour le détai
   qui a redémarré ou décroché sans erreur se remet d'aplomb toute seule.
 - Changement de Mixer différé tant qu'un fader est touché (le fader tenu ne saute plus sur l'autre Mixer).
 - Clics LV1 en attente abandonnés si le Mixer change entre-temps (ils seraient tombés au mauvais endroit).
+
+## 19/10/2026 : V0.6
+
+- Trim et phase de la LV1 sur les encodeurs : 2e appui sur TRACK (LED qui clignote), appui encodeur = phase.
+- Sends on Fader activé sur la LV1 (menu Fx / Mon, User Key) : la X-Touch et le bandeau suivent, sur les deux Mixers ;
+  un solo d'entrée ne fait pas sortir des sends.
+- « Tout quitter » ferme aussi REAPER LV1 (et seulement lui).
+- Capture MyFOH (`tools/capture_myfoh.ps1`) : commandes trim, phase, EQ, solo trouvées.
