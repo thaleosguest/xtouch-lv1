@@ -132,7 +132,7 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   dans l'image de la fenêtre LV1 (`screen.window_rows`, PrintWindow, admin requis) via `Target.guard` / `window_reader` /
   `active_tab` ; journal « envoyé (vu à travers la fenêtre qui couvre la LV1) ». JAMAIS dans les lectures périodiques
   (PrintWindow fait redessiner la LV1). Vérifié sur REAPER caché (photo = son vrai contenu, 35 ms) ; sur la LV1, refusé
-  hors admin (None, sans erreur) -> à confirmer chez Joseph (pont admin). Tests `test_aller_retour_onglet.py`,
+  hors admin (None, sans erreur). **Confirmé chez Joseph (journal 143033)** : 48 clics de tranche, 35 « vu à travers », 0 refus ; la LV1 a bien sélectionné une tranche couverte (relue ensuite sur son écran). Tests `test_aller_retour_onglet.py`,
   `test_fenetre_devant.py` (échouent sur l'ancien code).
 
 ## Refactor en cours (depuis le 19/10/2026)
