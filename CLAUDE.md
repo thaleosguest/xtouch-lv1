@@ -9,7 +9,8 @@
 - Dépôt public `https://github.com/thaleosguest/xtouch-lv1` (branche `master`), release `v0.1` : `Total_Control_LV1_Install.exe`
   + `XTouch-LV1-v0.1.zip` (zip de `build/stage/xtouch`, SANS les réglages ni journaux de Joseph de `dist/XTouch-LV1`).
   Pas de CI : compiler (`py build.py`), zipper, puis `gh release create vX.Y <fichiers> --notes-file ...`.
-  Dernière release : **v0.5** (19/10/2026 : Tout quitter, renvoi X-Touch 30 s, Mixer différé pendant un toucher, clics
+  Dernière release : **v0.6** (19/10/2026 : trim et phase, SoF de la LV1 suivi, Tout quitter + REAPER LV1) ;
+  v0.5 (19/10/2026 : Tout quitter, renvoi X-Touch 30 s, Mixer différé pendant un toucher, clics
   abandonnés au changement de Mixer) ; v0.4 le même jour (FLIP / User Keys, sélection Channel / sous une fenêtre, refactor). Zip = `build/stage/xtouch` sous un dossier `XTouch-LV1/`.
 - Page de profil `thaleosguest/thaleosguest` (README : tableau des 3 produits). Gain Recall garde son nom et son dépôt.
 - Ne jamais versionner « Manuel Livetrack 2/ » (manuel d'un tiers), journaux, captures.
