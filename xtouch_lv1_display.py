@@ -69,7 +69,7 @@ from bridge.lv1_watch import FollowsView, LV1Clicker, LayerModeWatcher, ViewFoll
 from bridge.buttons import view_leds, ButtonControl
 from bridge.reaper import TransportControl, ACT_REAPER_SAVE_AS, AppControl
 
-VERSION = "0.4"
+VERSION = "0.5"
 # Dossier des fichiers de Joseph (réglages, courbe, journaux, reaper/) : à côté de l'exe une fois compilé (build.py)
 HERE = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.abspath(__file__))
 COLOR_FILE = os.path.join(HERE, "xtouch_couleurs.json")

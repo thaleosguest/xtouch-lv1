@@ -111,3 +111,11 @@ Chaque ligne correspond à un ou plusieurs commits git (`git log` pour le détai
 - Sélection, BANK et touches View quand une fenêtre couvre la LV1 : le pont lit l'image de la fenêtre LV1.
 - Code réorganisé (refactor en 10 étapes : `surface/`, `lv1/`, `bridge/`, `osc.py`, classe `App`), sans changement
   de comportement ; test de référence du rendu X-Touch. Vérifié sur le matériel.
+
+## 19/10/2026 : V0.5
+
+- Menu de l'icône : « Tout quitter (XTouch-LV1 + X/M32 Gain Recall) ».
+- Tout est renvoyé à la X-Touch toutes les 30 s (écrans, couleurs, LED, afficheur ; pas les moteurs) : une X-Touch
+  qui a redémarré ou décroché sans erreur se remet d'aplomb toute seule.
+- Changement de Mixer différé tant qu'un fader est touché (le fader tenu ne saute plus sur l'autre Mixer).
+- Clics LV1 en attente abandonnés si le Mixer change entre-temps (ils seraient tombés au mauvais endroit).
