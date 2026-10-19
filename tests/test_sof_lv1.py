@@ -5,7 +5,8 @@ Séquences relevées dans le journal 195719 (/Notify/InternalAssign, type 7 = bu
 - états de passage (F6 : LR off, Fx 1 on, Fx 2 on, Fx 1 off) : seul l'état final compte, après SOF_SETTLE ;
 - aucun appui de User Key envoyé par le suivi ; fader tenu : attendre le lâcher ;
 - mode SEND local de la X-Touch (LV1 restée sur LR) : pas touché ;
-- Mixer 2 affiché : même état (la LV1 envoie le même message, 4e nombre 0).
+- Mixer 2 affiché : même état (la LV1 envoie le même message, 4e nombre 0) ;
+- InternalAssign suit le SOLO : une entrée en solo (0 n) est ignorée, pendant ou hors sends.
 
     py tests/test_sof_lv1.py .
 """
@@ -83,6 +84,20 @@ check("Mixer 2 : Mon 4 suivi", sends.aux == 11)
 ia(25, 3, 0); ia(3, 0, 1); suivre()
 check("Mixer 2 : retour normal", sends.aux is None)
 st.view = 0
+
+# solo d'une entrée pendant les sends (capture MyFOH : InternalAssign 0 n) : ignoré ; fin du solo : on reste en sends
+ia(3, 0, 0); ia(2, 2, 1); suivre()
+check("Fx 3 en sends", sends.aux == 2)
+ia(0, 4, 1); suivre()
+check("solo d'une entrée : on reste en sends", sends.aux == 2)
+ia(0, 4, 0); ia(2, 2, 1); suivre()
+check("fin du solo d'entrée : toujours Fx 3", sends.aux == 2)
+ia(2, 2, 0); ia(3, 0, 1); suivre()
+check("LR : normal", sends.aux is None)
+# hors sends, solo d'une entrée : rien
+ia(3, 0, 0); ia(0, 1, 1); suivre()
+check("solo d'entrée hors sends : rien", sends.aux is None)
+ia(0, 1, 0); ia(3, 0, 1); suivre()
 
 check("le suivi n'a envoyé aucune User Key", envoyes == [])
 

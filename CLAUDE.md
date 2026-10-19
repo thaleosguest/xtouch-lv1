@@ -105,6 +105,16 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
 
 - **Installeur, fin (18/10)** : bouton « Lancer XTouch-LV1 » à côté de Fermer (`finish` / `launch_xtouch`, os.startfile
   = ShellExecute, nécessaire pour l'UAC ; Popen -> erreur 740), seulement si XTouch-LV1 est installé et sans erreur.
+- **Capture MyFOH du 19/10 (myfoh_20261019_210545.pcapng, `tools/capture_myfoh.ps1`)** — commandes du client, format
+  et réponse vérifiés :
+  - `/SetTrackTrim i:g i:ch i:? f:dB` (pas de « / » au milieu !) -> `/Notify/TrackTrim g ch voie f i:1` (L et R) ;
+  - `/SetTrackPhaseState i:g i:ch i:voie i:0|1` -> `/Notify/PhaseState g ch voie état i:1` ;
+  - `/SetEQState i:g i:ch i:0|1` -> `/Notify/EQState` ; `/Set/EQ/Band/Gain|Freq|Q i:g i:ch i:bande d:` ;
+    `/Set/EQ/Band/Shape i:g i:ch i:bande s:'Bell'|'Low-Shelf'|'Hi-Pass'|'Low-RShelv'` ; `/GetEQ i:g i:ch`, `/GetGEQ` ;
+  - `/ClearAllSolo` (sans argument) ; `/Get/Sends i:? i:g i:ch` -> `/Notify/Sends` ; `/Set/Solo i:g i:ch i:0|1` ;
+  - Sends on Fader : MyFOH passe par les User Keys (`/Set/UserKey k T` puis `F`), PAS de commande dédiée trouvée.
+  - **`InternalAssign` type 7 suit le SOLO**, pas SoF : `/Set/Solo` d'une entrée -> `InternalAssign 0 n 7 0 1` ; un Flip
+    Sends met l'aux en solo (`/Notify/Solo 2 n 1`). D'où le filtre de `follow_lv1` (aux ou LR seulement).
 - **Sends on Fader activé SUR LA LV1 (19/10, journal 195719)** : `/Notify/InternalAssign i:g i:ch i:7 i:vue? i:actif i:1`
   = bus sur les faders (type 7) : LR (3,0) = normal, Fx (2,n) / Mon (25,n) = sends ; menu Fx / Mon de la LV1 ET User
   Keys Flip Sends (aussi celles appuyées par la X-Touch) l'envoient. États de passage (LR off, Fx 1 on, Fx 2 on, Fx 1

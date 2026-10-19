@@ -160,9 +160,14 @@ class SendControl:
             keys = dict(self.state.user_keys)
         if bus == self.lv1_sof or busy:
             return
-        self.lv1_sof = bus
         target = next((k for k, (g, ch, _n) in enumerate(aux) if (g, ch) == bus), None)
-        if target is None:                       # LR (ou autre bus) : mode normal
+        # InternalAssign suit en fait le SOLO (capture MyFOH du 19/10 : /Set/Solo d'une entrée -> InternalAssign 0 n) ;
+        # un Flip Sends met l'aux en solo. Seuls comptent : un aux (sends) et LR (rien en solo : normal). Une entrée,
+        # un groupe… en solo pendant les sends : ignoré (sinon la X-Touch sortait des sends à chaque Solo).
+        if target is None and bus != (3, 0):
+            return
+        self.lv1_sof = bus
+        if target is None:                       # LR : mode normal
             if self.aux is not None:
                 JOURNAL.mark("LV1 : fin du Sends on Fader -> X-Touch en mode normal")
                 self.flip_key, self.aux, self.picking = None, None, False
