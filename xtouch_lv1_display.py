@@ -1532,7 +1532,7 @@ class LV1Clicker(FollowsView, threading.Thread):
                     continue
                 if kind == "onglet":
                     ok, why = self.click_all(self.page + 1)
-                    JOURNAL.mark("clic LV1 onglet All / Mixer : %s" % ("envoyé" if ok else why))
+                    JOURNAL.mark("clic LV1 onglet All / Mixer : %s" % (("envoyé" + (" (%s)" % why if why else "")) if ok else why))
                     if not ok:
                         self._refused("onglet All", why or "envoi refusé par Windows")
                     continue
@@ -1540,7 +1540,7 @@ class LV1Clicker(FollowsView, threading.Thread):
                     with self.state.lock:
                         n = self.state.n_inputs
                     ok, why = self.click_mode(arg, n, self.page + 1)
-                    JOURNAL.mark("clic LV1 mode %s : %s" % (arg, "envoyé" if ok else why))
+                    JOURNAL.mark("clic LV1 mode %s : %s" % (arg, ("envoyé" + (" (%s)" % why if why else "")) if ok else why))
                     if not ok:
                         self._refused("mode %s" % arg, why or "envoi refusé par Windows")
                     else:
@@ -1551,7 +1551,7 @@ class LV1Clicker(FollowsView, threading.Thread):
                         if self.state.current.get(self.page) == arg:
                             continue
                     ok, why = self.click_layer(arg, self.page + 1)
-                    JOURNAL.mark("clic LV1 couche %d : %s" % (arg + 1, "envoyé" if ok else why))
+                    JOURNAL.mark("clic LV1 couche %d : %s" % (arg + 1, ("envoyé" + (" (%s)" % why if why else "")) if ok else why))
                     if not ok:
                         self._refused("couche", why or "envoi refusé par Windows")
                         continue
@@ -1574,7 +1574,7 @@ class LV1Clicker(FollowsView, threading.Thread):
                         f = self.state.tracks.get(arg, {}).get("rgb")
                     rgb = tuple(int(round(v * 255)) for v in f) if f else None
                     ok, why = self.click_strip(i, self.page + 1, rgb=rgb)   # mot-clé : 3e paramètre = méthode
-                    JOURNAL.mark("clic LV1 tranche %d %s : %s" % (i + 1, arg, "envoyé" if ok else why))
+                    JOURNAL.mark("clic LV1 tranche %d %s : %s" % (i + 1, arg, ("envoyé" + (" (%s)" % why if why else "")) if ok else why))
                     if not ok:
                         self._refused("sélection", why or "envoi refusé par Windows")
                     else:

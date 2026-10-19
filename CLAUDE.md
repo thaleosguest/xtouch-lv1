@@ -124,6 +124,17 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   boucle). `LV1Link.state_complete`, `keys_missing`. Test `tests/test_user_keys_absentes.py` (échoue sur l'ancien
   code : 1 connexion, FLIP muet). Hors refactor : commit à part.
 
+- **Sélection depuis Channel / fenêtre devant (19/10, journal 135225, essai de l'étape 4)** — deux correctifs hors
+  refactor : (A) après le clic d'onglet la LV1 allume l'onglet AVANT de redessiner les tranches -> `on_mixer` relit
+  le garde-fou et réessaie l'action `retry` (bande du nom, rien cliqué) pendant `REDRAW_WAIT` 0,5 s ; empiré par les
+  lectures rapides de la 0.2.1. (B) une fenêtre sur la LV1 cache la bande du nom / l'onglet à la lecture de l'écran
+  -> pour un clic VOULU (`Target.traverse`, posé par click_layer / click_mode / click_strip / toggle_all_tab), relecture
+  dans l'image de la fenêtre LV1 (`screen.window_rows`, PrintWindow, admin requis) via `Target.guard` / `window_reader` /
+  `active_tab` ; journal « envoyé (vu à travers la fenêtre qui couvre la LV1) ». JAMAIS dans les lectures périodiques
+  (PrintWindow fait redessiner la LV1). Vérifié sur REAPER caché (photo = son vrai contenu, 35 ms) ; sur la LV1, refusé
+  hors admin (None, sans erreur) -> à confirmer chez Joseph (pont admin). Tests `test_aller_retour_onglet.py`,
+  `test_fenetre_devant.py` (échouent sur l'ancien code).
+
 ## Refactor en cours (depuis le 19/10/2026)
 
 Plan en 11 étapes validé par Joseph ; étapes 0 à 9 SANS changement de comportement, étape 10 = correctifs.

@@ -36,7 +36,7 @@ REDRAW_WAIT = 0.5
 
 WM_MOUSEMOVE, WM_LBUTTONDOWN, WM_LBUTTONUP, MK_LBUTTON = 0x0200, 0x0201, 0x0202, 0x0001
 
-from lv1.screen import user32 as u32, lv1_window, client_rect, pixel, screen_rows, close as _close
+from lv1.screen import user32 as u32, lv1_window, client_rect, pixel, screen_rows, window_rows, close as _close
 
 
 def is_admin():
@@ -53,6 +53,11 @@ class Target:
         self.mixer = mixer
         self.hwnd, self.detached = lv1_window(mixer)
         self.rect = client_rect(self.hwnd) if self.hwnd else None
+        # Clic VOULU (Select, BANK, touches View) : si la lecture de l'écran échoue (fenêtre posée sur la LV1), on relit
+        # dans l'image de la fenêtre LV1 (PrintWindow, 19/10). Faux pour les lectures périodiques : PrintWindow fait
+        # redessiner la LV1, pas question de le faire 5 fois par seconde.
+        self.traverse = False
+        self.used_window = False      # la décision a été prise sur l'image de la fenêtre (noté dans le journal)
 
     def pt(self, rx, ry):
         x, y, w, h = self.rect
@@ -109,12 +114,50 @@ class Target:
             return rows[sy - y0][sx - x0] if (x0 <= sx <= x1 and y0 <= sy <= y1) else None
         return read
 
+    def window_reader(self, box):
+        """Comme reader, mais dans l'image de la fenêtre LV1 (PrintWindow) : voit à travers une fenêtre posée dessus.
+        None si Windows refuse. Seulement en secours d'un clic voulu (self.traverse)."""
+        x0, y0 = self.pt(box[0], box[1])
+        x1, y1 = self.pt(box[2], box[3])
+        try:
+            rows = window_rows(self.hwnd, x0, list(range(y0, y1 + 1)), x1 - x0 + 1)
+        except Exception:
+            rows = None
+        if rows is None:
+            return None
+
+        def read(x, y):
+            cx, cy = self.pt(x, y)
+            return rows[cy - y0][cx - x0] if (x0 <= cx <= x1 and y0 <= cy <= y1 and cx - x0 < len(rows[0])) else None
+        return read
+
+    def guard(self, box, fn):
+        """Garde-fou fn(read) -> raison ou None, lu à l'écran ; en cas d'échec et de clic voulu, relu dans la fenêtre."""
+        why = fn(self.reader(box))
+        if why and self.traverse:
+            r = self.window_reader(box)
+            if r is not None and fn(r) is None:
+                self.used_window = True
+                return None
+        return why
+
     def active_tab(self):
-        """Onglet affiché (« Mixer 1 », « Channel »…) lu à l'écran (une capture de la ligne), ou None (LV1 cachée)."""
+        """Onglet affiché (« Mixer 1 », « Channel »…) lu à l'écran (une capture de la ligne), ou None (LV1 cachée).
+        Clic voulu (self.traverse) : relu dans l'image de la fenêtre LV1 si l'écran ne montre pas d'onglet."""
         xs = list(TABS.values())
-        read = self.reader((min(xs), TAB_READ_Y, max(xs), TAB_READ_Y))
-        found = [name for name, x in TABS.items() if _close(read(x, TAB_READ_Y), TAB_ACTIVE)]
-        return found[0] if len(found) == 1 else None
+        box = (min(xs), TAB_READ_Y, max(xs), TAB_READ_Y)
+
+        def tab_in(read):
+            found = [name for name, x in TABS.items() if _close(read(x, TAB_READ_Y), TAB_ACTIVE)]
+            return found[0] if len(found) == 1 else None
+        tab = tab_in(self.reader(box))
+        if tab is None and self.traverse:
+            r = self.window_reader(box)
+            if r is not None:
+                tab = tab_in(r)
+                if tab is not None:
+                    self.used_window = True
+        return tab
 
     def on_mixer(self, frame, action):
         """Exécute action() sur la page Mixer. Si la LV1 est sur l'onglet Channel (sélection très utile là,
@@ -298,7 +341,7 @@ def layer_edge_why(read, k):
 def layer_frame(k):
     """Garde-fou de la case k pour Target.check / on_mixer (fonction de la cible ; une capture du bord)."""
     y = LAYER_Y0 + LAYER_PITCH * k
-    return lambda t: layer_edge_why(t.reader((LAYER_EDGE[0], y, LAYER_EDGE[1], y)), k)
+    return lambda t: t.guard((LAYER_EDGE[0], y, LAYER_EDGE[1], y), lambda r: layer_edge_why(r, k))
 
 
 def strip_point(i):
@@ -340,13 +383,20 @@ def color_runs(colors, rgb, y0, tol=14):
     return merged
 
 
+def _vu(t, res):
+    """(fait, raison) d'un clic : sur un succès décidé dans l'image de la fenêtre, la raison le dit (journal)."""
+    ok, why = res
+    return ok, why or ("vu à travers la fenêtre qui couvre la LV1" if ok and t.used_window else None)
+
+
 def click_layer(k, mixer=1, method="message"):
     """Clique la case de couche k (0..7). Renvoie (fait, raison)."""
     t = Target(mixer)
+    t.traverse = True
     why = t.check(layer_frame(k))
     if why:
         return False, why
-    return t.on_mixer(layer_frame(k), lambda: t.click(*layer_point(k), method=method))
+    return _vu(t, t.on_mixer(layer_frame(k), lambda: t.click(*layer_point(k), method=method)))
 
 
 def mode_row_why(read):
@@ -375,11 +425,12 @@ def click_mode(name, n_inputs, mixer=1, method="message"):
     if name not in (MODES_80 if n_inputs == 80 else MODES_64):
         return False, "pas de bouton %s en %s canaux" % (name, n_inputs or "?")
     t = Target(mixer)
-    row = lambda tg: mode_guard_why(tg.reader((LAYER_EDGE[0], MODE_ROW_Y, MODE_SPANS[1][1], LAYER_Y0)))
+    t.traverse = True
+    row = lambda tg: tg.guard((LAYER_EDGE[0], MODE_ROW_Y, MODE_SPANS[1][1], LAYER_Y0), mode_guard_why)
     why = t.check(row)
     if why:
         return False, why
-    return t.on_mixer(row, lambda: t.click(*MODE_BUTTONS[name], method=method))
+    return _vu(t, t.on_mixer(row, lambda: t.click(*MODE_BUTTONS[name], method=method)))
 
 
 def view_hint():
@@ -417,6 +468,7 @@ def spill_on(mixer=1):
 def toggle_all_tab(mixer=1, method="message"):
     """Touche GLOBAL VIEW (Joseph, 16/10) : onglet All ; déjà sur All -> retour sur Mixer N. Renvoie (fait, raison)."""
     t = Target(mixer)
+    t.traverse = True
     why = t.check(tabs=False)
     if why:
         return False, why
@@ -425,7 +477,7 @@ def toggle_all_tab(mixer=1, method="message"):
     tab = t.active_tab()
     if tab is None:
         return False, "onglets illisibles (LV1 cachée ?)"
-    return t.click(TABS["Mixer %d" % mixer if tab == "All" else "All"], TAB_Y, method), None
+    return _vu(t, (t.click(TABS["Mixer %d" % mixer if tab == "All" else "All"], TAB_Y, method), None))
 
 
 def click_strip(i, mixer=1, method="message", rgb=None):
@@ -434,6 +486,7 @@ def click_strip(i, mixer=1, method="message", rgb=None):
     if rgb is None:
         return False, "couleur du canal inconnue : bande du nom introuvable"
     t = Target(mixer)
+    t.traverse = True
     why = t.check()
     if why:
         return False, why
@@ -442,16 +495,24 @@ def click_strip(i, mixer=1, method="message", rgb=None):
         x, y, w, h = t.rect
         sx = x + round((STRIP_X0 - 46 + NAME_DX + STRIP_PITCH * i) * w / REF_W)
         ya, yb = (y + round(v * h / REF_H) for v in NAME_SCAN)
-        col = [row[0] for row in screen_rows(sx, list(range(ya, yb)), 1)]
-        runs = [(round((a - y) * REF_H / h), round((b - y) * REF_H / h)) for a, b in color_runs(col, rgb, ya)]
-        ny = name_bar_y(runs)
+
+        def bande(col):
+            runs = [(round((a - y) * REF_H / h), round((b - y) * REF_H / h)) for a, b in color_runs(col, rgb, ya)]
+            return name_bar_y(runs)
+        ny = bande([row[0] for row in screen_rows(sx, list(range(ya, yb)), 1)])
+        if ny is None and t.traverse:                     # une fenêtre couvre la tranche : relue dans la fenêtre LV1
+            img = window_rows(t.hwnd, sx - x, list(range(ya - y, yb - y)), 1)
+            if img:
+                ny = bande([row[0] for row in img])
+                if ny is not None:
+                    t.used_window = True
         if ny is None:
             act.why = "bande du nom de la tranche %d introuvable (disposition Mixer ?)" % (i + 1)
             return False                                  # rien cliqué : réessayable (act.retry)
         act.why = None
         return t.click(strip_point(i)[0], ny, method=method)
     act.why, act.retry = None, True
-    ok, why = t.on_mixer(None, act)
+    ok, why = _vu(t, t.on_mixer(None, act))
     return ok, why or act.why
 
 

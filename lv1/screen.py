@@ -186,6 +186,59 @@ def screen_rows(x, ys, w):
     return out
 
 
+def window_rows(hwnd, cx, ys, w):
+    """Comme screen_rows, mais lu dans l'image de la FENÊTRE elle-même (PrintWindow), même recouverte par d'autres
+    fenêtres : coordonnées CLIENT (cx, ys). None si Windows refuse (programme pas administrateur alors que la LV1
+    l'est, fenêtre réduite) ou si l'image est vide.
+
+    Ajouté le 19/10 (sélection refusée quand une fenêtre couvre la LV1). PrintWindow fait REDESSINER la fenêtre dans
+    l'image : à n'utiliser qu'en secours, au moment d'un clic voulu — jamais dans une lecture périodique.
+    Technique reprise de lv1_patch.Shot (marche sur la LV1 depuis le 16/10, pont administrateur)."""
+    if not hwnd or not ys:
+        return None
+    u, g32 = user32(), ctypes.windll.gdi32
+    vp = ctypes.c_void_p
+    r = wt.RECT()
+    if not u.GetClientRect(hwnd, ctypes.byref(r)):
+        return None
+    W, H = r.right - r.left, r.bottom - r.top
+    if W <= 0 or H <= 0:
+        return None
+    for f in (g32.CreateCompatibleDC, g32.CreateCompatibleBitmap, g32.SelectObject):
+        f.restype = vp
+    g32.CreateCompatibleDC.argtypes = [vp]
+    g32.CreateCompatibleBitmap.argtypes = [vp, ctypes.c_int, ctypes.c_int]
+    g32.SelectObject.argtypes = [vp, vp]
+    g32.GetDIBits.argtypes = [vp, vp, ctypes.c_uint, ctypes.c_uint, vp, vp, ctypes.c_uint]
+    g32.DeleteObject.argtypes = g32.DeleteDC.argtypes = [vp]
+    u.PrintWindow.argtypes = [vp, vp, wt.UINT]
+    dc = u.GetDC(None)
+    mem = g32.CreateCompatibleDC(dc)
+    bmp = g32.CreateCompatibleBitmap(dc, W, H)
+    old = g32.SelectObject(mem, bmp)
+    try:
+        if not u.PrintWindow(hwnd, mem, 3):              # PW_CLIENTONLY | PW_RENDERFULLCONTENT
+            return None
+        bmi = (ctypes.c_uint32 * 10)(40, W, (-H) & 0xFFFFFFFF, 1 | (32 << 16), 0, 0, 0, 0, 0, 0)
+        buf = (ctypes.c_ubyte * (4 * W * H))()
+        g32.GetDIBits(mem, bmp, 0, H, buf, bmi, 0)
+    finally:
+        g32.SelectObject(mem, old)
+        g32.DeleteObject(bmp)
+        g32.DeleteDC(mem)
+        u.ReleaseDC(None, dc)
+    x0, x1 = max(0, cx), min(W, cx + w)
+    out = []
+    for yy in ys:
+        if not 0 <= yy < H or x1 <= x0:
+            return None
+        o = 4 * yy * W
+        out.append([(buf[o + 4 * i + 2], buf[o + 4 * i + 1], buf[o + 4 * i]) for i in range(x0, x1)])
+    if all(c == (0, 0, 0) for row in out for c in row):
+        return None                                      # image noire : PrintWindow n'a rien rendu
+    return out
+
+
 def close(a, b, tol=12):
     """Deux couleurs à tol près sur chaque composante (a = None, couleur illisible : jamais proche)."""
     return a is not None and all(abs(x - y) <= tol for x, y in zip(a, b))
