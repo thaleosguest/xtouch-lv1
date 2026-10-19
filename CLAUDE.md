@@ -120,7 +120,11 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   (pilote = `device_daw.is_local`, ou `--pilote`). `lv1_db.driver_info` -> (nom, vignette) ; vignette = RANG du pilote parmi les
   appareils E/S + pilotes présents (relevé du 20/10 : LV1-PORT déplacé en place 3, place 2 vide -> « 3. LV1-PORT » en
   2e position : la rangée est tassée ; serveurs SGS et télécommandes à part). Déplacer le pilote EFFACE ses routes B.
-  `diagonal_problems` : pilote connu + routing vide = tout décalé (avant : None, « inconnu » -> pas de carte, 20/10). `lv1_patch.fix_diagonal(n, tile, expect, name)` : `select_tile` (clic dans la
+  `diagonal_problems` : pilote connu + routing vide = tout décalé (avant : None, « inconnu » -> pas de carte, 20/10).
+  Décision de Joseph (20/10, après ajout de vMIX-MF, pilote d'un autre PC, place 3) : diagonale / REALIGN = pilote LOCAL
+  seulement, pour l'instant (`--pilote` reste possible). Une entrée B branchée exprès sur un autre pilote serait vue
+  « décalée » et REALIGN la remettrait sur le pilote local (pistes écartées : suivre le pilote majoritaire, sélecteur sur la
+  carte, ignorer les canaux sur un autre pilote). `lv1_patch.fix_diagonal(n, tile, expect, name)` : `select_tile` (clic dans la
   vignette si une autre est sélectionnée, refus si hors de vue), `matches_db` (cases à l'écran = routes B de la base
   pour ce pilote, au moins la moitié, sinon refus SANS clic), dézoom seulement si lignes visibles < n, `click_fast`
   (20 ms entre clics, onglet contrôlé toutes les 16 ; avant : capture PrintWindow + 0,15 s PAR case), relecture et
