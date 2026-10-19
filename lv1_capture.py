@@ -25,6 +25,7 @@ from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lv1_probe as L
+import osc
 
 NOISY = {"/Notify/Meters", "/ping", "/pong", "/Notify/NetworkCongestion", "/Notify/TempoBlink"}
 
@@ -180,10 +181,10 @@ def decode_stream(chunks):
         if not buf:
             t_buf = t
         buf += data
-        pk, buf = L.split_frames(buf)
+        pk, buf = osc.split_frames(buf)
         for p in pk:
             try:
-                addr, args = L.osc_decode(p)
+                addr, args = osc.osc_decode(p)
             except Exception:                    # trame illisible : on la signale sans s'arrêter
                 addr, args = "<illisible %d octets>" % len(p), []
             out.append((t_buf if buf else t, addr, args))

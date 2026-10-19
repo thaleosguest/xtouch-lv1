@@ -6,7 +6,7 @@ Reaper : Préférences > Control/OSC/web > Add > OSC (Open Sound Control)
     Device IP : 127.0.0.1   Device port : 9000      (Reaper ENVOIE l'état ici : LED play / rec / repeat / click)
     Local listen port : 8000                         (Reaper REÇOIT les commandes ici)
     Pattern config : Default
-Bibliothèque standard seulement (OSC de lv1_probe), UDP.
+Bibliothèque standard seulement (osc.py), UDP.
 
 Messages (fichier Default.ReaperOSC, non vérifiés sur la machine de Joseph) :
     /play /stop /record /repeat /click   (t = déclencheur : valeur 1)
@@ -21,7 +21,7 @@ import threading
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import lv1_probe as P
+import osc as P
 
 # Actions Reaper (liste des actions, section Main)
 ACT_PREV_MARKER = 40172        # Markers: Go to previous marker/project start

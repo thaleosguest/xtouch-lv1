@@ -42,6 +42,7 @@ import queue
 import unicodedata
 
 import lv1_probe as L
+import osc
 import xtouch_probe as X
 from surface.notes import (XT, TOUCH_NOTES, MASTER, NOTE_REC, NOTE_SOLO, NOTE_MUTE, NOTE_SELECT,
                            NOTE_BANK_LEFT, NOTE_BANK_RIGHT, NOTE_CHANNEL_LEFT, NOTE_CHANNEL_RIGHT, CC_JOG,
@@ -577,7 +578,7 @@ class LV1Link(threading.Thread):
             if self.sock is None:
                 return False
             try:
-                self.sock.sendall(L.frame(address, args))
+                self.sock.sendall(osc.frame(address, args))
                 return True
             except OSError:
                 return False
@@ -614,8 +615,8 @@ class LV1Link(threading.Thread):
         ack = threading.Event()
         buf = b""
         try:
-            sock.sendall(L.frame("/handshake", [("i", 1), ("i", -1), ("i", 1)]) +
-                         L.frame("/device_name", [("s", self.name_), ("s", "XTOUCH-LV1-DISPLAY-0001")]))
+            sock.sendall(osc.frame("/handshake", [("i", 1), ("i", -1), ("i", 1)]) +
+                         osc.frame("/device_name", [("s", self.name_), ("s", "XTOUCH-LV1-DISPLAY-0001")]))
             asked = False
             t_ack = time.time() + 3
             got_state, t_conn, reasked, seen = False, None, False, set()
@@ -628,15 +629,15 @@ class LV1Link(threading.Thread):
                     raise OSError("la LV1 a fermé la connexion")
                 if chunk:
                     buf += chunk
-                    packets, buf = L.split_frames(buf)
+                    packets, buf = osc.split_frames(buf)
                     for p in packets:
                         try:
-                            address, args = L.osc_decode(p)
+                            address, args = osc.osc_decode(p)
                         except Exception:
                             continue
                         if address == "/ping":
                             with self.send_lock:
-                                sock.sendall(L.frame("/pong", args))
+                                sock.sendall(osc.frame("/pong", args))
                         elif address == "/handshake" and args[:1] == [("i", 1)]:
                             ack.set()
                         else:
@@ -655,7 +656,7 @@ class LV1Link(threading.Thread):
                     print("  LV1 connectée (%s:%d)" % (ip, port))
                     if self.on_connect:
                         threading.Thread(target=self.on_connect, daemon=True).start()
-                    sock.sendall(L.frame("/Get/Aux/Tracks") + L.frame("/Get/Layers", [("i", 0), ("i", 0)]))
+                    sock.sendall(osc.frame("/Get/Aux/Tracks") + osc.frame("/Get/Layers", [("i", 0), ("i", 0)]))
                     t_conn = time.time()
                 if t_conn and not got_state:
                     waited = time.time() - t_conn
@@ -670,7 +671,7 @@ class LV1Link(threading.Thread):
                         reasked = True
                         JOURNAL.mark("état initial LV1 non reçu : nouvelle demande")
                         with self.send_lock:
-                            sock.sendall(L.frame("/Get/Aux/Tracks") + L.frame("/Get/Layers", [("i", 0), ("i", 0)]))
+                            sock.sendall(osc.frame("/Get/Aux/Tracks") + osc.frame("/Get/Layers", [("i", 0), ("i", 0)]))
                 if not ack.is_set() and time.time() > t_ack:
                     raise OSError("pas de réponse à la poignée de main")
         finally:

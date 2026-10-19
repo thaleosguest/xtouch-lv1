@@ -164,7 +164,11 @@ Règle : une étape = un commit, les 28 tests verts + compilation après chacune
   `_close`…) et `fenetres` (`_u32`, `pid_of`). Vérifié en direct (LV1 ouverte) : 9 mesures identiques avant/après.
   Volontairement à part : capture de `lv1_patch` (PrintWindow, autre technique) et `tracks_live.py` (essai inutilisé).
   `Target` reste dans `lv1_clic` (conversion de coordonnées + clics).
-- Étapes suivantes : 5 `osc.py`, 6 `surface/` (MIDI + rendu), 7 découpe de `LV1State`, 8 `bridge/` (contrôleurs),
+- **Étape 5 faite** : `osc.py` = OSC minimal + trames TCP de la LV1 (`osc_encode`, `osc_decode`, `frame`,
+  `split_frames`, `TX_HEADER`, `HEADER_LEN`), code identique à celui de `lv1_probe` (vérifié). `lv1_probe` les réexporte
+  (tests : `P.frame` etc. inchangés) et garde la découverte (`discover`, `connect_any`, `local_ipv4s`) et `short_args`.
+  Le pont et `lv1_capture` : `osc.*` pour l'OSC, `L.*` pour la découverte ; `reaper_link` : `import osc as P` seulement.
+- Étapes suivantes : 6 `surface/` (MIDI + rendu), 7 découpe de `LV1State`, 8 `bridge/` (contrôleurs),
   9 classe `App` (fin de `main()`), 10 désynchronisations (change le comportement : à valider une par une).
 
 ## Fichiers
