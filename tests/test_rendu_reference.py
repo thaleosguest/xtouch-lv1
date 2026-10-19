@@ -97,12 +97,12 @@ midi = MidiEnregistre()
 # Ordre de l'installation de Joseph : Extender à GAUCHE (tranches 1-8), X-Touch à droite (master).
 units = [("Extender", X.ID_EXT, "ext"), ("X-Touch", X.ID_MAIN, "main")]
 state = D.LV1State()
-surface = D.Surface(midi, units)
+xt = D.Surface(midi, units)
 gain = D.GainControl(state, None, write=False, lv1=None)
 sends = D.SendControl(state, None, write=False, gain=gain)
 buttons = D.ButtonControl(state, None, write=False, page=0)
 MASTER_CIBLE = (3, 0)          # fader master -> LR, comme le défaut --master 3:0
-entries = [None] * surface.strips
+entries = [None] * xt.strips
 sortie = []
 
 
@@ -113,7 +113,7 @@ def rendu(etiquette):
     now = Clock.now
     avant = len(midi.log)
     view = state.view
-    top, bot, cols, lvls, fads, layer_name, entries = D.build_frame(state, view, surface.strips, {})
+    top, bot, cols, lvls, fads, layer_name, entries = D.build_frame(state, view, xt.strips, {})
     send_leds = sends.frame(entries, top, bot, cols, fads, {})
     master_now = sends.aux_track() or MASTER_CIBLE
     entries = list(entries) + [None] * (D.MASTER - len(entries)) + [master_now]
@@ -123,23 +123,23 @@ def rendu(etiquette):
             connecte = state.connected
             mdb = state.tracks.get(master_now, {}).get("fader")
         master_fv = D.db_to_fader(mdb) if connecte and mdb is not None else None
-    rings, recs = gain.frame(entries[:surface.strips], bot)
-    surface.push(top, bot, cols, lvls, fads, now, (), master_fv)
-    surface.push_leds(*send_leds, recs=recs)
-    surface.push_rings(rings)
-    surface.set_main_led(D.NOTE_TRACK, gain.mode)
-    surface.set_main_led(D.NOTE_PAN, gain.pan_mode)
-    surface.set_main_led(D.NOTE_SEND, sends.aux is not None or (sends.picking and int(now * 3) % 2 == 0))
+    rings, recs = gain.frame(entries[:xt.strips], bot)
+    xt.push(top, bot, cols, lvls, fads, now, (), master_fv)
+    xt.push_leds(*send_leds, recs=recs)
+    xt.push_rings(rings)
+    xt.set_main_led(D.NOTE_TRACK, gain.mode)
+    xt.set_main_led(D.NOTE_PAN, gain.pan_mode)
+    xt.set_main_led(D.NOTE_SEND, sends.aux is not None or (sends.picking and int(now * 3) % 2 == 0))
     for k, on in enumerate(sends.fkey_leds()):
-        surface.set_main_led(D.NOTE_F1 + k, on)
+        xt.set_main_led(D.NOTE_F1 + k, on)
     with state.lock:
         lmode, ltab, lspill = state.layer_mode.get(state.view), state.lv1_tab, state.spill_lit
         sel = state.selected
         lr_db = state.tracks.get(master_now, {}).get("fader") if master_now else None
     for note, on in D.view_leds(lmode, ltab, lspill).items():
-        surface.set_main_led(note, on)
-    surface.set_main_led(D.NOTE_SMPTE, buttons.reaper_tc)
-    surface.set_main_led(D.NOTE_LED_SMPTE, False)          # REAPER absent dans le test
+        xt.set_main_led(note, on)
+    xt.set_main_led(D.NOTE_SMPTE, buttons.reaper_tc)
+    xt.set_main_led(D.NOTE_LED_SMPTE, False)          # REAPER absent dans le test
     if sends.picking:
         assign, timecode = D.seg_codes("SE", 2), D.seg_codes("SEL", 5) + D.seg_codes("", 5)
     elif sends.aux is not None:
@@ -148,7 +148,7 @@ def rendu(etiquette):
         timecode = D.seg_codes(sends.label() or "--", 5) + timecode[5:]
     else:
         assign, timecode = D.time_display(None, Clock.FIXE)
-    surface.push_master_display(assign, timecode)
+    xt.push_master_display(assign, timecode)
     nouveau = midi.log[avant:]
     if nouveau:                                            # Surface n'envoie que ce qui change : rien = rien à noter
         sortie.append("# %s | couche=%s" % (etiquette, layer_name))
@@ -163,7 +163,7 @@ for n, (addr, args) in enumerate(messages(), 1):
     D.handle(state, addr, args)
     rendu("msg %d %s" % (n, addr))
 
-# 2) ce que le journal ne contient pas (vumètres filtrés, gestes de la surface, états lus à l'écran)
+# 2) ce que le journal ne contient pas (vumètres filtrés, gestes de la xt, états lus à l'écran)
 state.connected = True
 for g, ch, sub, db in ((0, 0, 0, -6.0), (0, 1, 0, -18.0), (0, 2, 0, -60.0), (3, 0, 0, -3.0)):
     D.handle(state, "/Notify/Meters", [("i", 1), ("i", g), ("i", ch), ("i", sub), ("f", db)])

@@ -31,7 +31,6 @@ Usage :
 Arrêt : Ctrl+C (les écrans et vumètres sont remis à zéro).
 """
 import argparse
-import colorsys
 import json
 import os
 import socket
@@ -39,7 +38,6 @@ import sys
 import threading
 import time
 import queue
-import unicodedata
 
 import lv1_probe as L
 import osc
@@ -53,6 +51,11 @@ from surface.notes import (XT, TOUCH_NOTES, MASTER, NOTE_REC, NOTE_SOLO, NOTE_MU
                            NOTE_CLICK, NOTE_REW, NOTE_FF, NOTE_STOP, NOTE_PLAY, NOTE_RECORD, NOTE_UP,
                            NOTE_DOWN, NOTE_LEFT, NOTE_RIGHT, NOTE_ZOOM, NOTE_SCRUB, TRANSPORT_NOTES,
                            NOTE_DISPLAY, NOTE_SAVE, NOTE_ENTER)
+# Étape 6 : MIDI, envoi vers la X-Touch et textes affichés dans surface/ (réexportés : D.Surface, D.seg_codes…)
+from surface.display import ascii7, fader_text, rgb_to_xtouch, SIDE_NAMES, gain_label, seg_codes, time_display
+from surface.midi import WinMidiIn, SafeMidi
+from surface.xtouch import METER_REFRESH, FADER_TOL
+from surface import xtouch as _xtouch
 
 VERSION = "0.3"
 # Dossier des fichiers de Joseph (réglages, courbe, journaux, reaper/) : à côté de l'exe une fois compilé (build.py)
@@ -66,15 +69,9 @@ METER_STEPS = [-60.0, -50.0, -42.0, -36.0, -30.0, -24.0, -18.0, -12.0, -9.0, -6.
 
 METER_STALE = 1.0       # s : voie de vumètre qui n'arrive plus = disparue (stéréo -> mono)
 TICK = 0.05             # 20 rafraîchissements par seconde
-METER_REFRESH = 0.25    # renvoi d'un niveau inchangé (le vumètre retombe tout seul sinon)
 
 
 # ─── Conversions ──────────────────────────────────────────────────────────────
-
-def ascii7(text):
-    t = unicodedata.normalize("NFKD", text or "").encode("ascii", "ignore").decode("ascii")
-    return t.strip()
-
 
 def short_name(name, group, ch):
     """« Channel 6 » -> « In 6 » (comme dans X/M32 Gain Recall), sinon le nom LV1 sur 7 caractères."""
@@ -95,36 +92,6 @@ GROUP_TAG = {0: "In", 1: "Grp", 2: "Fx", 3: "LR", 4: "C", 5: "M", 6: "Mtx", 7: "
 def default_label(group, ch):
     tag = GROUP_TAG.get(group, "g%d" % group)
     return tag if group in (3, 4, 5, 7, 8) else "%s %d" % (tag, ch + 1)
-
-
-def fader_text(db):
-    if db is None:
-        return ""
-    if db <= -120:
-        return "  -inf"
-    return ("%+.1f" % db).rjust(6)
-
-
-def rgb_to_xtouch(rgb):
-    """RVB 0..1 -> couleur X-Touch la plus proche, par la teinte."""
-    if not rgb:
-        return XT["blanc"]
-    r, g, b = rgb
-    h, s, v = colorsys.rgb_to_hsv(r, g, b)
-    if s < 0.25 or v < 0.15:
-        return XT["blanc"]
-    deg = h * 360.0
-    if deg < 20 or deg >= 330:
-        return XT["rouge"]
-    if deg < 75:
-        return XT["jaune"]
-    if deg < 160:
-        return XT["vert"]
-    if deg < 200:
-        return XT["cyan"]
-    if deg < 260:
-        return XT["bleu"]
-    return XT["violet"]
 
 
 # Courbe dB -> course du fader (0..1). Provisoire : haut = +10 dB, 0 dB aux 3/4.
@@ -685,272 +652,22 @@ class LV1Link(threading.Thread):
 
 # ─── Surface X-Touch ──────────────────────────────────────────────────────────
 
-class Surface:
-    def __init__(self, midi, units):
-        """units = liste ordonnée de (libellé, id sysex, handle) ; 8 tranches par unité."""
-        self.midi = midi
-        self.units = units
-        self.sent_lcd = {}     # (unité, ligne) -> texte de 56 caractères
-        self.sent_color = {}   # unité -> tuple de 8 couleurs
-        self.sent_meter = {}   # (unité, tranche) -> (niveau, instant)
-        self.sent_fader = {}   # (unité, tranche) -> valeur 14 bits
-        self.motor = {}        # tranche -> (valeur, instant) de la dernière commande moteur
-        self.sent_led = {}     # (unité, note) -> 0 | 127
-        self.sent_ring = {}    # (unité, encodeur) -> valeur de couronne
-        self.sent_seg = {}     # CC de l'afficheur 7 segments -> code envoyé
-        # Le master est sur la X-Touch (canal MIDI 8) ; l'Extender n'en a pas.
-        self.master_unit = next((i for i, un in enumerate(units) if un[0] == "X-Touch"), None)
+class Surface(_xtouch.Surface):
+    """surface.xtouch.Surface + journal des commandes moteur (le journal est remplacé au démarrage : lu à l'appel)."""
 
-    def addr(self, strip):
-        """Tranche -> (unité, canal MIDI du fader)."""
-        if strip == MASTER:
-            return (self.master_unit, 8) if self.master_unit is not None else (None, None)
-        return strip // 8, strip % 8
-
-    def strip_of(self, unit, chan):
-        """(unité, canal MIDI du fader) -> tranche, ou None."""
-        if chan == 8:
-            return MASTER if unit == self.master_unit else None
-        return 8 * unit + chan if chan < 8 else None
-
-    def note_position(self, strip, value):
-        """La main a mis le fader à cette valeur : on la renvoie aussitôt à la X-Touch (écho Mackie).
-
-        Sans cet écho, la X-Touch garde la dernière position envoyée par l'ordinateur et, au
-        relâchement, son moteur y ramène le fader (constaté le 14/10 : retour à -14,6 dB)."""
-        u, s = self.addr(strip)
-        if u is None:
-            return
-        if u < len(self.units):
-            h = self.units[u][2]
-            self.midi.short(h, 0xE0 | s, value & 0x7F, (value >> 7) & 0x7F)
-        self.sent_fader[(u, s)] = value
-
-    def set_led(self, unit, note, on):
-        """LED d'un bouton Mackie : note on, vélocité 127 = allumée, 0 = éteinte."""
-        v = 127 if on else 0
-        if self.sent_led.get((unit, note)) != v and unit < len(self.units):
-            self.midi.short(self.units[unit][2], 0x90, note, v)
-            self.sent_led[(unit, note)] = v
-
-    def push_leds(self, mutes, solos, selects=(), recs=()):
-        selects = list(selects) + [False] * (len(mutes) - len(selects))
-        recs = list(recs) + [False] * (len(mutes) - len(recs))
-        for i, (m, so, se, r) in enumerate(zip(mutes, solos, selects, recs)):
-            u, s = i // 8, i % 8
-            self.set_led(u, NOTE_MUTE + s, bool(m))
-            self.set_led(u, NOTE_SOLO + s, bool(so))
-            self.set_led(u, NOTE_REC + s, bool(r))
-            self.set_led(u, NOTE_SELECT + s, bool(se))
-
-    def push_rings(self, values):
-        """Couronnes de LED des encodeurs : CC 0x30+n, valeur Mackie (mode << 4) | position 0..11."""
-        for i, v in enumerate(values):
-            u, s = i // 8, i % 8
-            if u < len(self.units) and self.sent_ring.get((u, s)) != v:
-                self.midi.short(self.units[u][2], 0xB0, 0x30 + s, v)
-                self.sent_ring[(u, s)] = v
-
-    def push_master_display(self, assign, timecode):
-        """Afficheur 7 segments : assign = 2 codes (gauche, droite), timecode = 10 codes (gauche -> droite)."""
-        if self.master_unit is None:
-            return
-        h = self.units[self.master_unit][2]
-        for cc, v in ((CC_ASSIGN_L, assign[0]), (CC_ASSIGN_R, assign[1])):
-            if self.sent_seg.get(cc) != v:
-                self.midi.short(h, 0xB0, cc, v)
-                self.sent_seg[cc] = v
-        for k, v in enumerate(timecode):
-            cc = CC_TIMECODE + (len(timecode) - 1 - k)
-            if self.sent_seg.get(cc) != v:
-                self.midi.short(h, 0xB0, cc, v)
-                self.sent_seg[cc] = v
-
-    def set_main_led(self, note, on):
-        """LED d'un bouton de la X-Touch principale (TRACK…)."""
-        if self.master_unit is not None:
-            self.set_led(self.master_unit, note, on)
-
-    @property
-    def strips(self):
-        return 8 * len(self.units)
-
-    def push(self, labels_top, labels_bot, colors, levels, faders, now, held=(), master_fv=None):
-        if master_fv is not None and self.master_unit is not None and MASTER not in held:
-            key = (self.master_unit, 8)
-            prev_f = self.sent_fader.get(key)
-            if prev_f is None or abs(prev_f - master_fv) > FADER_TOL or (master_fv == 0) != (prev_f == 0):
-                h = self.units[self.master_unit][2]
-                self.midi.short(h, 0xE8, master_fv & 0x7F, (master_fv >> 7) & 0x7F)
-                self.sent_fader[key] = master_fv
-                self.motor[MASTER] = (master_fv, now)
-                JOURNAL.mark("moteur master -> %d (%s dB)" % (master_fv, fader_to_db(master_fv)))
-        for u, (_, dev, h) in enumerate(self.units):
-            sl = slice(8 * u, 8 * u + 8)
-            for row, labels in ((0, labels_top[sl]), (1, labels_bot[sl])):
-                text = "".join(x[:7].ljust(7) for x in labels)
-                if self.sent_lcd.get((u, row)) != text:
-                    self.midi.long(h, X.msg_lcd(dev, 0 if row == 0 else 56, text))
-                    self.sent_lcd[(u, row)] = text
-            cols = tuple(colors[sl])
-            if self.sent_color.get(u) != cols:
-                self.midi.long(h, X.msg_colors(dev, cols))
-                self.sent_color[u] = cols
-            for s in range(8):
-                fv = faders[8 * u + s]
-                prev_f = self.sent_fader.get((u, s))
-                if (8 * u + s) not in held and (prev_f is None or abs(prev_f - fv) > FADER_TOL
-                                                  or (fv == 0) != (prev_f == 0)):
-                    self.midi.short(h, 0xE0 | s, fv & 0x7F, (fv >> 7) & 0x7F)
-                    self.sent_fader[(u, s)] = fv
-                    self.motor[8 * u + s] = (fv, now)
-                    JOURNAL.mark("moteur tranche %d -> %d (%s dB)" % (8 * u + s + 1, fv, fader_to_db(fv)))
-                lvl = levels[8 * u + s]
-                prev = self.sent_meter.get((u, s))
-                if prev is None or prev[0] != lvl or (lvl > 0 and now - prev[1] >= METER_REFRESH):
-                    st, d1 = X.msg_meter(s, lvl)
-                    self.midi.short(h, st, d1)
-                    self.sent_meter[(u, s)] = (lvl, now)
-
-    def clear(self):
-        for u, (_, dev, h) in enumerate(self.units):
-            try:
-                for s in range(8):
-                    st, d1 = X.msg_meter(s, 0)
-                    self.midi.short(h, st, d1)
-                    self.midi.short(h, 0xE0 | s, 0, 0)
-                    for base in (NOTE_REC, NOTE_SOLO, NOTE_MUTE, NOTE_SELECT):
-                        self.midi.short(h, 0x90, base + s, 0)
-                    self.midi.short(h, 0xB0, 0x30 + s, 0)
-                if u == self.master_unit:
-                    self.midi.short(h, 0x90, NOTE_TRACK, 0)
-                    self.midi.short(h, 0x90, NOTE_PAN, 0)
-                    self.midi.short(h, 0x90, NOTE_RUDE_SOLO, 0)
-                    self.midi.short(h, 0x90, NOTE_SEND, 0)
-                    self.midi.short(h, 0x90, NOTE_SOLO_ALL, 0)
-                    self.midi.short(h, 0x90, NOTE_FLIP, 0)
-                    for note in (NOTE_INPUTS, NOTE_BUSES, NOTE_USER, NOTE_GROUP, NOTE_GLOBAL_VIEW, NOTE_SMPTE,
-                                 NOTE_LED_SMPTE):
-                        self.midi.short(h, 0x90, note, 0)
-                    for k in range(8):
-                        self.midi.short(h, 0x90, NOTE_F1 + k, 0)
-                    for cc in list(range(CC_TIMECODE, CC_TIMECODE + 10)) + [CC_ASSIGN_L, CC_ASSIGN_R]:
-                        self.midi.short(h, 0xB0, cc, 0x20)
-                if u == self.master_unit:
-                    self.midi.short(h, 0xE8, 0, 0)
-                self.midi.long(h, X.msg_colors(dev, [7] * 8))
-                self.midi.long(h, X.msg_lcd(dev, 0, " " * 112))
-            except OSError:
-                pass
+    def motor_note(self, what, value):
+        JOURNAL.mark("moteur %s -> %d (%s dB)" % (what, value, fader_to_db(value)))
 
 
 # ─── Entrée MIDI (faders, toucher, boutons) ───────────────────────────────────
 
-class WinMidiIn:
-    """Entrée MIDI Windows (winmm). Les messages arrivent dans une file : (unité, status, d1, d2, instant)."""
-    MIM_DATA = 0x3C3
-    CALLBACK_FUNCTION = 0x00030000
-
-    def __init__(self, events):
-        import ctypes
-        from ctypes import wintypes as wt
-        self.ct = ctypes
-        self.w = ctypes.WinDLL("winmm")
-        self.events = events
-        self.handles = []
-        self._keep = []
-
-        class MIDIINCAPSW(ctypes.Structure):
-            _fields_ = [("wMid", wt.WORD), ("wPid", wt.WORD), ("vDriverVersion", wt.UINT),
-                        ("szPname", wt.WCHAR * 32), ("dwSupport", wt.DWORD)]
-        self.CAPS = MIDIINCAPSW
-        self.PROC = ctypes.WINFUNCTYPE(None, ctypes.c_void_p, wt.UINT, ctypes.c_size_t,
-                                       ctypes.c_size_t, ctypes.c_size_t)
-        w = self.w
-        w.midiInGetNumDevs.restype = wt.UINT
-        w.midiInGetDevCapsW.argtypes = [ctypes.c_size_t, ctypes.POINTER(MIDIINCAPSW), wt.UINT]
-        w.midiInOpen.argtypes = [ctypes.POINTER(ctypes.c_void_p), wt.UINT, ctypes.c_void_p,
-                                 ctypes.c_size_t, wt.DWORD]
-        w.midiInStart.argtypes = [ctypes.c_void_p]
-        w.midiInStop.argtypes = [ctypes.c_void_p]
-        w.midiInClose.argtypes = [ctypes.c_void_p]
-
-    def list(self):
-        out = []
-        for i in range(self.w.midiInGetNumDevs()):
-            caps = self.CAPS()
-            if self.w.midiInGetDevCapsW(i, self.ct.byref(caps), self.ct.sizeof(caps)) == 0:
-                out.append((i, caps.szPname))
-        return out
-
-    def open(self, index, unit):
-        def cb(hmi, msg, inst, p1, p2, unit=unit):
-            if msg == self.MIM_DATA:
-                self.events.put((unit, p1 & 0xFF, (p1 >> 8) & 0x7F, (p1 >> 16) & 0x7F, time.time()))
-        proc = self.PROC(cb)
-        self._keep.append(proc)
-        h = self.ct.c_void_p()
-        r = self.w.midiInOpen(self.ct.byref(h), index, self.ct.cast(proc, self.ct.c_void_p), 0,
-                              self.CALLBACK_FUNCTION)
-        if r != 0:
-            raise OSError("entrée MIDI %d : erreur %d%s" % (index, r, " (déjà ouverte ?)" if r == 4 else ""))
-        self.w.midiInStart(h)
-        self.handles.append(h)
-        return h
-
-    def close_all(self):
-        for h in self.handles:
-            try:
-                self.w.midiInStop(h)
-                self.w.midiInClose(h)
-            except OSError:
-                pass
-        self.handles = []
-
-
 EVENTS = queue.Queue()  # messages MIDI reçus (global : les tests peuvent en injecter)
-FADER_TOL = 48          # écart (sur 16383) en dessous duquel on ne bouge pas le moteur
 HOLD_AFTER = 0.3        # s pendant lesquelles un fader lâché reste « tenu » (retours LV1 ignorés)
 MOTOR_BUSY = 1.5        # s après une commande moteur : un fader bougé sans toucher est le moteur, pas la main
 NAIL_SHOW = 0.15        # s : point de toucher d'un fader bougé sans toucher détecté, après son dernier mouvement
 UNTOUCHED_MIN = 80      # écart (sur 16383) qu'un fader non touché doit faire pour démarrer un geste (ongle)
 STALE_FOR = 2.0         # s après le relâchement pendant lesquelles un retour « périmé » est ignoré
 SEND_EVERY = 0.02       # envoi max d'une valeur par fader toutes les 20 ms
-
-
-SIDE_NAMES = {0: "L", 1: "R"}
-
-
-def gain_label(gains, side=0):
-    """Texte (7 car. max) du gain d'une tranche : mono « +12.0 » ; stéréo : côté réglé « L+12.0 » / « R+11.5 »."""
-    if not gains or any(g is None for g in gains):
-        return "  -"
-    if len(gains) == 2:
-        return "%s%+.1f" % ("LR"[side], gains[side])
-    return "%+.1f" % gains[0]
-
-
-# Codes : ASCII 0x40-0x5F (@, A-Z…) -> valeur - 0x40 ; ASCII 0x20-0x3F (espace, chiffres, -) -> tel quel ;
-# + 0x40 = point décimal allumé. Choix de Joseph (option C) : canal sélectionné + son gain, fader LR.
-
-
-def seg_codes(text, width):
-    """Texte -> `width` codes 7 segments (de gauche à droite), points fusionnés dans le caractère précédent,
-    aligné à droite. Caractères non affichables (+, minuscules…) : convertis ou remplacés par un espace."""
-    out = []
-    for c in text.upper():
-        if c == "." and out:
-            out[-1] |= 0x40
-            continue
-        o = ord(c)
-        if 0x40 <= o <= 0x5F:
-            out.append(o - 0x40)
-        elif 0x20 <= o <= 0x3F and c != "+":
-            out.append(o)
-        else:
-            out.append(0x20)
-    out = out[-width:]
-    return [0x20] * (width - len(out)) + out
 
 
 def master_display(selected, gain_db, side, stereo, lr_db):
@@ -975,22 +692,6 @@ def master_display(selected, gain_db, side, stereo, lr_db):
     left = seg_codes(g, 5)
     right = seg_codes(lr, 5)
     return seg_codes(num[-2:], 2), left + right
-
-
-def time_display(seconds, clock):
-    """Afficheur 7 segments hors mode sends (demande de Joseph du 16/10/2026, remplace le canal sélectionné / gain / LR :
-    « assez d'indices avec l'écran ») : (2 car. assignment, 10 car. timecode), groupes 3-2-2-3 de la X-Touch.
-    seconds = position de REAPER LV1 (/time) -> heures.minutes.secondes.millièmes ; None -> heure du PC (`clock`,
-    struct_time : la même que l'horloge de la LV1, qui tourne sur ce PC) en heures.minutes.secondes."""
-    if seconds is not None:
-        ms = int(round(max(0.0, seconds) * 1000))
-        h, ms = divmod(ms, 3600000)
-        m, ms = divmod(ms, 60000)
-        s, ms = divmod(ms, 1000)
-        text = "%3d.%02d.%02d.%03d" % (h % 1000, m, s, ms)
-    else:
-        text = "%3d.%02d.%02d   " % (clock.tm_hour, clock.tm_min, clock.tm_sec)
-    return seg_codes("", 2), seg_codes(text, 10)
 
 
 def layer_toast(layer_name):
@@ -2447,43 +2148,6 @@ def start_gain_recall():
     print("  X/M32 Gain Recall : lancé (%s)" % exe)
 
 
-class SafeMidi:
-    """Sorties MIDI qui ne plantent pas quand la X-Touch disparaît (USB débranché, veille, X-Touch éteinte : « envoi
-    court : There is no driver installed on your system », plantage de la 0.2 chez Joseph le 18/10). La 1re erreur est
-    notée dans `lost`, les envois suivants sont ignorés, et la boucle principale attend la X-Touch puis rouvre tout."""
-
-    def __init__(self, midi):
-        self.midi, self.lost = midi, None
-
-    def list(self):
-        return self.midi.list()
-
-    def open(self, index):
-        return self.midi.open(index)
-
-    def close(self, h):
-        try:
-            self.midi.close(h)
-        except OSError:
-            pass
-
-    def short(self, h, *args):
-        if self.lost:
-            return
-        try:
-            self.midi.short(h, *args)
-        except OSError as e:
-            self.lost = str(e)
-
-    def long(self, h, data):
-        if self.lost:
-            return
-        try:
-            self.midi.long(h, data)
-        except OSError as e:
-            self.lost = str(e)
-
-
 def open_units(midi, a, wait=False):
     """Ouvre les sorties X-Touch / Extender : [(libellé, id SysEx, handle)] (Extender d'abord sauf --ext-droite), ou
     [] si aucune. wait : attendre le branchement USB (vérifié toutes les 2 s) ; None si « Quitter » pendant l'attente."""
@@ -2763,7 +2427,7 @@ def main():
     state.view = fixed_view or 0
     link = LV1Link(state, a.host, a.port)
     link.start()
-    surface = Surface(midi, units)
+    xt = Surface(midi, units)
     faders = FaderControl(state, link, write=not a.lecture_seule)
     buttons = ButtonControl(state, link, write=not a.lecture_seule, page=state.view,
                             busy=lambda: bool(faders.held(time.time())))
@@ -2885,7 +2549,7 @@ def main():
         print("  Clics LV1 : la LV1 suit BANK et la sélection, la X-Touch suit la sélection LV1 (Mixer suivi : %s)."
               % ("onglet affiché" if fixed_view is None else "Mixer %d" % (fixed_view + 1)))
     print("Recherche de la LV1… (Ctrl+C pour arrêter)")
-    entries = [None] * surface.strips
+    entries = [None] * xt.strips
     master_target = None
     if a.master.lower() not in ("aucun", "none", "off"):
         try:
@@ -2893,7 +2557,7 @@ def main():
             master_target = (g_, c_)
         except ValueError:
             print("  --master %r invalide (attendu groupe:canal, ex. 3:0) : master désactivé." % a.master)
-    if master_target and surface.master_unit is not None:
+    if master_target and xt.master_unit is not None:
         print("  Fader master -> %s" % default_label(*master_target))
     last_layer = object()
     last_toast = [None]                   # dernier (Mixer, nom) notifié (pas deux notifs pour la même couche)
@@ -2934,7 +2598,7 @@ def main():
                 midi.lost = None
                 inputs_open = open_inputs(midi_in, units) if (midi_in and units) else 0
                 ports_check[0] = time.time()
-                surface = Surface(midi, units)           # caches vides : tout est renvoyé (écrans, LED, moteurs)
+                xt = Surface(midi, units)           # caches vides : tout est renvoyé (écrans, LED, moteurs)
                 JOURNAL.mark("X-Touch reconnectée (%d unité(s))" % len(units))
                 print("  X-Touch reconnectée.")
                 if not units:
@@ -2948,12 +2612,12 @@ def main():
                         unit, st, d1, d2, t = events.get_nowait()
                     except queue.Empty:
                         break
-                if not (faders.on_midi(unit, st, d1, d2, t, entries, surface)
-                        or sends.on_midi(unit, st, d1, d2, t, entries, surface)
-                        or gain.on_midi(unit, st, d1, d2, t, entries, surface)
-                        or transport.on_midi(unit, st, d1, d2, t, entries, surface)
-                        or (apps is not None and apps.on_midi(unit, st, d1, d2, t, entries, surface))
-                        or buttons.on_midi(unit, st, d1, d2, t, entries, surface)):
+                if not (faders.on_midi(unit, st, d1, d2, t, entries, xt)
+                        or sends.on_midi(unit, st, d1, d2, t, entries, xt)
+                        or gain.on_midi(unit, st, d1, d2, t, entries, xt)
+                        or transport.on_midi(unit, st, d1, d2, t, entries, xt)
+                        or (apps is not None and apps.on_midi(unit, st, d1, d2, t, entries, xt))
+                        or buttons.on_midi(unit, st, d1, d2, t, entries, xt)):
                     JOURNAL.mark("MIDI unité %d : %02X %02X %02X" % (unit, st, d1, d2))
             held = faders.flush(now)
             view = state.view
@@ -2963,7 +2627,7 @@ def main():
                     overlay.set_mixer(view + 1)
                 if apps is not None:
                     apps.mixer = view + 1
-            top, bot, cols, lvls, fads, layer_name, entries = build_frame(state, view, surface.strips, overrides)
+            top, bot, cols, lvls, fads, layer_name, entries = build_frame(state, view, xt.strips, overrides)
             send_leds = sends.frame(entries, top, bot, cols, fads, overrides)
             master_now = sends.aux_track() or master_target      # mode SEND : fader master = master de l'aux
             entries = list(entries) + [None] * (MASTER - len(entries)) + [master_now]
@@ -2982,31 +2646,31 @@ def main():
                         last_toast[0] = (view, toast)                          # (re-notifiée en changeant de Mixer)
                         overlay.set_layer(toast)
                 last_layer = layer_name
-            rings, recs = gain.frame(entries[:surface.strips], bot)
-            surface.push(top, bot, cols, lvls, fads, now, held, master_fv)
-            surface.push_leds(*send_leds, recs=recs)
-            surface.push_rings(rings)
-            surface.set_main_led(NOTE_TRACK, gain.mode)
-            surface.set_main_led(NOTE_PAN, gain.pan_mode)
-            surface.set_main_led(NOTE_SEND, sends.aux is not None or (sends.picking and int(now * 3) % 2 == 0))
+            rings, recs = gain.frame(entries[:xt.strips], bot)
+            xt.push(top, bot, cols, lvls, fads, now, held, master_fv)
+            xt.push_leds(*send_leds, recs=recs)
+            xt.push_rings(rings)
+            xt.set_main_led(NOTE_TRACK, gain.mode)
+            xt.set_main_led(NOTE_PAN, gain.pan_mode)
+            xt.set_main_led(NOTE_SEND, sends.aux is not None or (sends.picking and int(now * 3) % 2 == 0))
             if scene_bridge:
                 scene_relay(state, scene_bridge, link, now, write=not a.lecture_seule)
                 if now - tracks_sent[0] >= 1.0:                  # liste des entrées pour la synchro des pistes Reaper
                     tracks_sent[0] = now
                     scene_bridge.write_tracks(input_list(state))
             if apps is not None:
-                surface.set_main_led(NOTE_DISPLAY, apps.front == "reaper")      # LED DISPLAY = Reaper devant
+                xt.set_main_led(NOTE_DISPLAY, apps.front == "reaper")      # LED DISPLAY = Reaper devant
             if reaper:
                 for note, on in transport.leds().items():
-                    surface.set_main_led(note, on)
+                    xt.set_main_led(note, on)
             for k, on in enumerate(sends.fkey_leds()):
-                surface.set_main_led(NOTE_F1 + k, on)
+                xt.set_main_led(NOTE_F1 + k, on)
             with state.lock:
                 lmode, ltab, lspill = state.layer_mode.get(state.view), state.lv1_tab, state.spill_lit
             for note, on in view_leds(lmode, ltab, lspill).items():       # touches View = mode de couche / onglet All
-                surface.set_main_led(note, on)
-            surface.set_main_led(NOTE_SMPTE, buttons.reaper_tc)   # SMPTE : timecode choisi ; LED SMPTE : affiché
-            surface.set_main_led(NOTE_LED_SMPTE, bool(buttons.reaper_tc and reaper and reaper.alive()))
+                xt.set_main_led(note, on)
+            xt.set_main_led(NOTE_SMPTE, buttons.reaper_tc)   # SMPTE : timecode choisi ; LED SMPTE : affiché
+            xt.set_main_led(NOTE_LED_SMPTE, bool(buttons.reaper_tc and reaper and reaper.alive()))
             with state.lock:
                 sel = state.selected
                 any_solo = any(t.get("solo") for t in state.tracks.values())
@@ -3024,7 +2688,7 @@ def main():
             else:                                            # position de REAPER LV1, sinon heure (Joseph, 16/10)
                 tc = reaper.time if (buttons.reaper_tc and reaper and reaper.alive()) else None
                 assign, timecode = time_display(tc, time.localtime())
-            surface.push_master_display(assign, timecode)
+            xt.push_master_display(assign, timecode)
             if overlay:
                 if faders.held(now):                       # touché, ou bougé sans toucher (ongle) : bandeau affiché
                     recall_until[0] = now + RECALL_HOLD
@@ -3055,11 +2719,11 @@ def main():
                             print("  Diagonale B cassée (%d canaux : %s) : page Patch > Input B, puis ENTER."
                                   % (len(bad), ", ".join(bad[:5]) + ("…" if len(bad) > 5 else "")))
                             JOURNAL.mark("diagonale B cassée : %s" % bad)
-            surface.set_main_led(NOTE_RUDE_SOLO, any_solo and int(now * 2) % 2 == 0)   # clignote si un solo
-            surface.set_main_led(NOTE_SOLO_ALL, any_solo)                                # SOLO : allumé si un solo
+            xt.set_main_led(NOTE_RUDE_SOLO, any_solo and int(now * 2) % 2 == 0)   # clignote si un solo
+            xt.set_main_led(NOTE_SOLO_ALL, any_solo)                                # SOLO : allumé si un solo
             with state.lock:
                 on_b, ch_at = state.on_b, state.channels_at
-            surface.set_main_led(NOTE_FLIP, bool(on_b))                                  # FLIP : entrées sur B
+            xt.set_main_led(NOTE_FLIP, bool(on_b))                                  # FLIP : entrées sur B
             if ch_at != ab_seen[0] and now - ch_at > 1.0 and not a.dry_run:              # état renvoyé (Flip A/B…)
                 ab_seen[0] = ch_at
                 def reload_all():
@@ -3081,7 +2745,7 @@ def main():
             overlay.stop()
         if midi_in:
             midi_in.close_all()
-        surface.clear()
+        xt.clear()
         for _, _, h in units:
             midi.close(h)
         print("\nArrêté, écrans remis à zéro.")

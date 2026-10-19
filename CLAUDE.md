@@ -168,7 +168,15 @@ Règle : une étape = un commit, les 28 tests verts + compilation après chacune
   `split_frames`, `TX_HEADER`, `HEADER_LEN`), code identique à celui de `lv1_probe` (vérifié). `lv1_probe` les réexporte
   (tests : `P.frame` etc. inchangés) et garde la découverte (`discover`, `connect_any`, `local_ipv4s`) et `short_args`.
   Le pont et `lv1_capture` : `osc.*` pour l'OSC, `L.*` pour la découverte ; `reaper_link` : `import osc as P` seulement.
-- Étapes suivantes : 6 `surface/` (MIDI + rendu), 7 découpe de `LV1State`, 8 `bridge/` (contrôleurs),
+- **Étape 6 faite** : `surface/midi.py` (`WinMidiIn`, `SafeMidi`), `surface/xtouch.py` (`Surface`, `FADER_TOL`,
+  `METER_REFRESH`), `surface/display.py` (`ascii7`, `fader_text`, `rgb_to_xtouch`, `SIDE_NAMES`, `gain_label`,
+  `seg_codes`, `time_display`) ; code identique (comparé à l'arbre syntaxique). Seule retouche : `Surface` appelle
+  `motor_note(what, value)` (vide) au lieu d'écrire au journal ; le pont garde `class Surface(_xtouch.Surface)` qui
+  l'écrit (JOURNAL est remplacé au démarrage et par un test : lu à l'appel) -> journal et MIDI vérifiés identiques.
+  Variable locale `surface` de `main()` (et du test de référence) renommée `xt`. Restés dans le pont : noms LV1
+  (`short_name`, `GROUP_TAG`), `master_display`, `pan_label`, `send_label` (courbe de fader), `layer_toast` ;
+  `open_units` / `open_inputs` / `ports_missing` (journal + STOP) partiront avec `App` (étape 9).
+- Étapes suivantes : 7 découpe de `LV1State`, 8 `bridge/` (contrôleurs),
   9 classe `App` (fin de `main()`), 10 désynchronisations (change le comportement : à valider une par une).
 
 ## Fichiers
