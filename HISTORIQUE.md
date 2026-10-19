@@ -127,3 +127,11 @@ Chaque ligne correspond à un ou plusieurs commits git (`git log` pour le détai
   un solo d'entrée ne fait pas sortir des sends.
 - « Tout quitter » ferme aussi REAPER LV1 (et seulement lui).
 - Capture MyFOH (`tools/capture_myfoh.ps1`) : commandes trim, phase, EQ, solo trouvées.
+
+## 20/10/2026 : V0.7
+
+- Patch Input B : carte « INPUT B PATCH » sur la page Patch (zone vide des vignettes, style LV1, anglais) dès que la
+  diagonale est décalée, bouton REALIGN tactile (= ENTER de la X-Touch).
+- ENTER / REALIGN sécurisés : vignette du pilote local sélectionnée toute seule (rang dans la rangée), refus sans clic si
+  la grille ne correspond pas à la base ; beaucoup plus rapide (32 cases en 2,8 s au lieu de ~0,25 s par case).
+- Mono / stéréo changé sur la LV1 et pilote sans aucune route (déplacé dans le rack) : décalage détecté aussitôt.
