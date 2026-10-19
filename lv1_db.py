@@ -184,11 +184,15 @@ def driver_size(path=DB_PATH, driver=None):
 
 
 def driver_info(path=DB_PATH, driver=None):
-    """(nom, assign) du pilote SoundGrid (driver donné, sinon celui du PC de la LV1), ou (None, None). La page Patch
-    numérote ses vignettes dans l'ordre de l'inventaire : vignette n° assign + 1 (« 2. LV1-PORT » = assign 1)."""
-    for name, _g, assign, local in devices(path):
+    """(nom, vignette) du pilote SoundGrid (driver donné, sinon celui du PC de la LV1), ou (None, None). vignette =
+    position (1-based) dans la rangée de la page Patch. Relevé du 20/10 (Joseph déplace LV1-PORT en place 3, place 2
+    vide) : la rangée montre les appareils d'entrées/sorties et les pilotes PRÉSENTS, à la suite, dans l'ordre de leur
+    place (« 3. LV1-PORT » en 2e position) ; serveurs (SGS) et télécommandes à part. Donc vignette = rang, pas place."""
+    devs = devices(path)
+    for name, _g, assign, local in devs:
         if (driver and name.lower() == driver.lower()) or (not driver and local):
-            return name, assign
+            tiles = sorted(a for _n, g, a, _l in devs if g not in ("SGS", "Host") and a is not None)
+            return name, tiles.index(assign) + 1 if assign in tiles else None
     return None, None
 
 

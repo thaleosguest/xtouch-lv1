@@ -117,11 +117,11 @@ class AppControl:
             time.sleep(0.4)
 
     def patch_target(self):
-        """(vignette, attendu, n, nom) pour lv1_patch.fix_diagonal, tirés de l'état : vignette du pilote (assign + 1),
+        """(vignette, attendu, n, nom) pour lv1_patch.fix_diagonal, tirés de l'état : vignette du pilote (rang dans la rangée),
         lignes de l'entrée B déjà branchées sur le pilote d'après la base, nombre de voies d'entrée (au plus la taille
         du pilote). Lignes = voies des entrées dans l'ordre (2 par canal stéréo), comme diagonal_problems."""
         with self.state.lock:
-            name, assign = self.state.driver
+            name, tile = self.state.driver
             size, routing = self.state.driver_size, self.state.routing
             expect, row = {}, 0
             for (g, ch), t in sorted(self.state.tracks.items()):
@@ -132,7 +132,7 @@ class AppControl:
                     expect[row + k] = c
                 row += legs
         n = min(row, size) if (row and size) else None
-        return (assign + 1 if assign is not None else None), expect, n, name
+        return tile, expect, n, name
 
     def fix_patch(self, source="XT Enter"):
         """ENTER de la X-Touch ou bouton REALIGN de l'écran : un seul à la fois, sur un fil à part."""

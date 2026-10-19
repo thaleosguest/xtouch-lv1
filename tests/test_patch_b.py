@@ -1,5 +1,6 @@
 """Test : patch Input B sécurisé et plus rapide, alerte de la page Patch (demande de Joseph, 19/10/2026).
-- fix_diagonal sélectionne la vignette du pilote (assign + 1) si une autre l'est ; refuse si elle est hors de vue ;
+- fix_diagonal sélectionne la vignette du pilote si une autre l'est ; refuse si elle est hors de vue ;
+- lv1_db.driver_info : vignette = RANG parmi les appareils présents (place vide : rangée tassée), serveurs exclus ;
 - refus SANS clic si la grille affichée ne correspond pas à la base pour ce pilote (vignette défilée…) ;
 - clics à la suite, puis relecture et 2e passe pour les cases ratées ; pas de dézoom si toutes les lignes sont visibles ;
 - patch_alert : rien hors page Patch, « idle » / « busy » / « failed » + consigne anglaise / « done » ;
@@ -83,6 +84,18 @@ lv1 = FauxLV1(tile=1)
 res = P.fix_diagonal(n=6, tile=12, expect={}, name="LV1-PORT")
 check("vignette hors de vue : refus", not res[0] and "hors de vue" in res[1] and lv1.tile_clicks == [])
 
+
+# ── vignette = rang (relevé du 20/10 : LV1-PORT en place 3, place 2 vide -> 2e vignette)
+import lv1_db
+sauve = lv1_db.devices
+lv1_db.devices = lambda path=None: [("X32RACK", "IOBox", 0, False), ("LV1-PORT", "DAW", 2, True),
+                                    ("SG Server-2", "SGS", 0, False)]
+check("place 3, place 2 vide : vignette 2", lv1_db.driver_info() == ("LV1-PORT", 2))
+lv1_db.devices = lambda path=None: [("X32RACK", "IOBox", 0, False), ("S16", "IOBox", 1, False),
+                                    ("LV1-PORT", "DAW", 9, True), ("SG Server-2", "SGS", 0, False)]
+check("Rack B (place 10) : vignette 3", lv1_db.driver_info() == ("LV1-PORT", 3))
+check("--pilote nommé", lv1_db.driver_info(driver="s16") == ("S16", 2))
+lv1_db.devices = sauve
 
 # ── alerte de la page Patch
 class Apps:

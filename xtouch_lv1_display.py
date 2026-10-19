@@ -204,7 +204,7 @@ class ScreenModel:
         self.on_b = None          # entrées sur B ? (base LV1, relue après chaque Flip A/B) ; None = inconnu
         self.routing = {}         # canal -> {"rec": [...], "play": [...]} (pilote SoundGrid de ce PC, base LV1)
         self.driver_size = None   # nb de canaux de lecture du pilote (diagonale B : lignes 1..n)
-        self.driver = (None, None)  # (nom, assign) du pilote : vignette n° assign + 1 de la page Patch (ENTER, REALIGN)
+        self.driver = (None, None)  # (nom, n° de vignette dans la rangée de la page Patch) du pilote (ENTER, REALIGN)
 
 
 class BridgeState:

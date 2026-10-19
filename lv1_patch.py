@@ -229,7 +229,7 @@ def click_fast(grid, cells):
 def fix_diagonal(n=None, log=lambda m: None, tile=None, expect=None, name=None, passes=3):
     """Refait la diagonale (Patch > Input B ouvert) : vignette du pilote, dézoom si besoin, clics rapides, relecture,
     nouvelle passe pour les ratés. Rend (réussi, message). Utilisé par `diagonale --go`, ENTER de la X-Touch et le
-    bouton REALIGN de l'écran (pont). tile : vignette du pilote (assign + 1) ; expect : {ligne: colonne} de la base
+    bouton REALIGN de l'écran (pont). tile : vignette du pilote (rang dans la rangée, lv1_db.driver_info) ; expect : {ligne: colonne} de la base
     pour ce pilote ; n : nombre de lignes à patcher (voies des entrées, au plus la taille du pilote)."""
     grid, why = read_grid()
     if why:
