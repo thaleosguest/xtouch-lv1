@@ -1,0 +1,2 @@
+# Données des tests de référence : comparées octet par octet, jamais converties en CRLF (autocrlf de Windows)
+tests/data/*.txt text eol=lf
