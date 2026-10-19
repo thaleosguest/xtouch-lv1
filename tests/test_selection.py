@@ -73,7 +73,7 @@ MARKS = []
 class J:
     def write(self, *a): pass
     def mark(self, text): MARKS.append(text)
-D.JOURNAL = J()
+D.JOURNAL.current = J()
 
 CH_R, CH_L, SEL = 0x31, 0x30, 0x18
 def inject():

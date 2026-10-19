@@ -56,6 +56,7 @@ from surface.display import ascii7, fader_text, rgb_to_xtouch, SIDE_NAMES, gain_
 from surface.midi import WinMidiIn, SafeMidi
 from surface.xtouch import METER_REFRESH, FADER_TOL
 from surface import xtouch as _xtouch
+from bridge.journal import JOURNAL_SKIP, Journal, JournalSlot, JOURNAL
 
 VERSION = "0.3"
 # Dossier des fichiers de Joseph (réglages, courbe, journaux, reaper/) : à côté de l'exe une fois compilé (build.py)
@@ -360,34 +361,6 @@ def parse_layers(args):
             entries.append(None if (g == -1 and c == -1) else (g, c))
         layers.append((name, entries))
     return page, is_custom, layers
-
-
-JOURNAL_SKIP = {"/Notify/Meters", "/ping", "/Notify/NetworkCongestion", "/Notify/TempoBlink"}
-
-
-class Journal:
-    """Journal complet (arguments non tronqués) pour décoder couches, Custom, Spill, 80 canaux."""
-    def __init__(self, path):
-        self.path = path
-        self.t0 = time.time()
-        self.f = open(path, "w", encoding="utf-8") if path else None
-        self.lock = threading.Lock()
-
-    def write(self, address, args):
-        if not self.f or address in JOURNAL_SKIP:
-            return
-        with self.lock:
-            self.f.write("%.3f %s %s\n" % (time.time() - self.t0, address, L.short_args(args, 100000)))
-            self.f.flush()
-
-    def mark(self, text):
-        if self.f:
-            with self.lock:
-                self.f.write("%.3f ===== %s\n" % (time.time() - self.t0, text))
-                self.f.flush()
-
-
-JOURNAL = Journal(None)
 
 
 def handle(state, address, args):
@@ -902,8 +875,6 @@ class GainControl:
                 if self.mode and i < len(bot) and e is not None:
                     bot[i] = "  -"
         return rings, recs
-
-
 
 
 def flip_target(func, aux_tracks):
@@ -2411,10 +2382,9 @@ def main():
     if not a.dry_run and not a.sans_gain_recall and a.x32.lower() not in ("aucun", "none", "off"):
         threading.Thread(target=start_gain_recall, daemon=True).start()
 
-    global JOURNAL
     if not a.no_journal:
         jpath = os.path.join(HERE, "xtouch_journal_%s.txt" % time.strftime("%Y%m%d_%H%M%S"))
-        JOURNAL = Journal(jpath)
+        JOURNAL.current = Journal(jpath)          # emplacement partagé avec bridge/ (étape 8a)
         print("  Journal des messages LV1 : %s" % jpath)
 
     if a.dry_run:

@@ -31,7 +31,8 @@ MAJ = "--maj" in sys.argv
 
 # ── horloge figée : le rendu ne doit dépendre ni de l'heure ni de la vitesse de la machine ────────────────────
 class Clock:
-    """Remplace le module `time` DANS xtouch_lv1_display (lui seul : le test ne lance aucun fil)."""
+    """Remplace le module `time` dans xtouch_lv1_display ET les modules bridge/ (étape 8 : les contrôleurs y sont
+    partis) ; le test ne lance aucun fil."""
     now = 1000000.0
     FIXE = vraie_horloge.struct_time((2026, 10, 17, 15, 9, 46, 4, 290, 1))
 
@@ -52,6 +53,9 @@ class Clock:
 
 
 D.time = Clock()
+for _nom, _mod in list(sys.modules.items()):
+    if _nom.startswith("bridge.") and hasattr(_mod, "time"):
+        _mod.time = D.time
 
 
 # ── sortie MIDI qui enregistre au lieu d'envoyer ──────────────────────────────────────────────────────────────
