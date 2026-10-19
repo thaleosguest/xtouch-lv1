@@ -130,7 +130,9 @@ Règle : une étape = un commit, les 28 tests verts + compilation après chacune
   `xtouch_lv1_display` (`from surface.notes import (...)`) -> `D.NOTE_TRACK` et les tests marchent pareil.
   Attention : `main()` a une variable locale `surface` (l'objet `Surface`) qui n'a rien à voir avec le paquet
   `surface/` ; à renommer `xt` à l'étape 6.
-- Étapes suivantes : 2 propriété `page` unique, 3 `lv1/layout.py` (positions écran), 4 `lv1/screen.py` (fenêtres +
+- **Étape 2 faite** : mixin `FollowsView` (une seule propriété `page` -> `state.view`) hérité par LV1Clicker,
+  LayerModeWatcher, LV1SelectionWatcher et ButtonControl, au lieu de 4 copies.
+- Étapes suivantes : 3 `lv1/layout.py` (positions écran), 4 `lv1/screen.py` (fenêtres +
   lectures), 5 `osc.py`, 6 `surface/` (MIDI + rendu), 7 découpe de `LV1State`, 8 `bridge/` (contrôleurs),
   9 classe `App` (fin de `main()`), 10 désynchronisations (change le comportement : à valider une par une).
 ## Fichiers

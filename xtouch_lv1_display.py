@@ -326,6 +326,22 @@ class LV1State:
         return None, None
 
 
+class FollowsView:
+    """Objets qui suivent le Mixer affiché : leur `page` EST `state.view` (une seule valeur pour tout le pont).
+
+    Hérité par LV1Clicker, LayerModeWatcher, LV1SelectionWatcher et ButtonControl : avant (18/10) chacun avait sa
+    copie de la propriété, donc quatre endroits à corriger. `self.page = n` au démarrage impose la vue de départ
+    (option --mixer)."""
+
+    @property
+    def page(self):
+        return self.state.view
+
+    @page.setter
+    def page(self, value):
+        self.state.view = value
+
+
 def parse_layers(args):
     """/Notify/Layers : page, custom(0|1), nb, puis par couche : nom, n, (groupe, canal) x n."""
     if len(args) < 3 or any(a[0] != "i" for a in args[:3]):
@@ -1398,7 +1414,7 @@ class SendControl:
         return mutes, solos, selects
 
 
-class LV1Clicker(threading.Thread):
+class LV1Clicker(FollowsView, threading.Thread):
     """Fait suivre la LV1 par clics simulés (option --clic-lv1) : couche (BANK) et sélection (Select, CHANNEL).
 
     L'API réseau n'a pas ces commandes (Companion, capture MyFOH du 14/10). lv1_clic.py clique dans la fenêtre
@@ -1433,15 +1449,6 @@ class LV1Clicker(threading.Thread):
 
     def layer(self, k):
         self.q.put(("couche", k))
-
-    @property
-    def page(self):
-        """Mixer suivi (0 = Mixer 1, 1 = Mixer 2) : partagé par tout le pont (state.view), suit l'onglet affiché."""
-        return self.state.view
-
-    @page.setter
-    def page(self, value):
-        self.state.view = value
 
     def mode(self, name):
         """Bouton de mode de couche de la LV1 : input, mix, factory, custom, spill."""
@@ -1558,7 +1565,7 @@ class LV1Clicker(threading.Thread):
                 JOURNAL.mark("clic LV1 : erreur %r" % e)
 
 
-class LayerModeWatcher(threading.Thread):
+class LayerModeWatcher(FollowsView, threading.Thread):
     """Mode de couche de la vue suivie (Input / Mix / Factory / Custom / Spill) et nombre de canaux configuré, lus
     dans la base de la LV1 (copie) chaque fois qu'elle change : voyants des touches View, bouton à cliquer.
     Le réseau ne le donne pas (/Notify/CustomButton et /Notify/SpillButton ne bougent pas, vérifié le 14/10)."""
@@ -1610,15 +1617,6 @@ class LayerModeWatcher(threading.Thread):
             self.state.n_inputs = n
         if changed:
             JOURNAL.mark("mode de couche (base LV1) : %s, %s canaux" % (mode, n))
-
-    @property
-    def page(self):
-        """Mixer suivi (0 = Mixer 1, 1 = Mixer 2) : partagé par tout le pont (state.view), suit l'onglet affiché."""
-        return self.state.view
-
-    @page.setter
-    def page(self, value):
-        self.state.view = value
 
     def run(self):
         while True:
@@ -1679,7 +1677,7 @@ def view_leds(mode, tab=None, spill=False):
             NOTE_USER: mode == 1 and not spill, NOTE_GROUP: spill, NOTE_GLOBAL_VIEW: tab == "All"}
 
 
-class LV1SelectionWatcher(threading.Thread):
+class LV1SelectionWatcher(FollowsView, threading.Thread):
     """Sens LV1 -> X-Touch : la tranche sélectionnée sur l'écran de la LV1 (liseré jaune, lu à l'écran
     toutes les 0,15 s, sans administrateur) devient la sélection du pont (LED Select).
 
@@ -1697,15 +1695,6 @@ class LV1SelectionWatcher(threading.Thread):
         self.last = None
         self.last_page = None
         self.stop_flag = False
-
-    @property
-    def page(self):
-        """Mixer suivi (0 = Mixer 1, 1 = Mixer 2) : partagé par tout le pont (state.view), suit l'onglet affiché."""
-        return self.state.view
-
-    @page.setter
-    def page(self, value):
-        self.state.view = value
 
     def step(self):
         if self.page != self.last_page:                      # autre Mixer suivi : sa sélection repart de zéro
@@ -1897,7 +1886,7 @@ class AppControl:
         return True
 
 
-class ButtonControl:
+class ButtonControl(FollowsView):
     """Mute / Solo -> LV1 ; ◄ BANK ► -> couche, Select / ◄ CHANNEL ► -> sélection (locales). Rec : rien."""
 
     def __init__(self, state, link, write=True, page=0, busy=lambda: False):
@@ -1908,15 +1897,6 @@ class ButtonControl:
         self.transport = None     # TransportControl (Reaper) : reçoit le jog quand il ne va pas à la LV1
         self.reaper_tc = True     # afficheur : timecode de REAPER (s'il répond) ou heure ; touche SMPTE
         self.warned = set()
-
-    @property
-    def page(self):
-        """Mixer suivi (0 = Mixer 1, 1 = Mixer 2) : partagé par tout le pont (state.view), suit l'onglet affiché."""
-        return self.state.view
-
-    @page.setter
-    def page(self, value):
-        self.state.view = value
 
     def on_bank(self, d1):
         step = -1 if d1 == NOTE_BANK_LEFT else 1
