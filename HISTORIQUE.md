@@ -102,3 +102,12 @@ Chaque ligne correspond à un ou plusieurs commits git (`git log` pour le détai
 
 - La surface suit le Mixer affiché (onglet Mixer 1 / Mixer 2, ou fenêtre Mixer détachée) : couches, BANK, sélection,
   touches View et voyants, notification, overlay marchent sur Mixer 2 comme sur Mixer 1 (`--mixer auto`, défaut).
+
+## 19/10/2026 : V0.4
+
+- FLIP marche même quand la LV1 n'envoie pas ses User Keys à la connexion (le pont les redemande).
+- Sélection d'une tranche depuis l'onglet Channel : le pont attend que la LV1 ait redessiné la page Mixer (1 essai
+  sur ~20 passait avant).
+- Sélection, BANK et touches View quand une fenêtre couvre la LV1 : le pont lit l'image de la fenêtre LV1.
+- Code réorganisé (refactor en 10 étapes : `surface/`, `lv1/`, `bridge/`, `osc.py`, classe `App`), sans changement
+  de comportement ; test de référence du rendu X-Touch. Vérifié sur le matériel.
