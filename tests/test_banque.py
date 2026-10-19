@@ -95,6 +95,8 @@ out = io.StringIO()
 with contextlib.redirect_stdout(out):
     D.main()
 shown = [l.split(":", 1)[1].strip() for l in out.getvalue().splitlines() if "Couche affichée" in l]
+# écran de démarrage (« … (par défaut) ») parfois noté avant les couches de la fausse LV1 : timing, pas le sujet du test
+shown = [l for l in shown if not l.endswith("(par défaut)")]
 print("Couches affichées :", shown)
 print("/Set envoyés :", [(g[1], g[2]) for g in got])
 
