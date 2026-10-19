@@ -77,6 +77,7 @@ COLOR_FILE = os.path.join(HERE, "xtouch_couleurs.json")
 
 METER_STALE = 1.0       # s : voie de vumètre qui n'arrive plus = disparue (stéréo -> mono)
 TICK = 0.05             # 20 rafraîchissements par seconde
+REFRESH_EVERY = 30.0    # s : tout est renvoyé à la X-Touch (sauf les moteurs), au cas où elle aurait décroché sans erreur
 
 
 # ─── Conversions ──────────────────────────────────────────────────────────────
@@ -1157,6 +1158,7 @@ class App:
         self.recall_until, self.recall_sent, self.recall_touched = 0.0, 0.0, None
         self.ab_seen = 0.0
         self.ch_at = 0.0
+        self.refresh_at = None           # prochain renvoi complet à la X-Touch (None = jamais : test de référence)
         self.t_end = None
 
     # ── démarrage ──────────────────────────────────────────────────────────────────────────────────────────────
@@ -1288,6 +1290,7 @@ class App:
         if self.master_target and self.xt.master_unit is not None:
             print("  Fader master -> %s" % default_label(*self.master_target))
         self.shown_view = state.view
+        self.refresh_at = time.time() + REFRESH_EVERY
         self.t_end = time.time() + a.seconds if a.seconds else None
         return None
 
@@ -1444,6 +1447,9 @@ class App:
         RUDE SOLO, SOLO, FLIP ; plus la notification de couche (overlay). Testé tel quel par test_rendu_reference."""
         state, xt, sends, gain, buttons = self.state, self.xt, self.sends, self.gain, self.buttons
         overlay, apps, reaper, xlink = self.overlay, self.apps, self.reaper, self.xlink
+        if self.refresh_at is not None and now >= self.refresh_at:     # tout renvoyer (sauf moteurs) de temps en temps
+            self.refresh_at = now + REFRESH_EVERY
+            xt.refresh()
         view = state.view
         if view != self.shown_view:                     # autre Mixer : overlay (fenêtre détachée) et bascule d'appli
             self.shown_view = view

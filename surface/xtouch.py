@@ -100,6 +100,13 @@ class Surface:
         if self.master_unit is not None:
             self.set_led(self.master_unit, note, on)
 
+    def refresh(self):
+        """Oublie ce qui a été envoyé (écrans, couleurs, LED, couronnes, vumètres, 7 segments) : tout repart au prochain
+        tour. Une X-Touch qui a redémarré ou décroché SANS erreur d'envoi restait vide ou fausse (étape 10, 19/10).
+        Pas les moteurs : renvoyer une position ferait frémir le fader, ou lutter contre un doigt non détecté."""
+        for cache in (self.sent_lcd, self.sent_color, self.sent_led, self.sent_ring, self.sent_meter, self.sent_seg):
+            cache.clear()
+
     def motor_note(self, what, value):
         """Commande moteur envoyée (what = « master » / « tranche 3 ») : rien ici, le pont l'écrit dans son journal."""
 

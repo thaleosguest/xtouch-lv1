@@ -207,7 +207,12 @@ Règle : une étape = un commit, les 28 tests verts + compilation après chacune
   `App(None)` ne démarre rien. Test de référence rebranché sur `App.tick_render` : nouvelle référence = ancienne + 3
   LED (RUDE SOLO, SOLO, FLIP, que l'imitation omettait) — prouvé : sans ces lignes, identique ligne à ligne.
   **Validé sur le matériel par Joseph le 19/10** (essai complet : RAS).
-- Étape suivante : 10 désynchronisations (change le comportement : à valider une par une).
+- Étape 10 (change le comportement, un correctif à la fois, accord de Joseph) :
+  - **Correctif 3 fait** : renvoi complet à la X-Touch toutes les `REFRESH_EVERY` (30 s) : `Surface.refresh()` vide les
+    caches écrans / couleurs / LED / couronnes / vumètres / 7 segments, PAS les moteurs (`sent_fader` gardé : pas de
+    frémissement, pas de lutte avec un doigt non détecté). `App.refresh_at` (None dans `App(None)` : test de référence
+    inchangé). ~135 messages par renvoi. Test `tests/test_renvoi_complet.py`.
+  - Restent : 1 pas de changement de Mixer pendant un toucher, 2 file de clics vidée au changement de Mixer.
 
 ## Fichiers
 
