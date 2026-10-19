@@ -29,6 +29,10 @@ from lv1.layout import (REF_W, REF_H, TABS, TAB_READ_Y, TAB_Y, TAB_ACTIVE, TAB_X
                         SEL_TOP_ROWS, SEL_YELLOW, SEL_X0, SEL_PITCH, BOTTOM_Y, BOTTOM_X, BOTTOM_GREY)
 
 HOP_WAIT = 0.6        # s max pour que la LV1 affiche l'onglet cliqué
+# Après le clic d'onglet, la LV1 allume l'ONGLET avant d'avoir redessiné les TRANCHES (essai du 19/10, journal 135225 :
+# depuis Channel, 1 sélection sur ~20 passait, « bande du nom introuvable » ; empiré quand les lectures sont passées de
+# 1-2 s à 30 ms en 0.2.1 : la lenteur laissait le temps au dessin). On relit donc la page pendant au plus REDRAW_WAIT s.
+REDRAW_WAIT = 0.5
 
 WM_MOUSEMOVE, WM_LBUTTONDOWN, WM_LBUTTONUP, MK_LBUTTON = 0x0200, 0x0201, 0x0202, 0x0001
 
@@ -125,12 +129,22 @@ class Target:
                     self.click(TABS["Channel"], TAB_Y)
                     return False, "onglet Mixer %d pas affiché après le clic" % self.mixer
                 time.sleep(0.02)
+            t_end = time.time() + REDRAW_WAIT             # page pas encore redessinée : on relit un moment
             why = self.frame_why(frame)
+            while why and time.time() < t_end:
+                time.sleep(0.03)
+                why = self.frame_why(frame)
             if why:
                 self.click(TABS["Channel"], TAB_Y)
                 return False, "page Mixer : %s" % why
         ok = action()
         if hop:
+            # action refusée faute de dessin, sans rien avoir cliqué (`action.retry`, ex. bande du nom introuvable) :
+            # on réessaie pendant le redessin
+            t_end = time.time() + REDRAW_WAIT
+            while not ok and getattr(action, "retry", False) and time.time() < t_end:
+                time.sleep(0.03)
+                ok = action()
             time.sleep(0.08)
             self.click(TABS["Channel"], TAB_Y)
         return ok, None
@@ -433,9 +447,10 @@ def click_strip(i, mixer=1, method="message", rgb=None):
         ny = name_bar_y(runs)
         if ny is None:
             act.why = "bande du nom de la tranche %d introuvable (disposition Mixer ?)" % (i + 1)
-            return False
+            return False                                  # rien cliqué : réessayable (act.retry)
+        act.why = None
         return t.click(strip_point(i)[0], ny, method=method)
-    act.why = None
+    act.why, act.retry = None, True
     ok, why = t.on_mixer(None, act)
     return ok, why or act.why
 
