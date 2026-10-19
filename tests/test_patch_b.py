@@ -60,7 +60,7 @@ P.read_grid = lambda sc=None: (lv1.grid(), None)
 P.LC.Target = FauxTarget
 P.LC.is_admin = lambda: True
 P.LC.u32 = lambda: type("U", (), {"IsIconic": staticmethod(lambda h: False)})()
-P.time.sleep = lambda s: None
+P.time = type("T", (), {"sleep": staticmethod(lambda s: None)})()   # lv1_patch seulement
 
 # 1) mauvaise vignette (X32 = 1) : le pilote (vignette 2) est sélectionné, puis la diagonale est refaite en 2 passes
 lv1 = FauxLV1(tile=1, on={0: [0], 1: [1], 2: [5], 4: [4]})
@@ -115,7 +115,9 @@ import xtouch_overlay_qt as Q
 Q.RETOUR = qo.rx.getsockname()[1]
 Q.send_action("overlay démarré, canal retour OK", "log")
 Q.send_action("fix_patch")
-time.sleep(0.3)
+t_end = time.time() + 3
+while time.time() < t_end and not (got and logs):
+    time.sleep(0.02)
 check("clic REALIGN transmis au pont", got == ["fix_patch"])
 check("trace de l'overlay transmise", logs == ["overlay démarré, canal retour OK"])
 qo.handle_back(b'bruit')
