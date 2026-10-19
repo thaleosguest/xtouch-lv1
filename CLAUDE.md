@@ -201,6 +201,7 @@ Règle : une étape = un commit, les 28 tests verts + compilation après chacune
   « Mémoires » de boucle = attributs (`last_toast`, `recall_until`, `diag_t` / `diag_warn`, `ab_seen`, `ch_at`…).
   `App(None)` ne démarre rien. Test de référence rebranché sur `App.tick_render` : nouvelle référence = ancienne + 3
   LED (RUDE SOLO, SOLO, FLIP, que l'imitation omettait) — prouvé : sans ces lignes, identique ligne à ligne.
+  **Validé sur le matériel par Joseph le 19/10** (essai complet : RAS).
 - Étape suivante : 10 désynchronisations (change le comportement : à valider une par une).
 
 ## Fichiers
