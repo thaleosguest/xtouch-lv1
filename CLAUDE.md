@@ -213,7 +213,11 @@ Règle : une étape = un commit, les 28 tests verts + compilation après chacune
     frémissement, pas de lutte avec un doigt non détecté). `App.refresh_at` (None dans `App(None)` : test de référence
     inchangé). ~135 messages par renvoi. Test `tests/test_renvoi_complet.py` ; essayé par Joseph le 19/10 : rien ne se voit,
     faders immobiles. Cas « X-Touch muette » pas reproduit (non vérifié).
-  - Restent : 1 pas de changement de Mixer pendant un toucher, 2 file de clics vidée au changement de Mixer.
+  - **Correctif 1 fait** : `ViewFollower(..., busy=)` (même garde-fou que BANK : `faders.held`, doigt posé ou lâché
+    depuis < HOLD_AFTER) : changement de Mixer DIFFÉRÉ pendant un toucher (journal « Mixer N affiché : changement
+    différé (fader touché) », une fois), fait au lâcher si la LV1 montre toujours l'autre Mixer ; `lv1_tab` (GLOBAL
+    VIEW) suivi quand même. Test `tests/test_mixer_toucher.py`.
+  - Reste : 2 file de clics vidée au changement de Mixer.
 
 ## Fichiers
 

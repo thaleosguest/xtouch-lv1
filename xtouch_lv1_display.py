@@ -1265,7 +1265,8 @@ class App:
         if not a.dry_run:
             LayerModeWatcher(state, state.view).start()           # voyants INPUTS / BUSES / USER / GROUP
             if sys.platform == "win32":
-                ViewFollower(state, fixed_view).start()           # Mixer suivi (onglet / fenêtre) + voyant GLOBAL VIEW
+                ViewFollower(state, fixed_view,                   # Mixer suivi (onglet / fenêtre) + voyant GLOBAL VIEW
+                             busy=lambda: bool(faders.held(time.time()))).start()   # pas pendant un toucher
         if a.lecture_seule:
             print("  Mode lecture seule : rien n'est envoyé à la LV1.")
         if a.clic_lv1 and not a.lecture_seule:

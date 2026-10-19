@@ -241,12 +241,16 @@ class ViewFollower(threading.Thread):
     onglet Mixer 1 / Mixer 2 de la fenêtre principale, ou fenêtre Mixer détachée (« MIXER1 » / « MIXER2 ») au premier
     plan ; autre onglet (Channel, All…) : le dernier Mixer reste suivi. fixed = 0 / 1 (--mixer 1 / 2) : vue imposée.
     Met aussi à jour state.lv1_tab (voyant GLOBAL VIEW). Limite : avec un Mixer détaché, la fenêtre principale a moins
-    d'onglets (positions décalées) -> son onglet peut être mal lu (cas 2 écrans, hors de l'usage de Joseph)."""
+    d'onglets (positions décalées) -> son onglet peut être mal lu (cas 2 écrans, hors de l'usage de Joseph).
+    busy() vrai (fader sous le doigt, ou relâché depuis moins de HOLD_AFTER) : changement de Mixer DIFFÉRÉ (étape 10,
+    19/10) — sinon le fader tenu écrivait sur la tranche du même numéro dans l'autre Mixer. Il se fait au lâcher, si la
+    LV1 montre toujours l'autre Mixer."""
     PERIOD = 0.2
 
-    def __init__(self, state, fixed=None, read=None):
+    def __init__(self, state, fixed=None, read=None, busy=lambda: False):
         super().__init__(daemon=True)
-        self.state, self.fixed = state, fixed
+        self.state, self.fixed, self.busy = state, fixed, busy
+        self.deferred = None             # Mixer en attente pendant un toucher (pour ne le noter qu'une fois)
         if read is None:
             import lv1_clic
             read = lv1_clic.view_hint
@@ -265,8 +269,15 @@ class ViewFollower(threading.Thread):
                     new = int(tab[-1]) - 1
                 if new is None or new == self.state.view:
                     new = None
+                elif self.busy():
+                    if new != self.deferred:
+                        self.deferred = new
+                        JOURNAL.mark("Mixer %d affiché : changement différé (fader touché)" % (new + 1))
+                    new = None
                 else:
                     self.state.view = new
+            if new is not None or self.fixed is not None or not self.busy():
+                self.deferred = None
         if new is not None:
             JOURNAL.mark("Mixer suivi : Mixer %d" % (new + 1))
             print("  Mixer suivi : Mixer %d" % (new + 1))
