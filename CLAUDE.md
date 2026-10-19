@@ -183,8 +183,17 @@ Règle : une étape = un commit, les 28 tests verts + compilation après chacune
   `stale`, `pan_hold`, `scene_events` ; `bank`, `layer_entries`). Noms d'accès inchangés (`state.xxx`), un seul verrou.
   Vérifié : mêmes 32 champs, mêmes valeurs, mêmes méthodes (arbre syntaxique). `handle()` et l'état restent dans le
   pont : les tests remplacent `D.time` (le déplacer ailleurs fausserait le test de référence).
-- Étapes suivantes : 8 `bridge/` (contrôleurs),
-  9 classe `App` (fin de `main()`), 10 désynchronisations (change le comportement : à valider une par une).
+- **Étape 8 faite** (8a à 8h, un commit par fichier) : `bridge/journal.py` (Journal ; `JOURNAL` = **emplacement
+  partagé** `JournalSlot` : main() fait `JOURNAL.current = Journal(chemin)`, un test `D.JOURNAL.current = J()` — ne
+  plus réaffecter `JOURNAL`, les modules bridge/ garderaient l'ancien), `bridge/values.py` (courbe de fader +
+  `load_fader_curve`, vumètres, `LV1_PAN_SCALE`, `pan_label` ; `HERE` recalculé = même dossier ; `FADER_CURVE` /
+  `INF_POS` PAS réexportés car remplacés au chargement : lire `_values.FADER_CURVE`), `gain.py`, `sends.py`,
+  `faders.py` (+ HOLD_AFTER…SEND_EVERY), `lv1_watch.py` (FollowsView, LV1Clicker, LayerModeWatcher, ViewFollower,
+  LV1SelectionWatcher), `buttons.py` (ButtonControl, view_leds), `reaper.py` (TransportControl, AppControl). Code
+  identique (arbre syntaxique), pont réexporte tout (`D.GainControl`…). Test de référence : l'horloge figée est
+  aussi posée dans chaque module `bridge.*` (qui ont leur propre `import time`). Pont : 3 080 -> 1 490 lignes.
+  `test_banque` a échoué une fois (écran de démarrage noté avant les couches : timing), puis 4/4.
+- Étapes suivantes : 9 classe `App` (fin de `main()`), 10 désynchronisations (change le comportement : à valider une par une).
 
 ## Fichiers
 
