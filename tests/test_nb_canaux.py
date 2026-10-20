@@ -77,5 +77,35 @@ check("liste tronquée : rien retiré", entrees(st) == list(range(16)))
 D.handle(st, "/Channels", channels(80, 16, stereo={0}))
 check("retour à 80 : pistes revenues", entrees(st) == list(range(80)))
 
+# ── 2e essai de Joseph (journal 195006) : la BASE garde les 80 entrées en config 64 ; load_pans (connexion, rappel de
+# scène) les recréait juste après /Channels -> « In 65 » … « In 80 » et REALIGN encore en échec
+import lv1_db
+lv1_db.input_pans = lambda: {(0, c): 0.0 for c in range(80)}
+lv1_db.input_sends = lambda: {(0, c, a): (-144.0, False) for c in range(80) for a in range(2)}
+
+
+class Pont:
+    load_pans = D.App.load_pans
+
+
+pont = Pont()
+pont.state = st = D.LV1State()
+st.driver, st.driver_size, st.routing = ("LV1-PORT", 2), 128, {0: {"play": [0, 1]}}
+st.routing.update({c: {"play": [c + 1]} for c in range(1, 64)})
+D.handle(st, "/Channels", channels(64, 8, stereo={0}))
+pont.load_pans()
+check("/Channels puis base : toujours 64 entrées", entrees(st) == list(range(64)))
+check("/Channels puis base : pans posés", st.tracks[(0, 10)]["pan"] == 0.0)
+check("/Channels puis base : pas d'envois pour 65-80", not any(k[1] >= 64 for k in st.sends))
+check("/Channels puis base : diagonale OK", D.diagonal_problems(st) == [])
+pont.load_pans(force=True)
+check("rappel de scène : toujours 64", entrees(st) == list(range(64)))
+
+pont.state = st = D.LV1State()
+pont.load_pans()
+check("base avant /Channels : 80 créées", entrees(st) == list(range(80)))
+D.handle(st, "/Channels", channels(64, 8, stereo={0}))
+check("base avant /Channels : surplus retiré par /Channels", entrees(st) == list(range(64)) and st.tracks[(0, 3)]["pan"] == 0.0)
+
 print("OK" if ok else "ÉCHEC : " + ", ".join(why))
 sys.exit(0 if ok else 1)

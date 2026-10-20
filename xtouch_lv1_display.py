@@ -1466,9 +1466,14 @@ class App:
         except Exception as e:                # base absente (autre PC, test) : « ? » jusqu'au 1er changement
             JOURNAL.mark("pans de départ illisibles : %r" % e)
             return
+        # La base garde TOUTES les entrées déjà créées (80 après un passage de 80 à 64 canaux, essai de Joseph du 20/10) :
+        # liste /Channels déjà reçue -> seules ses pistes sont mises à jour (sinon In 65-80 revenaient, diagonale B
+        # impossible) ; pas encore reçue -> créées, le /Channels qui suit retire le surplus.
         with state.lock:
             now_ = time.time()
             for key, v in pans.items():
+                if state.channels_at and key not in state.tracks:
+                    continue
                 t = state.track(*key)
                 if t["pan"] is None or (force and now_ >= state.pan_hold.get(key, 0)):
                     t["pan"] = v
@@ -1480,6 +1485,8 @@ class App:
             return
         with state.lock:
             for key, (g_db, on) in snd.items():
+                if state.channels_at and key[:2] not in state.tracks:
+                    continue
                 s = state.send(*key)
                 if s["fader"] is None or (force and key not in state.held_tracks):
                     s["fader"] = g_db
