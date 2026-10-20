@@ -387,12 +387,15 @@ def handle(state, address, args):
         elif address == "/Channels" and args and args[0][0] == "i":
             state.channels_at = time.time()
             count = args[0][1]
+            seen, whole = set(), 0 < count <= 256
             for k in range(max(0, min(count, 256))):
                 base = 1 + k * 19
                 if base + 3 >= len(args):
+                    whole = False
                     break
                 n, g, c, f = args[base], args[base + 1], args[base + 2], args[base + 3]
                 if n[0] == "s" and g[0] == "i" and c[0] == "i":
+                    seen.add((g[1], c[1]))
                     t = state.track(g[1], c[1])
                     t["name"] = n[1]
                     # 1er double = fader en dB (-144 = -inf). Pris à CHAQUE /Channels, pas seulement au départ :
@@ -403,6 +406,7 @@ def handle(state, address, args):
                     # Vérifié le 14/10/2026 (journaux 173028 -> 173215) : des 12 entiers,
                     # le 1er = solo, le 2e = mute (0|1). Seul moyen d'avoir l'état à la connexion.
                     if base + 6 >= len(args):
+                        whole = False
                         break
                     so, mu = args[base + 5], args[base + 6]
                     if so[0] == "i":
@@ -412,6 +416,17 @@ def handle(state, address, args):
                     # 12e entier : 1 = mono, 2 = stéréo (vérifié le 15/10 : P170 ST et Channel 11 = 2)
                     if base + 16 < len(args) and args[base + 16][0] == "i":
                         t["stereo"] = args[base + 16][1] == 2
+            # Liste COMPLÈTE de toutes les pistes (entrées, groupes, LR…) : celles qui n'y sont plus ont disparu. Bug du
+            # 20/10 (Joseph passe la LV1 de 80 à 64 canaux, /Channels 150 -> 126) : Channel 65-80 restaient en mémoire,
+            # la diagonale B voulait les patcher -> « COULDN'T REALIGN ». Liste tronquée : rien n'est retiré.
+            if whole and seen:
+                gone = {key for key in state.tracks if key not in seen}
+                for key in gone:
+                    del state.tracks[key]
+                for key in [s for s in state.sends if s[:2] in gone]:
+                    del state.sends[key]
+                if gone:
+                    JOURNAL.mark("pistes disparues de la LV1 : %d (%s…)" % (len(gone), sorted(gone)[:4]))
         elif address == "/Notify/Layers":
             # Jeu adopté SEULEMENT s'il est suivi de /Notify/CurrentLayer pour la même vue (bug du 15/10, journal
             # 155042) : dans un état complet (connexion, rappel de scène, Flip A/B), la LV1 envoie les jeux d'usine
