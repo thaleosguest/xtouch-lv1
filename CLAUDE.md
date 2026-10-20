@@ -147,6 +147,10 @@ ne font). Projet voisin : `x32-gain-recall` (X/M32 Gain Recall for eMotion LV1, 
   Toute nouvelle fenêtre CLIQUABLE de l'overlay : ne pas utiliser FLAGS.
   Mono / stéréo (20/10, journal 002111) : `/Notify/StemFormatForSource g ch 100|101 1|2` à chaque changement -> `track["stereo"]`
   (avant : seulement `/Channels` à la connexion, la diagonale restait « OK » après un passage mono <-> stéréo).
+  Nombre de canaux réduit (20/10, 80 -> 64 : « COULDN'T REALIGN », In 65-80 fantômes) : `/Channels` = liste COMPLÈTE de
+  toutes les pistes (150 en 80 canaux, 126 en 64 ; groupes 16 -> 8) -> pistes absentes retirées (liste tronquée : rien) ;
+  la BASE garde les 80 objets d'entrée -> `load_pans` ne crée plus de piste une fois `/Channels` reçu. Test
+  `tests/test_nb_canaux.py`. **Validé par Joseph le 20/10** (80 -> 64 -> 32 -> 16).
 - **Trim et phase LV1 (19/10, choix de Joseph)** : TRACK = normal -> gain X32 -> trim -> normal (sans Gain Recall : normal
   -> trim). `GainControl.trim_mode` : encodeur = `/SetTrackTrim g ch stéréo f` (0,5 dB/cran, 3e arg 1 si stéréo), appui
   = `/SetTrackPhaseState g ch stéréo 0|1` ; état lu dans `/Notify/TrackTrim` / `PhaseState` (`track["trim"|"phase"][voie]`).
