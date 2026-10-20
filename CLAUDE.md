@@ -307,7 +307,7 @@ Règle : une étape = un commit, les 28 tests verts + compilation après chacune
   (Uninstall Total Control for LV1.exe = copie de l'installeur, racine = dossier parent ; installed.json). Raccourcis : Bureau + menu Démarrer
   « Total Control for LV1 » (anciens dossier et menu « LV1 Suite » retirés à l'installation : `OLD_SUITES`) (PowerShell WScript.Shell). REAPER fermé obligatoire : reaper-kb.ini (lignes « Custom: lv1_*.lua »
   remplacées, id RS+sha1(chemin)), Scripts/__startup.lua (bloc marqué), surface OSC 8000/9000 si absente. Données de
-  Gain Recall (%APPDATA%) jamais touchées ; sa clé Run retirée à la désinstallation si elle vise l'exe installé.
+  Gain Recall (%APPDATA%) jamais touchées ; son démarrage auto retiré à la désinstallation s'il vise l'exe installé : clé Run « XM32 Gain Recall LV1 » (nom corrigé le 20/10) et tâche planifiée 3.1 (suppression = admin : une demande UAC, `schtasks_admin` ; refus -> consigne). Test `tests/test_desinstall_gr.py`.
   Test `tests/test_installer.py` ; essai de l'exe : `--silencieux --no-shortcuts --root DIR --reaper DIR [--apps]`.
   Essai du pont sans élévation : `__COMPAT_LAYER=RunAsInvoker`.
 - **REAPER LV1 = REAPER portable (16/10, Joseph : « un vrai pack »)** : l'installeur TÉLÉCHARGE

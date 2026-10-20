@@ -15,7 +15,7 @@ XTouch-LV1 :
     dans REAPER.ini si aucune surface OSC n'écoute sur 8000.
 X32 Gain Recall : copie de l'exe (release GitHub, embarquée par build.py) + mode d'emploi ; ses données
 (%APPDATA%\\X32 Gain Recall : scènes, réglages) ne sont JAMAIS touchées, même à la désinstallation. Sa case « lancer
-avec Windows » (clé Run) est retirée à la désinstallation si elle visait l'exe installé.
+avec Windows » (tâche planifiée en 3.1, clé Run avant) est retirée à la désinstallation si elle visait l'exe installé.
 
 Essai sans rien toucher au vrai système : tests/test_installer.py (dossiers temporaires), ou l'exe avec
 --silencieux --no-shortcuts --root DIR --reaper DIR [--apps xtouch,gainrecall].
@@ -59,7 +59,9 @@ TEMPLATE = "LV1 Multitrack.RPP"
 SCRIPTS = ["lv1_scenes.lua", "lv1_sync_tracks.lua", "lv1_meter_bridge.lua"]        # actions déclarées
 STARTUP = ["lv1_scenes.lua", "lv1_meter_bridge.lua"]                              # lancées avec Reaper
 BEGIN, END = "-- XTouch-LV1 begin (installer, do not edit)", "-- XTouch-LV1 end"
-GR_RUN_KEY, GR_RUN_NAME = r"Software\Microsoft\Windows\CurrentVersion\Run", "X32 Gain Recall"
+GR_RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+GR_RUN_NAMES = ("XM32 Gain Recall LV1", "X32 Gain Recall")      # nom écrit par Gain Recall <= 3.0.1, ancien nom supposé
+GR_TASK = "XM32 Gain Recall LV1"                               # tâche planifiée de Gain Recall 3.1 (TASK_NAME)
 NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0
 
 # Langue de l'installeur (demande de Joseph : anglais ET français) : celle de Windows au départ, bouton EN / FR.
@@ -215,20 +217,103 @@ def copy_gainrecall(src, target, log):
           "X32 Gain Recall installé dans %s (scènes et réglages restent dans %%APPDATA%%\\X32 Gain Recall)") % target)
 
 
+def run_value(name):
+    """Valeur de la clé Run (HKCU) de ce nom, ou None."""
+    import winreg
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, GR_RUN_KEY) as k:
+            return winreg.QueryValueEx(k, name)[0]
+    except OSError:
+        return None
+
+
+def drop_run_value(name):
+    import winreg
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, GR_RUN_KEY, 0, winreg.KEY_SET_VALUE) as k:
+            winreg.DeleteValue(k, name)
+        return True
+    except OSError:
+        return False
+
+
+def schtasks(*args):
+    """(code, sortie) de schtasks, sans fenêtre."""
+    try:
+        r = subprocess.run(["schtasks"] + list(args), capture_output=True, text=True, creationflags=NO_WINDOW, timeout=20)
+        return r.returncode, (r.stdout or "") + (r.stderr or "")
+    except (OSError, subprocess.SubprocessError) as e:
+        return -1, str(e)
+
+
+def schtasks_admin(*args):
+    """schtasks en administrateur (UNE demande UAC) : code de sortie, ou None si l'UAC est refusée / impossible."""
+    import ctypes
+    import ctypes.wintypes as wt
+
+    class SEI(ctypes.Structure):
+        _fields_ = [("cbSize", wt.DWORD), ("fMask", ctypes.c_ulong), ("hwnd", wt.HWND), ("lpVerb", wt.LPCWSTR),
+                    ("lpFile", wt.LPCWSTR), ("lpParameters", wt.LPCWSTR), ("lpDirectory", wt.LPCWSTR),
+                    ("nShow", ctypes.c_int), ("hInstApp", wt.HINSTANCE), ("lpIDList", ctypes.c_void_p),
+                    ("lpClass", wt.LPCWSTR), ("hkeyClass", wt.HKEY), ("dwHotKey", wt.DWORD), ("hIcon", wt.HANDLE),
+                    ("hProcess", wt.HANDLE)]
+    sei = SEI(cbSize=ctypes.sizeof(SEI), fMask=0x40, lpVerb="runas", lpFile="schtasks.exe",   # SEE_MASK_NOCLOSEPROCESS
+              lpParameters=subprocess.list2cmdline(args), nShow=0)
+    if not ctypes.windll.shell32.ShellExecuteExW(ctypes.byref(sei)) or not sei.hProcess:
+        return None
+    k32 = ctypes.windll.kernel32
+    k32.WaitForSingleObject.argtypes = [wt.HANDLE, wt.DWORD]
+    k32.GetExitCodeProcess.argtypes = [wt.HANDLE, ctypes.POINTER(wt.DWORD)]
+    k32.CloseHandle.argtypes = [wt.HANDLE]
+    k32.WaitForSingleObject(sei.hProcess, 30000)
+    code = wt.DWORD()
+    k32.GetExitCodeProcess(sei.hProcess, ctypes.byref(code))
+    k32.CloseHandle(sei.hProcess)
+    return code.value
+
+
+def task_exe(xml):
+    """Exe lancé par une tâche planifiée (XML de « schtasks /Query /XML »), ou None (même lecture que Gain Recall)."""
+    m = re.search(r"<Command>(.*?)</Command>", xml or "", re.S)
+    if not m:
+        return None
+    return (m.group(1).strip().strip('"').replace("&quot;", '"').replace("&lt;", "<").replace("&gt;", ">")
+            .replace("&amp;", "&"))
+
+
 def gainrecall_autostart(target, log):
-    """Désinstallation : retire la clé Run de Gain Recall si elle lance l'exe installé (pas une autre copie)."""
+    """Désinstallation : retire le « lancer avec Windows » de Gain Recall s'il lance l'exe installé (pas une autre
+    copie). 3.1 (exe administrateur) : tâche planifiée GR_TASK, créée en administrateur -> sa suppression demande les
+    droits (essai du 20/10 : sans admin, même la création est refusée) : UNE demande UAC, seulement si elle vise cet exe ;
+    refusée -> rien de supprimé, consigne. <= 3.0.1 : valeur de la clé Run (nom corrigé le 20/10 : l'installeur cherchait
+    « X32 Gain Recall », Gain Recall écrit « XM32 Gain Recall LV1 »)."""
     if sys.platform != "win32":
         return
-    import winreg
     exe = os.path.join(target, APPS[GR]["exe"]).lower()
-    try:
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, GR_RUN_KEY, 0, winreg.KEY_READ | winreg.KEY_SET_VALUE) as k:
-            cur = winreg.QueryValueEx(k, GR_RUN_NAME)[0]
-            if exe in cur.lower():
-                winreg.DeleteValue(k, GR_RUN_NAME)
-                log(_("X32 Gain Recall: removed from Windows startup", "X32 Gain Recall : retiré du démarrage de Windows"))
-    except OSError:
-        pass
+    for name in GR_RUN_NAMES:
+        cur = run_value(name)
+        if cur and exe in cur.lower() and drop_run_value(name):
+            log(_("X32 Gain Recall: removed from Windows startup", "X32 Gain Recall : retiré du démarrage de Windows"))
+    code, out = schtasks("/Query", "/TN", GR_TASK, "/XML")
+    hint = _("   uncheck \"Launch with Windows\" in X32 Gain Recall, or delete the task \"%s\" in Task Scheduler",
+             "   décocher « Lancer avec Windows » dans X32 Gain Recall, ou supprimer la tâche « %s » du Planificateur de tâches") % GR_TASK
+    if code != 0:
+        if "access" in out.lower() or "accès" in out.lower():        # elle existe mais ne se lit pas : pas à l'aveugle
+            log(_("X32 Gain Recall: startup task not checked (access denied):",
+                  "X32 Gain Recall : tâche de démarrage pas vérifiée (accès refusé) :"))
+            log(hint)
+        return
+    if (task_exe(out) or "").lower() != exe:
+        return                                                         # une autre copie de Gain Recall : on n'y touche pas
+    if schtasks("/Delete", "/TN", GR_TASK, "/F")[0] != 0:
+        log(_("X32 Gain Recall: administrator rights requested to remove its startup task...",
+              "X32 Gain Recall : droits administrateur demandés pour retirer sa tâche de démarrage..."))
+        schtasks_admin("/Delete", "/TN", GR_TASK, "/F")
+    if schtasks("/Query", "/TN", GR_TASK)[0] == 0:
+        log(_("X32 Gain Recall: startup task NOT removed:", "X32 Gain Recall : tâche de démarrage PAS retirée :"))
+        log(hint)
+    else:
+        log(_("X32 Gain Recall: startup task removed", "X32 Gain Recall : tâche de démarrage retirée"))
 
 
 def shortcuts(root, log):
