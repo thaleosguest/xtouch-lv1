@@ -31,7 +31,7 @@ DIST = os.path.join(HERE, "dist")
 WORK = os.path.join(HERE, "build")
 SHARED = ["LISEZMOI.md", "MODE_EMPLOI.html", "xtouch_couleurs.exemple.json"]
 INSTALLER = "Total_Control_LV1_Install"
-GR_REPO, GR_TAG, GR_EXE = "thaleosguest/x32-gain-recall", "v3.0.1", "XM32_Gain_Recall_LV1.exe"
+GR_REPO, GR_TAG, GR_EXE = "thaleosguest/x32-gain-recall", "v3.1.0", "XM32_Gain_Recall_LV1.exe"
 GR_WORKSPACE = os.path.join(os.path.dirname(HERE), "x32-gain-recall-workspace")
 
 
