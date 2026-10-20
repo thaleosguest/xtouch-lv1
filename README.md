@@ -8,7 +8,7 @@ Une **Behringer X-Touch + X-Touch Extender** comme surface de contrôle de la **
 couleurs des canaux sur les écrans, vumètres, faders motorisés, Mute / Solo / Select, couches, sends, User Keys,
 transport vers REAPER — et le **gain des préamplis X32 / M32** sur les encodeurs.
 
-Version courante : **0.7**. Mode d'emploi complet : [MODE_EMPLOI.html](MODE_EMPLOI.html).
+Version courante : **0.7.1**. Mode d'emploi complet : [MODE_EMPLOI.html](MODE_EMPLOI.html).
 
 ## Téléchargement
 
@@ -17,7 +17,7 @@ Dans la page [Releases](../../releases/latest), deux fichiers :
 | Fichier | Contenu | Pour qui |
 |---|---|---|
 | **`Total_Control_LV1_Install.exe`** | le pack **Total Control for LV1** : installeur avec cases à cocher pour **XTouch-LV1**, **REAPER LV1** et **[X/M32 Gain Recall for eMotion LV1](https://github.com/thaleosguest/x32-gain-recall)** | la plupart des gens |
-| `XTouch-LV1-v0.7.zip` | XTouch-LV1 seul, sans installation (dézipper, lancer `XTouch-LV1.exe`) | qui veut juste la surface |
+| `XTouch-LV1-v0.7.1.zip` | XTouch-LV1 seul, sans installation (dézipper, lancer `XTouch-LV1.exe`) | qui veut juste la surface |
 
 ### Le pack Total Control for LV1
 

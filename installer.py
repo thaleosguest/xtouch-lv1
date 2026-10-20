@@ -32,7 +32,7 @@ import threading
 
 SUITE = "Total Control for LV1"                    # nom du pack (choisi par Joseph le 16/10/2026)
 OLD_SUITES = ["LV1 Suite"]                         # anciens noms : dossier et menu Démarrer remplacés à l'installation
-VERSION = "0.7"                                     # version de XTouch-LV1 (= xtouch_lv1_display.VERSION, build.py vérifie)
+VERSION = "0.7.1"                                   # version de XTouch-LV1 (= xtouch_lv1_display.VERSION, build.py vérifie)
 XT, RP, GR = "xtouch", "reaper", "gainrecall"
 # RP (« REAPER LV1 », demande de Joseph) = intégration REAPER, sans dossier à elle : scripts dans <XTouch-LV1>\reaper,
 # déclarés dans REAPER ; il lui faut XTouch-LV1 (le pont échange les scènes et les pistes avec les scripts).

@@ -135,3 +135,11 @@ Chaque ligne correspond à un ou plusieurs commits git (`git log` pour le détai
 - ENTER / REALIGN sécurisés : vignette du pilote local sélectionnée toute seule (rang dans la rangée), refus sans clic si
   la grille ne correspond pas à la base ; beaucoup plus rapide (32 cases en 2,8 s au lieu de ~0,25 s par case).
 - Mono / stéréo changé sur la LV1 et pilote sans aucune route (déplacé dans le rack) : décalage détecté aussitôt.
+
+## 20/10/2026 : V0.7.1
+
+- Patch Input B : LV1 passée de 80 à 64, 32 ou 16 canaux -> plus de « COULDN'T REALIGN » (les canaux retirés restaient
+  en mémoire : pistes absentes de `/Channels` retirées, et plus recréées depuis la base par les pans de départ).
+- Pack : X/M32 Gain Recall **3.1.0**.
+- Désinstallation de Gain Recall : son « lancer avec Windows » est bien retiré (tâche planifiée 3.1, une demande UAC ;
+  clé Run des versions précédentes, sous son vrai nom).
