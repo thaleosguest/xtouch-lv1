@@ -9,7 +9,9 @@
 - Dépôt public `https://github.com/thaleosguest/xtouch-lv1` (branche `master`), release `v0.1` : `Total_Control_LV1_Install.exe`
   + `XTouch-LV1-v0.1.zip` (zip de `build/stage/xtouch`, SANS les réglages ni journaux de Joseph de `dist/XTouch-LV1`).
   Pas de CI : compiler (`py build.py`), zipper, puis `gh release create vX.Y <fichiers> --notes-file ...`.
-  Dernière release : **v0.7** (20/10/2026 : patch Input B — carte REALIGN, sécurisé, rapide, mono/stéréo) ;
+  Dernière release : **v0.7.1** (27/10/2026 : nombre de canaux réduit 80 -> 64/32/16, Gain Recall 3.1.0, retrait du
+  démarrage auto de Gain Recall à la désinstallation ; validée par Joseph sur l'installeur) ;
+  v0.7 (20/10/2026 : patch Input B — carte REALIGN, sécurisé, rapide, mono/stéréo) ;
   v0.6 (19/10/2026 : trim et phase, SoF de la LV1 suivi, Tout quitter + REAPER LV1) ;
   v0.5 (19/10/2026 : Tout quitter, renvoi X-Touch 30 s, Mixer différé pendant un toucher, clics
   abandonnés au changement de Mixer) ; v0.4 le même jour (FLIP / User Keys, sélection Channel / sous une fenêtre, refactor). Zip = `build/stage/xtouch` sous un dossier `XTouch-LV1/`.
