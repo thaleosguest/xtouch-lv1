@@ -29,6 +29,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 
 SUITE = "Total Control for LV1"                    # nom du pack (choisi par Joseph le 16/10/2026)
 OLD_SUITES = ["LV1 Suite"]                         # anciens noms : dossier et menu Démarrer remplacés à l'installation
@@ -153,9 +154,12 @@ def running(image):
     if sys.platform != "win32":
         return False
     try:
-        out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq %s" % image, "/NH"], capture_output=True,
-                             text=True, creationflags=NO_WINDOW).stdout
-    except OSError:
+        # sortie lue en octets puis décodée sans erreur possible (30/10/2026) : selon la langue et le réglage UTF-8 de
+        # Windows, `text=True` pouvait lever UnicodeDecodeError -> clic sur Install sans effet (exception invisible)
+        raw = subprocess.run(["tasklist", "/FI", "IMAGENAME eq %s" % image, "/NH"], capture_output=True,
+                             creationflags=NO_WINDOW).stdout or b""
+        out = raw.decode("utf-8", "replace") + raw.decode("cp850", "replace")
+    except (OSError, ValueError, subprocess.SubprocessError):
         return False
     return image.lower() in out.lower()
 
@@ -710,8 +714,21 @@ def uninstall(root, apps, reaper, log, keep_settings, do_shortcuts=True):
 
 # ---------------------------------------------------------------- fenêtre
 
+LOG_FILE = os.path.join(os.environ.get("TEMP") or os.path.expanduser("~"), "Total_Control_LV1_Install.log")
+
+
+def log_file(msg):
+    """Journal de l'installeur (%TEMP%/Total_Control_LV1_Install.log) : l'exe n'a pas de console."""
+    try:
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(time.strftime("%Y-%m-%d %H:%M:%S ") + msg + "\n")
+    except OSError:
+        pass
+
+
 def gui(a, sources):
     import tkinter as tk
+    import traceback
     from tkinter import messagebox
     removing = a.uninstall
     have = installed(a.root)
@@ -719,6 +736,22 @@ def gui(a, sources):
     bg, fg, dim, field = "#111213", "#e9edf0", "#9aa0a6", "#1b1d20"
     root = tk.Tk()
     root.configure(bg=bg)
+    log_file("installeur %s, Windows %s, langue %s" % (VERSION, sys.getwindowsversion().build
+                                                       if hasattr(sys, "getwindowsversion") else "?", LANG[0]))
+
+    def on_error(exc, val, tb):
+        """Erreur dans un clic (30/10/2026, « Install ne fait rien » sous Windows 11) : affichée et journalisée au lieu
+        de disparaître (pas de console)."""
+        text = "".join(traceback.format_exception(exc, val, tb))
+        log_file("ERREUR\n" + text)
+        try:
+            state["go"].config(state="normal")
+        except Exception:
+            pass
+        messagebox.showerror(SUITE, _("Unexpected error:\n%s\n\nDetails saved in:\n%s",
+                                      "Erreur inattendue :\n%s\n\nDétails enregistrés dans :\n%s") % (val, LOG_FILE),
+                             parent=root)
+    root.report_callback_exception = on_error
     ico = os.path.join(getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__))), "assets", "icon.ico")
     if os.path.exists(ico):                                # logo de XTouch-LV1 dans la barre de titre
         try:
@@ -731,6 +764,8 @@ def gui(a, sources):
     state = {"started": False, "box": None, "go": None}
 
     def log(msg):
+        log_file(msg)
+
         def put():
             box = state["box"]
             box.insert("end", msg + "\n")
