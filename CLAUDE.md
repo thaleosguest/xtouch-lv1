@@ -615,6 +615,12 @@ Messages vérifiés :
   `RecallSetup` dans le même processus (`on_done`). Bandeau < 140 px (`MINI_H`) = présentation « petit » : couleur + nom en haut,
   valeur + diode(s) de vumètre (verte / ambre > -12 / rouge > -3, éteinte < -50 ; 2 en stéréo), « M » si mute.
   Réglage de Joseph : petit = 1017-1076, grand = 745-1076, master 1884-1920 (trop étroit pour la valeur en petit).
+  **31/10 (demande de Joseph)** : option « Always visible » (`persistent` dans RECALL_OPTIONS / ADJUST, relue à chaud
+  par le pont : `recall_persistent`) = bandeau jamais caché (rafraîchi 10/s sans geste, `RECALL_EVERY_IDLE`) ; le
+  bandeau apparaît aussi à l'appui d'un bouton de tranche (Rec / Solo / Mute / Select, appui encodeur) ou à un cran
+  d'encodeur (`strip_gesture` dans `tick_input`, `RECALL_BUTTON_HOLD` 1,5 s) ; bandeau « petit » (`paint_mini`) :
+  pan en filet sous le nom, potard du gain X32 (`gain_v` du payload, arc à la couleur de la tranche), voyants M / S /
+  48V (48V seulement avec un préampli X32), master étroit inchangé.
   **Réglage à la main** : `py xtouch_overlay_qt.py --reglage` (3 blocs Extender 8 / X-Touch 8 / master 1, bords =
   étirer, intérieur = déplacer, haut/bas = hauteur ; Entrée = enregistrer, Échap = annuler) -> `xtouch_ecran.json`
   ({ext, xt, master: [x0, x1] sur 1920, y0, y1 sur 1080}), relu à chaud par le pont. `recall_payload`, `StripRecall`,

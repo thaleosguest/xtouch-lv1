@@ -266,6 +266,7 @@ RECALL_OPTIONS = [
     ("cap_alpha", "See-through fader", True),      # capuchon du fader un peu transparent (vumètre visible dessous)
     ("touch_dot", "Touch dot", True),              # fader touché : point bleu AU-DESSUS de la tranche (Joseph, 15/10)
     ("touch_outline", "Touch outline", True),      # fader touché : contour blanc de la case
+    ("persistent", "Always visible", False),       # bandeau toujours affiché (sinon : au toucher) (Joseph, 31/10)
 ]
 # Deux hauteurs mémorisées (demande de Joseph, 15/10) : « petit » (nom, couleur, valeur, diode) et « grand »
 # (présentation complète) ; `taille` = celle en cours, y0 / y1 = ses valeurs. Bascule : --taille petit|grand.
@@ -373,6 +374,7 @@ class StripRecall(QWidget):
         self.f_scale = QFont("Segoe UI", 7)
         self.f_mini = QFont("Segoe UI", 9, QFont.Bold)
         self.f_mini_val = QFont("Consolas", 10, QFont.Bold)
+        self.f_pill = QFont("Segoe UI", 7, QFont.Bold)
 
     def set(self, data):
         self.data = data or {}
@@ -470,14 +472,16 @@ class StripRecall(QWidget):
             p.drawRect(QRectF(m.left(), m.bottom() - h, m.width(), h))
 
     def paint_mini(self, p, r, c, hot, send):
-        """Bandeau « petit » : couleur + nom en haut, valeur + diode(s) de vumètre en bas (2 en stéréo)."""
+        """Bandeau « petit » : couleur + nom en haut (avec le PAN en filet sous le nom), puis potard du gain X32,
+        valeur + diode(s) de vumètre, et les voyants M / S / 48V (demande de Joseph du 31/10 : mute, solo, 48V, pan
+        et potard dans le petit bandeau). Case étroite (master) : nom court, valeur, « M »."""
         sel = bool(c.get("sel"))
         p.setPen(QPen(QColor("#ffffff") if hot else (QColor(255, 242, 0) if sel else QColor(LINE2)),
                       2.0 if (hot or sel) else 1.0))
         p.setBrush(QColor("#1b1d20") if hot else QColor(PANEL))
         p.drawRoundedRect(r, 6, 6)
         col = QColor(c.get("color") or LINE2)
-        top = QRectF(r.left(), r.top(), r.width(), r.height() * 0.5)
+        top = QRectF(r.left(), r.top(), r.width(), max(14.0, r.height() * 0.4))
         path = QPainterPath()
         path.addRoundedRect(r, 6, 6)
         p.save()
@@ -488,25 +492,93 @@ class StripRecall(QWidget):
         p.setPen(QColor(PANEL) if dark else QColor("#ffffff"))
         p.setFont(self.f_mini)
         name = c.get("name", "")
-        p.drawText(top.adjusted(3, 0, -3, 0), Qt.AlignCenter, name if r.width() >= COMPACT_W else name[:3])
+        narrow = r.width() < COMPACT_W
+        p.drawText(top.adjusted(3, 0, -3, -3 if not narrow else 0), Qt.AlignCenter, name[:3] if narrow else name)
+        pv = c.get("pan_v")
+        if pv is not None and not narrow:                  # pan : filet sous le nom, repère au centre, point = position
+            ty = top.bottom() - 3.0
+            x0, x1 = top.left() + 8, top.right() - 8
+            p.setPen(QPen(QColor(0, 0, 0, 110), 2.0))
+            p.drawLine(QPointF(x0, ty), QPointF(x1, ty))
+            xm = (x0 + x1) / 2
+            px_ = xm + max(-1.0, min(1.0, pv)) * (x1 - x0) / 2
+            p.setPen(QPen(QColor(LV1_BLUE), 2.0))
+            p.drawLine(QPointF(xm, ty), QPointF(px_, ty))
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor("#ffffff"))
+            p.drawEllipse(QPointF(px_, ty), 2.6, 2.6)
         bot = QRectF(r.left(), top.bottom(), r.width(), r.bottom() - top.bottom())
         meters = c.get("meters") or [None]
-        d = max(6.0, min(10.0, bot.height() * 0.42))
-        lx = bot.right() - 5 - d * len(meters) - 3 * (len(meters) - 1)
+        if narrow:                                         # master étroit : valeur + « M », comme avant
+            if c.get("mute"):
+                p.setPen(QColor(225, 22, 32))
+                p.setFont(self.f_mini)
+                p.drawText(QRectF(bot.left(), bot.top(), bot.width(), bot.height() / 2), Qt.AlignCenter, "M")
+            p.setPen(QColor(TXT))
+            p.setFont(self.f_mini_val)
+            p.drawText(QRectF(bot.left() - 2, bot.center().y() - 2, bot.width() + 4, bot.height() / 2), Qt.AlignCenter,
+                       c.get("value", ""))
+            return
+        # potard du gain X32 (seulement si la tranche a un préampli X32) : à gauche, sur toute la hauteur du bas
+        gv = c.get("gain_v")
+        x0 = bot.left() + 4
+        if gv is not None:
+            kd = max(14.0, min(bot.height() - 4, 26.0))
+            kr = QRectF(x0, bot.center().y() - kd / 2, kd, kd)
+            frac = max(0.0, min(1.0, (gv + 12.0) / 72.0))
+            a = kr.adjusted(1.5, 1.5, -1.5, -1.5)
+            p.setPen(QPen(QColor("#2a2e33"), 2.6, Qt.SolidLine, Qt.RoundCap))
+            p.drawArc(a, (90 + 135) * 16, -270 * 16)
+            p.setPen(QPen(col, 2.6, Qt.SolidLine, Qt.RoundCap))
+            p.drawArc(a, (90 + 135) * 16, int(-270 * frac * 16))
+            body = kr.adjusted(kd * 0.24, kd * 0.24, -kd * 0.24, -kd * 0.24)
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor(LV1_KNOB))
+            p.drawEllipse(body)
+            th = math.radians(-135 + frac * 270)
+            cx_, cy_ = body.center().x(), body.center().y()
+            rr = body.width() / 2
+            p.setPen(QPen(QColor("#ffffff"), 1.6, Qt.SolidLine, Qt.RoundCap))
+            p.drawLine(QPointF(cx_ + math.sin(th) * rr * 0.15, cy_ - math.cos(th) * rr * 0.15),
+                       QPointF(cx_ + math.sin(th) * rr * 0.85, cy_ - math.cos(th) * rr * 0.85))
+            x0 = kr.right() + 4
+        half = bot.height() / 2
+        line_a = QRectF(x0, bot.top() + 1, bot.right() - x0 - 4, half - 1)
+        line_b = QRectF(x0, bot.top() + half, bot.right() - x0 - 4, half - 2)
+        # ligne 1 : valeur (fader ou envoi) + diode(s) de vumètre
+        d = max(6.0, min(9.0, line_a.height() * 0.6))
+        lx = line_a.right() - d * len(meters) - 3 * (len(meters) - 1)
         for k, db in enumerate(meters):
             p.setPen(Qt.NoPen)
             p.setBrush(led_color(db))
-            p.drawEllipse(QRectF(lx + k * (d + 3), bot.center().y() - d / 2, d, d))
-        x0 = bot.left() + 4
-        if c.get("mute"):
-            p.setPen(QColor(225, 22, 32))
-            p.setFont(self.f_mini)
-            p.drawText(QRectF(x0, bot.top(), 14, bot.height()), Qt.AlignVCenter | Qt.AlignLeft, "M")
-            x0 += 14
+            p.drawEllipse(QRectF(lx + k * (d + 3), line_a.center().y() - d / 2, d, d))
         p.setPen(QColor("#ff8a80") if (send and c.get("send_off")) else QColor(TXT))
         p.setFont(self.f_mini_val)
-        p.drawText(QRectF(x0, bot.top(), lx - x0 - 2, bot.height()), Qt.AlignCenter,
+        p.drawText(QRectF(line_a.left(), line_a.top(), lx - line_a.left() - 2, line_a.height()), Qt.AlignCenter,
                    ("> " if send else "") + c.get("value", ""))
+        # ligne 2 : voyants M / S / 48V (éteints = contour gris ; 48V seulement s'il y a un préampli X32)
+        pills = [("M", c.get("mute"), QColor(225, 22, 32)), ("S", c.get("solo"), QColor(255, 210, 0))]
+        if c.get("ph") is not None:
+            pills.append(("48V", c.get("ph"), QColor(209, 52, 59)))
+        ph_ = max(10.0, min(14.0, line_b.height() - 1))
+        x = line_b.left()
+        p.setFont(self.f_pill)
+        fm = p.fontMetrics()
+        for text, on, lit in pills:
+            pw = max(ph_ + 2, fm.horizontalAdvance(text) + 8)
+            if x + pw > line_b.right():
+                break
+            pr = QRectF(x, line_b.center().y() - ph_ / 2, pw, ph_)
+            if on:
+                p.setPen(Qt.NoPen)
+                p.setBrush(lit)
+            else:
+                p.setPen(QPen(QColor(LINE2), 1.0))
+                p.setBrush(Qt.NoBrush)
+            p.drawRoundedRect(pr, 3, 3)
+            p.setPen(QColor("#111111") if (on and text == "S") else (QColor("#ffffff") if on else QColor("#6b7178")))
+            p.drawText(pr, Qt.AlignCenter, text)
+            x += pw + 3
 
     def paint_cell(self, p, r, c, hot, send):
         if c and self.height() - DOT_PAD < MINI_H:

@@ -815,6 +815,40 @@ def scene_relay(state, bridge, link, now, write=True):
 
 RECALL_HOLD = 0.5        # s : le rappel de pistes reste affiché après le relâchement du dernier fader
 RECALL_EVERY = 0.05      # s : rafraîchissement du rappel (vumètres) pendant qu'il est affiché
+RECALL_EVERY_IDLE = 0.1  # s : rafraîchissement quand il reste affiché sans geste (option « toujours visible »)
+RECALL_BUTTON_HOLD = 1.5  # s : rappel affiché après un appui sur un bouton de tranche / un cran d'encodeur (31/10)
+
+
+def strip_gesture(st, d1, d2):
+    """Bouton de tranche (Rec / Solo / Mute / Select, appui sur l'encodeur) appuyé, ou encodeur tourné : le rappel de
+    pistes s'affiche comme pour un fader (demande de Joseph du 31/10)."""
+    kind = st & 0xF0
+    if kind == 0x90 and d2 > 0:
+        return NOTE_REC <= d1 < NOTE_SELECT + 8 or NOTE_VPOT_PUSH <= d1 < NOTE_VPOT_PUSH + 8
+    return kind == 0xB0 and CC_VPOT <= d1 < CC_VPOT + 8
+
+
+_PERSIST = {"t": 0.0, "mtime": None, "on": False}
+
+
+def recall_persistent(now):
+    """Option « toujours visible » du rappel de pistes (interrupteur du réglage ADJUST de l'overlay, dans
+    xtouch_ecran.json), relue au plus une fois par seconde, seulement si le fichier a changé."""
+    if now - _PERSIST["t"] >= 1.0:
+        _PERSIST["t"] = now
+        path = os.path.join(HERE, "xtouch_ecran.json")
+        try:
+            mt = os.path.getmtime(path)
+        except OSError:
+            mt = None
+        if mt != _PERSIST["mtime"]:
+            _PERSIST["mtime"] = mt
+            try:
+                with open(path, encoding="utf-8-sig") as f:
+                    _PERSIST["on"] = bool((json.load(f).get("options") or {}).get("persistent"))
+            except (OSError, ValueError, AttributeError):
+                _PERSIST["on"] = False
+    return _PERSIST["on"]
 
 
 def recall_payload(state, entries, sends, touched, xlink=None, gain=None):
@@ -859,6 +893,7 @@ def recall_payload(state, entries, sends, touched, xlink=None, gain=None):
         g = xlink.gain(e, side)
         if g is not None:
             c["gain"] = ("%s%+.1f" % ("LR"[side], g)) if len(xlink.preamps(e)) == 2 else "%+.1f" % g
+            c["gain_v"] = g                           # potard du petit bandeau (31/10)
             c["ph"] = xlink.phantom_on(e, side)
     info = sends.overlay_info() if aux is not None else (None,)
     curve = [[d, p] for d, p in _values.FADER_CURVE]          # le petit fader de l'écran suit la courbe calibrée
@@ -1582,6 +1617,8 @@ class App:
                     unit, st, d1, d2, t = self.events.get_nowait()
                 except queue.Empty:
                     break
+            if strip_gesture(st, d1, d2):                 # bouton de tranche / encodeur : rappel de pistes affiché
+                self.recall_until = max(self.recall_until, now + RECALL_BUTTON_HOLD)
             if not (self.faders.on_midi(unit, st, d1, d2, t, entries, xt)
                     or self.sends.on_midi(unit, st, d1, d2, t, entries, xt)
                     or self.gain.on_midi(unit, st, d1, d2, t, entries, xt)
@@ -1684,13 +1721,17 @@ class App:
                 self.scene_bridge.write_tracks(input_list(state))
         if overlay:
             faders = self.faders
-            if faders.held(now):                       # touché, ou bougé sans toucher (ongle) : bandeau affiché
-                self.recall_until = now + RECALL_HOLD
+            held = faders.held(now)
+            if held:                                   # touché, ou bougé sans toucher (ongle) : bandeau affiché
+                self.recall_until = max(self.recall_until, now + RECALL_HOLD)
+            if recall_persistent(now):                 # option « toujours visible » (ADJUST) : jamais caché
+                self.recall_until = max(self.recall_until, now + 1.0)
             # point / contour de toucher : le doigt SEULEMENT (disparaît au relâchement, demande de Joseph du
             # 15/10), ou un geste sans toucher détecté (ongle) tant qu'il bouge
             touched = faders.touch_display(now)
             if now < self.recall_until:
-                if now - self.recall_sent >= RECALL_EVERY or touched != self.recall_touched:
+                every = RECALL_EVERY if (held or touched) else RECALL_EVERY_IDLE
+                if now - self.recall_sent >= every or touched != self.recall_touched:
                     self.recall_sent, self.recall_touched = now, touched
                     overlay.set_recall(recall_payload(state, self.entries, sends, touched, self.xlink, self.gain))
             elif self.recall_sent:

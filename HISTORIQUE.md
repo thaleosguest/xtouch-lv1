@@ -150,3 +150,10 @@ Chaque ligne correspond à un ou plusieurs commits git (`git log` pour le détai
   `tasklist` (programmes ouverts) était décodée avec l'encodage du système : erreur possible selon la langue / le
   réglage UTF-8, invisible (exe sans console). Décodage sans erreur ; toute erreur d'un clic est maintenant affichée et
   écrite dans `%TEMP%\Total_Control_LV1_Install.log`.
+
+## 31/10/2026 : overlay (rappel de pistes)
+
+- Option « Always visible » dans le réglage ADJUST : le bandeau reste affiché (sinon, au toucher).
+- Le bandeau apparaît aussi quand on appuie sur un bouton de tranche (Rec, Solo, Mute, Select, encodeur) ou qu'on tourne
+  un encodeur, pas seulement en touchant un fader.
+- Petit bandeau : pan (filet sous le nom), potard du gain X32, voyants M / S / 48V.
