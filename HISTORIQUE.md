@@ -143,3 +143,10 @@ Chaque ligne correspond à un ou plusieurs commits git (`git log` pour le détai
 - Pack : X/M32 Gain Recall **3.1.0**.
 - Désinstallation de Gain Recall : son « lancer avec Windows » est bien retiré (tâche planifiée 3.1, une demande UAC ;
   clé Run des versions précédentes, sous son vrai nom).
+
+## 31/10/2026 : V0.7.2
+
+- Installeur sous Windows 11 : clic sur Install sans effet (signalé par Joseph, réglé chez lui). La sortie de
+  `tasklist` (programmes ouverts) était décodée avec l'encodage du système : erreur possible selon la langue / le
+  réglage UTF-8, invisible (exe sans console). Décodage sans erreur ; toute erreur d'un clic est maintenant affichée et
+  écrite dans `%TEMP%\Total_Control_LV1_Install.log`.
