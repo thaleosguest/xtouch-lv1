@@ -151,7 +151,7 @@ Chaque ligne correspond à un ou plusieurs commits git (`git log` pour le détai
   réglage UTF-8, invisible (exe sans console). Décodage sans erreur ; toute erreur d'un clic est maintenant affichée et
   écrite dans `%TEMP%\Total_Control_LV1_Install.log`.
 
-## 31/10/2026 : overlay (rappel de pistes)
+## 01/11/2026 : V0.8 (overlay, rappel de pistes)
 
 - Option « Always visible » dans le réglage ADJUST : le bandeau reste affiché (sinon, au toucher).
 - Le bandeau apparaît aussi quand on appuie sur un bouton de tranche (Rec, Solo, Mute, Select, encodeur) ou qu'on tourne
