@@ -449,7 +449,9 @@ Messages vérifiés :
   n'était vue qu'au prochain envoi raté (rien n'est envoyé sans vumètre ni geste) et ses entrées restaient muettes ->
   `check_ports` interroge `RtpHub.stale(poignée)` à chaque tour. **Piège de test** : un faux appareil qui lit un paquet
   toutes les 20 ms fait croire à une perte de session (les `CK` attendent derrière la rafale d'écrans du démarrage).
-  Pas encore essayé sous Windows ni avec la vraie LV1. Test : `tests/test_rtpmidi_pont.py`.
+  Test : `tests/test_rtpmidi_pont.py`. **Validé le 10/11/2026 sur emo-lv1** (pont depuis les sources, admin, Windows 11) :
+  écrans, couleurs, vumètres, faders, boutons, clics LV1, overlay, Gain Recall ; aucune perte de paquet en 10 min ; retour
+  LV1 ~10 ms après l'envoi d'un fader ; pas de retard ressenti par Joseph par rapport à l'USB.
 
 ## Garde-fous des faders (ne pas retirer sans raison)
 
