@@ -63,6 +63,8 @@ def server():
     lay = [("i", 0), ("i", 0), ("i", 1), ("s", "Ch 1-16"), ("i", 16)]
     for k in range(16): lay += [("i", 0), ("i", k)]
     send("/Notify/Layers", lay); send("/Notify/CurrentLayer", [("i", 0), ("i", 0)])
+    for k in range(16):              # une vraie LV1 envoie ses 16 User Keys à la connexion (17/10) ; sans elles le pont
+        send("/Notify/UserKeyInfo", [("i", k), ("s", "None"), ("s", "None"), ("i", 0)])   # se reconnecte à 3 s (10/11)
     aux = [("i", 24)]
     for k in range(8): aux += [("i", k), ("i", 2), ("s", "Fx %d" % (k + 1))]
     for k in range(16): aux += [("i", k), ("i", 25), ("s", "Mon %d" % (k + 1))]
@@ -102,6 +104,7 @@ def inject():
     put(3.75, 1, 0x90, 0x70, 127); put(3.8, 1, 0xE8, 0x00, 0x30); put(3.85, 1, 0x90, 0x70, 0)  # master LR : lecture seule
     put(3.9, 0, 0x90, 0x69, 127); put(3.95, 0, 0xE1, 0x00, 0x50); put(4.3, 0, 0x90, 0x69, 0)  # fader 2 normal
 threading.Thread(target=inject, daemon=True).start()
+D.BANNER_SECS = 0     # pas de messages sur toute la largeur ici (ils couvriraient la ligne du bas lue plus bas)
 
 sys.argv = ["x", "--dry-run", "--no-journal", "--host", "127.0.0.1", "--port", str(srv.getsockname()[1]),
             "--x32", "aucun", "--seconds", "4.8"]
@@ -126,6 +129,7 @@ ok = ok and span == [[0, 1, 2, 12.0]] and not any(x == "/Set/Track/Pan" for x, v
 ok = ok and bool(picks)
 bottom = [v for t, d in sorted(LCD.items()) if 2.1 <= t < 3.6 for v in d if v[5:7] == b"8"]
 print("Ligne du bas en mode envois :", bottom[-1][7:30] if bottom else None)
+# fader 1 touché de 2,6 à 3,0 s : sa ligne du bas montre le niveau d'envoi (puis 1 s encore), sinon le pan d'envoi
 ok = ok and any(b[7:14].startswith(b"F3 -") for b in bottom[-2:])   # 2 unités : l'une des deux dernières
 # Overlay (rappel à l'écran) pendant le choix de l'aux : les aux de la page, pas la dernière couche (Joseph, 15/10)
 class _Pick:

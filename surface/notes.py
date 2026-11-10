@@ -27,7 +27,8 @@ NOTE_CHANNEL_LEFT, NOTE_CHANNEL_RIGHT = 0x30, 0x31
 # Page Channel : il règle le potard de plugin sélectionné (fader horizontal du bas) par crans de molette.
 CC_JOG = 0x3C
 
-NOTE_FLIP = 0x32                  # FLIP (vérifié le 14/10) -> User Key « Flip AB Input channel » de la LV1
+NOTE_FLIP = 0x32                  # FLIP (vérifié le 14/10) -> sends on fader, comme le Flip du contrôleur LV1 (Joseph 10/11)
+NOTE_SHIFT = 0x46                 # SHIFT (norme Mackie ; 0x46 vu le 10/11) : SHIFT + FLIP = User Key « Flip AB » de la LV1
 
 # Touches View (norme Mackie ; 0x33 et 0x3F vues dans les journaux de Joseph, 0x43 et 0x45 par la suite de la norme)
 # -> boutons de mode de couche de la LV1 (demande de Joseph du 16/10) : INPUTS = Input (Factory en 16/32/64),
@@ -36,6 +37,8 @@ NOTE_FLIP = 0x32                  # FLIP (vérifié le 14/10) -> User Key « Fli
 # SMPTE/BEATS (0x35) : afficheur 7 segments = timecode REAPER ou heure (Joseph, 16/10) ; LED SMPTE (0x71) = timecode.
 NOTE_GLOBAL_VIEW, NOTE_INPUTS, NOTE_BUSES, NOTE_USER = 0x33, 0x3F, 0x43, 0x45
 NOTE_GROUP = 0x4F
+NOTE_AUDIO_TRACKS = 0x40          # AUDIO TRACKS (vérifié le 10/11, journal 173512) -> mode Custom de la LV1 (Joseph, 10/11 : USER est pris
+                                  # par le mode User Keys sur les Select, comme le bouton User du contrôleur LV1)
 NOTE_SMPTE, NOTE_LED_SMPTE = 0x35, 0x71
 
 NOTE_SOLO_ALL = 0x5A             # bouton SOLO (groupe Marker..Click..Solo, Mackie, à confirmer) : allumé si un solo
@@ -54,7 +57,9 @@ CC_TIMECODE, CC_ASSIGN_L, CC_ASSIGN_R = 0x40, 0x4B, 0x4A
 NOTE_RUDE_SOLO = 0x73             # LED « SOLO » près de l'afficheur (norme Mackie, à confirmer)
 
 NOTE_SEND = 0x29                  # SEND (norme Mackie ; « sends on fader »)
-NOTE_F1 = 0x36                    # F1..F8 = 0x36..0x3D (norme Mackie, à confirmer) -> User Keys 1..8 de la LV1
+NOTE_F1 = 0x36                    # F1..F8 = 0x36..0x3D (vérifié le 10/11, journal 173512) -> couches 1..8 (Joseph, 10/11)
+# Vus dans le journal 173512 (non utilisés) : 0x41 (AUDIO INST ?), 0x44 (OUTPUTS ?), 0x46 et 0x49 (SHIFT / ALT ?, tenus
+# avec FLIP par Joseph). USER 0x45 vérifié (mode User Keys sur les Select).
 
 # Transport X-Touch -> REAPER (demande de Joseph, 15/10 : la surface coupée en deux, tranches = LV1,
 # transport / navigation = Reaper pour le virtual soundcheck). Notes Mackie (norme, non vérifiées sur la X-Touch).

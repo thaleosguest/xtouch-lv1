@@ -71,7 +71,7 @@ essayées sur la X-Touch.</p>
   <a href="#master">Master</a><a href="#nav">Couches et sélection</a><a href="#encodeurs">Encodeurs</a>
   <a href="#sends">Sends on fader</a><a href="#fkeys">F1–F8</a><a href="#flip">FLIP A/B</a>
   <a href="#afficheur">Afficheur</a><a href="#transport">Transport Reaper</a><a href="#apps">DISPLAY / SAVE / ENTER</a>
-  <a href="#jog">Jog</a><a href="#ecran">À l'écran</a><a href="#reaper">Reaper</a><a href="#depannage">Dépannage</a>
+  <a href="#jog">Jog</a><a href="#ecran">À l'écran</a><a href="#reaper">Reaper</a><a href="#reseau">Réseau</a><a href="#depannage">Dépannage</a>
 </nav>
 
 <h2 id="demarrer">1. Démarrer</h2>
@@ -124,6 +124,9 @@ canal, nom en haut, valeur en bas. Vumètres = ceux de la LV1 (post-fader).</p>
   premier plan). Tout ce qui suit marche pareil sur les deux ; sur un autre onglet (Channel, All…), le dernier Mixer reste
   suivi.</p>
 <table>
+  <tr><td><span class="k">F1</span> … <span class="k">F8</span></td><td><b>Couches 1 à 8</b> en accès direct, comme les
+      touches de couche du contrôleur LV1 ; la LED de la couche affichée est allumée ; la LV1 suit. Une couche vide ne
+      fait rien. Bloqué pendant qu'un fader est touché.</td></tr>
   <tr><td><span class="k">◄ BANK</span> <span class="k">BANK ►</span></td><td>Couche précédente / suivante (les couches
       vides sont sautées) ; la LV1 suit. Bloqué pendant qu'un fader est touché.</td></tr>
   <tr><td><span class="k">◄ CHANNEL</span> <span class="k">CHANNEL ►</span></td><td>Sélectionne le canal précédent /
@@ -131,7 +134,7 @@ canal, nom en haut, valeur en bas. Vumètres = ceux de la LV1 (post-fader).</p>
   <tr><td><span class="k">INPUTS</span></td><td>Bouton <b>Input</b> de la LV1 en 80 canaux, <b>Factory</b> en 16 / 32 / 64.
       <span class="tag">à confirmer</span></td></tr>
   <tr><td><span class="k">BUSES</span></td><td>Bouton <b>Mix</b> (80 canaux seulement).</td></tr>
-  <tr><td><span class="k">USER</span></td><td>Bouton <b>Custom</b> : appuyer encore revient au dernier Input / Mix.</td></tr>
+  <tr><td><span class="k">AUDIO TRACKS</span></td><td>Bouton <b>Custom</b> : appuyer encore revient au dernier Input / Mix.</td></tr>
   <tr><td><span class="k">GROUP</span></td><td>Bouton <b>Spill</b> : appuyer encore revient au dernier Input / Mix.</td></tr>
   <tr><td><span class="k">GLOBAL VIEW</span></td><td>Onglet <b>All</b> de la LV1 ; appuyer encore revient au Mixer.</td></tr>
   <tr><td>Voyants</td><td>La touche du mode affiché par la LV1 est allumée (lu dans la LV1, même quand on change de
@@ -140,40 +143,59 @@ canal, nom en haut, valeur en bas. Vumètres = ceux de la LV1 (post-fader).</p>
       <span class="tag">à confirmer</span></td></tr>
 </table>
 
-<h2 id="encodeurs">6. Encodeurs : TRACK et PAN</h2>
+<h2 id="encodeurs">6. Encodeurs : PAN, GAIN, TRIM (comme le contrôleur LV1)</h2>
 <table>
   <tr><th>Mode</th><th>Encodeur tourné</th><th>Encodeur appuyé</th></tr>
-  <tr><td><span class="k">TRACK</span></td><td><b>Gain du préampli X32</b> (pas de 0,5 dB). Écran du bas : « L+12.0 ».</td>
-      <td>Canal stéréo : bascule <b>L ↔ R</b> (jamais les deux en même temps).</td></tr>
-  <tr><td><span class="k">TRACK</span> ×2<br>(LED clignote)</td><td><b>Trim</b> de la LV1 (pas de 0,5 dB). Écran du bas : « T+3.5 ».</td>
+  <tr><td><span class="k">PAN</span><br>(au démarrage)</td><td><b>Pan</b> LV1 (L45 … C … R45), plus rapide si on tourne vite.
+      En sends on fader : pan de l'<b>envoi</b> (écran « M16 L12 »).</td><td>Pan au centre.</td></tr>
+  <tr><td><span class="k">TRACK</span></td><td><b>GAIN</b> automatique : le <b>préampli X32</b> si la tranche en a un
+      (« L+12.0 », pas de 0,5 dB), sinon le <b>trim</b> LV1 (« T+3.5 »).</td>
+      <td>Canal stéréo X32 : bascule <b>L ↔ R</b> (jamais les deux en même temps).</td></tr>
+  <tr><td><span class="k">TRACK</span> ×2<br>(LED clignote)</td><td><b>TRIM</b> de la LV1 sur toutes les tranches.</td>
       <td><b>Phase</b> inversée / normale. LED Rec de la tranche = phase inversée.</td></tr>
-  <tr><td><span class="k">PAN</span></td><td><b>Pan</b> LV1 (L45 … C … R45), plus rapide si on tourne vite.</td>
-      <td>Pan au centre.</td></tr>
-  <tr><td>aucun</td><td>Rien.</td><td>—</td></tr>
 </table>
-<p>TRACK alterne : gain X32, puis trim LV1 (LED qui clignote), puis mode normal (sans X/M32 Gain Recall : trim, puis normal). TRACK et PAN s'excluent ; appuyer à nouveau sur PAN allumé revient au mode normal.</p>
+<p>TRACK fait tourner : PAN → GAIN → TRIM → PAN (sans X/M32 Gain Recall : PAN → TRIM → PAN). PAN revient
+directement au pan.</p>
 
-<h2 id="sends">7. Sends on fader <span class="tag">bouton SEND à confirmer</span></h2>
+<h3>Les écrans</h3>
+<ul>
+  <li>En haut : le nom du canal (raccourci s'il dépasse 7 lettres : « Lead Vocal » → « LeadVcl »), ou le nom de la
+      User Key en mode USER.</li>
+  <li>En bas : la <b>valeur de l'encodeur</b> (pan, gain ou trim). Quand tu <b>touches un fader</b>, son niveau en dB
+      (ou le niveau d'envoi) remplace la valeur, et reste 1 s après le relâchement.</li>
+  <li>Messages sur toute la largeur, 1,5 s : changement de couche (« LAYER 2 Ch17-32 »), de mode des encodeurs
+      (« ENCODER GAIN »), sends (« SELECT AN AUX », « SENDS TO Mon 16 », « SENDS OFF »), USER. Tant que
+      <span class="k">SHIFT</span> est tenu : « SHIFT + FLIP = FLIP A/B INPUTS ON A » (ou B).</li>
+  <li>Vumètres : la <b>LED rouge</b> clignote 1 s quand le canal sature, à l'entrée (préampli X32, lu dans X/M32
+      Gain Recall : XTouch-LV1 allume ses vumètres s'ils sont éteints) ou après le fader (0 dBFS sur la LV1).</li>
+</ul>
+
+<h2 id="sends">7. Sends on fader : FLIP (ou SEND)</h2>
 <ol>
-  <li><span class="k">SEND</span> : les écrans montrent les aux (Fx 1-8 sur l'Extender, Mon 1-8 sur la X-Touch ;
+  <li><span class="k">FLIP</span> (comme le Flip du contrôleur LV1) ou <span class="k">SEND</span> : la LED clignote, les écrans montrent les aux (Fx 1-8 sur l'Extender, Mon 1-8 sur la X-Touch ;
       <span class="k">BANK ►</span> = Mon 9-16). Les faders montrent les masters des aux. L'écran du PC montre la même liste.</li>
   <li><span class="k">SELECT</span> sous l'aux voulu.</li>
   <li>Les faders deviennent les <b>niveaux d'envoi</b> de chaque canal vers cet aux ; <span class="k">MUTE</span> = envoi
       on/off (LED allumée = envoi coupé) ; encodeur = <b>pan de l'envoi</b> ; fader master = master de l'aux.
       Un bandeau « SEND ON FADER » et un cadre rouge autour de la LV1 le rappellent.</li>
-  <li><span class="k">SEND</span> à nouveau : retour aux canaux.</li>
+  <li><span class="k">FLIP</span> ou <span class="k">SEND</span> à nouveau : retour aux canaux.</li>
 </ol>
 <p>Afficheur : « SE » + « SEL » pendant le choix, puis le nom de l'aux et son niveau. Monter un envoi coupé l'allume
 (comportement de la LV1).</p>
 
-<h2 id="fkeys">8. F1 à F8 = User Keys 1 à 8 de la LV1</h2>
-<p>Chaque touche F appuie sur la User Key correspondante de la LV1. Si cette User Key est un <b>« Flip Sends »</b> vers un
-aux, la X-Touch passe <b>aussi</b> en sends on fader vers cet aux (LED de la touche F allumée) ; un 2e appui revient
-en arrière. <span class="tag">notes F à confirmer</span></p>
+<h2 id="fkeys">8. USER = User Keys 1 à 16 de la LV1 sur les SELECT</h2>
+<p>Comme le bouton User du contrôleur LV1 : <span class="k">USER</span> (LED allumée) transforme les 16
+<span class="k">SELECT</span> en <b>User Keys 1 à 16</b> de la LV1 (Extender = 1-8, X-Touch = 9-16) ; le nom de chaque
+User Key s'affiche en haut de l'écran de la tranche (« - » si elle n'est pas assignée). <span class="k">USER</span> à
+nouveau : les SELECT reviennent à la sélection. <span class="k">SEND</span> sort aussi du mode USER.</p>
+<p>Si une User Key est un <b>« Flip Sends »</b> vers un aux, la X-Touch passe <b>aussi</b> en sends on fader vers cet
+aux (LED du SELECT allumée) ; un 2e appui revient en arrière.</p>
 
-<h2 id="flip">9. FLIP = Flip A/B</h2>
-<p><span class="k">FLIP</span> appuie sur la User Key « Flip AB » de la LV1 (la LV1 demande de confirmer à l'écran).
-LED FLIP allumée = entrées sur <b>B</b> (lecture Reaper = virtual soundcheck). Sur l'écran de la LV1, une pastille
+<h2 id="flip">9. SHIFT + FLIP = Flip A/B</h2>
+<p><span class="k">SHIFT</span> tenu + <span class="k">FLIP</span> appuie sur la User Key « Flip AB » de la LV1 (la LV1
+demande de confirmer à l'écran). Elle marche aussi par le SELECT de cette User Key en mode <span class="k">USER</span>.
+Pendant que <span class="k">SHIFT</span> est tenu, les écrans rappellent SHIFT + FLIP et disent si les entrées sont
+sur <b>A</b> ou sur <b>B</b> (lecture Reaper = virtual soundcheck). Sur l'écran de la LV1, une pastille
 recouvre la touche FlipAB : <b style="color:var(--blue)">A</b> bleu / <b style="color:var(--red)">B</b> rouge.</p>
 <div class="card warn"><b>« FLIP ! » encadré de rouge</b> = la diagonale du patch B n'est plus alignée (souvent après un
 passage mono ↔ stéréo d'un canal). Réparer : page <b>Patch &gt; Input B</b> de la LV1, clic maintenu sur la première case
@@ -260,7 +282,20 @@ potard. Sinon : la molette déplace la lecture de Reaper (<span class="k">SCRUB<
 canaux enregistrés, NON = tous). Ensuite noms et couleurs suivent en direct ; les nouvelles pistes arrivent à l'arrêt.
 Nouvelles pistes : désarmées, monitoring OFF.</p>
 
-<h2 id="depannage">16. Dépannage</h2>
+<h2 id="reseau">16. Réseau : choix de la LV1, relais, X-Touch en Ethernet</h2>
+<ul>
+  <li><b>Plusieurs LV1 sur le réseau</b> : la LV1 de <b>ce PC</b> d'abord. Menu de l'icône près de l'horloge : liste des
+      LV1 vues, choix gardé ; « automatique » = ce PC d'abord.</li>
+  <li><b>LV1 sur un autre PC</b> (ex. VM sans écran) et X-Touch en USB ici : choisir cette LV1 dans le menu. Si XTouch-LV1
+      tourne aussi là-bas, il passe ici en <b>relais</b> (le MIDI suit par le réseau local, TCP 9310).</li>
+  <li><b>X-Touch par sa prise Ethernet</b> (sans USB) : X-Touch et Extender en mode <b>MC</b>, réseau en <b>esclave</b>.
+      Fichier <code>xtouch_rtpmidi.json</code> à côté de l'exe (gardé à la mise à jour) :<br>
+      <code>{"devices": [{"name": "X-TOUCH", "ip": "192.168.1.38", "port": 5008}, {"name": "X-TOUCH-EXT", "ip":
+      "192.168.1.39", "port": 5006}]}</code><br>
+      (adresse et port de contrôle de chaque appareil, dans son menu réseau). Pas de retard ressenti par rapport à l'USB.</li>
+</ul>
+
+<h2 id="depannage">17. Dépannage</h2>
 <table>
   <tr><td>La X-Touch ne répond plus (écrans à jour, mais boutons et faders sans effet)</td><td>Éteindre et rallumer la X-Touch
       et l'Extender (ou débrancher / rebrancher l'USB) : XTouch-LV1 se reconnecte tout seul, inutile de le relancer. Si ça

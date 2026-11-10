@@ -157,3 +157,44 @@ Chaque ligne correspond à un ou plusieurs commits git (`git log` pour le détai
 - Le bandeau apparaît aussi quand on appuie sur un bouton de tranche (Rec, Solo, Mute, Select, encodeur) ou qu'on tourne
   un encodeur, pas seulement en touchant un fader.
 - Petit bandeau : pan (filet sous le nom), potard du gain X32, voyants M / S / 48V.
+
+## 02/11/2026 : V0.8.1 (plusieurs LV1 sur le réseau, X-Touch par le réseau)
+
+- Deux LV1 sur le réseau de Joseph (pc-portable-js et emo-lv1) : XTouch-LV1 prenait la 1re annonce entendue et suivait
+  parfois la LV1 de l'autre PC (couches et couleurs qui ne correspondaient pas). Maintenant : la LV1 de ce PC d'abord
+  (`lv1_finder.py`). Menu de l'icône : liste des LV1 vues, choix retenu (`xtouch_lv1_choix.json`), comme MyFOH.
+- X-Touch par le réseau (`netmidi.py`) : LV1 dans une VM sans écran, vue en RDP. XTouch-LV1 tourne sur le PC de la LV1
+  (clics, overlay, base de la LV1 : tout y est) ; sur le PC où la X-Touch est branchée en USB, choisir cette LV1 dans le
+  menu de l'icône : XTouch-LV1 redémarre en relais et fait suivre le MIDI (TCP 9310, réseaux locaux seulement). Pas de
+  RTP MIDI. Si XTouch-LV1 ne tourne pas là-bas : connexion directe à la LV1, comme avant.
+
+## 10/11/2026 : X-Touch par Ethernet (RTP-MIDI direct), en essai
+
+- X-Touch et Extender pilotées par leur prise Ethernet, sans pilote ni PC relais (`rtpmidi.py`) : adresses dans
+  `xtouch_rtpmidi.json` à côté de l'exe ; le pont les voit comme des X-Touch branchées (perte / retour gérés comme en USB,
+  l'USB reste prioritaire). Vérifié : connexion aux deux appareils, latence 0,1 à 0,2 ms. Pas encore essayé avec la LV1.
+
+## 10/11/2026 : touches comme le contrôleur eMotion LV1 (étape 1, à essayer)
+
+Disposition choisie par Joseph : la X-Touch se rapproche du contrôleur LV1, le transport reste à REAPER.
+- **F1-F8 = couches 1 à 8** en accès direct (LED = couche affichée) ; BANK ◄ ► inchangé.
+- **USER** : les 16 Select deviennent les **User Keys 1 à 16** (nom en haut de l'écran), Flip Sends compris
+  (avant : F1-F8 = User Keys 1-8).
+- **AUDIO TRACKS** = Custom (avant : USER).
+- Essayé sur emo-lv1 le 10/11 (journal 173512) : tout marche, notes F1-F8 / AUDIO TRACKS / USER vérifiées.
+- Étape 2 (à essayer) : **FLIP = sends on fader** comme le contrôleur (comme SEND, LED qui clignote au choix de l'aux) ;
+  **SHIFT + FLIP = Flip A/B** (SHIFT tenu : LED FLIP = entrées sur B).
+- Étape 2 validée par Joseph le 10/11 (SHIFT = 0x46). La LED FLIP « A/B » sous SHIFT n'était pas parlante : remplacée
+  par un message sur les écrans.
+- Étape 3 : encodeurs en **PAN au démarrage** ; TRACK = **GAIN automatique** (préampli X32, sinon trim),
+  TRACK x2 = TRIM + phase, puis PAN. **Écrans** : ligne du bas = encodeur, niveau en dB en touchant le fader ;
+  **messages** sur toute la largeur (couche, mode, sends, USER, SHIFT) ; **noms raccourcis** (« LeadVcl ») ;
+  `--essai-vumetre` pour le témoin de saturation : LED rouge du vumètre = valeur Mackie 14 (essai de Joseph),
+  allumée quand le préampli X32 sature (vumètres d'entrée de Gain Recall) ou à 0 dBFS après le fader, tenue 1 s.
+
+## V0.9 (Total Control for LV1 0.9) : en préparation
+
+- Tout ce qui précède depuis la 0.8 : choix de la LV1 et relais (0.8.1), X-Touch en Ethernet (RTP-MIDI), disposition
+  « comme le contrôleur LV1 » (couches F1-F8, USER, FLIP, PAN / GAIN / TRIM, écrans, saturation).
+- Installeur : X/M32 Gain Recall **3.2.0** (tablette TouchOSC) ; règle de pare-feu UDP 9300 (réseaux privés, une
+  demande Windows) ; raccourci « TouchOSC template » dans le menu Démarrer ; `xtouch_rtpmidi.json` gardé à la mise à jour.

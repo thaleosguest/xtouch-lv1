@@ -38,7 +38,7 @@ stamp[0] = 2; w.step()
 check("relu au changement", len(reads) == 2)
 
 L = D.view_leds
-check("voyants", L(4)[D.NOTE_INPUTS] and L(0)[D.NOTE_INPUTS] and L(5)[D.NOTE_BUSES] and L(1)[D.NOTE_USER]
+check("voyants", L(4)[D.NOTE_INPUTS] and L(0)[D.NOTE_INPUTS] and L(5)[D.NOTE_BUSES] and L(1)[D.NOTE_AUDIO_TRACKS]
       and L(3)[D.NOTE_GROUP] and L(4, "All")[D.NOTE_GLOBAL_VIEW] and not L(3)[D.NOTE_GLOBAL_VIEW]
       and not any(L(None).values())
       and sum(L(5, "Mixer 1").values()) == 1)
@@ -56,7 +56,7 @@ b = D.ButtonControl(st, None, write=False)
 b.lv1 = FakeClicker()
 def press(note):
     b.on_midi(1, 0x90, note, 0x7F, 0, [], None); b.on_midi(1, 0x90, note, 0, 0, [], None)
-for n in (D.NOTE_INPUTS, D.NOTE_BUSES, D.NOTE_USER, D.NOTE_GROUP, D.NOTE_GLOBAL_VIEW):
+for n in (D.NOTE_INPUTS, D.NOTE_BUSES, D.NOTE_AUDIO_TRACKS, D.NOTE_GROUP, D.NOTE_GLOBAL_VIEW):
     press(n)
 check("80 canaux", b.lv1.modes == ["input", "mix", "custom", "spill", "all"])
 b.lv1.modes.clear(); st.n_inputs = 64

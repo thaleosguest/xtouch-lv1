@@ -33,7 +33,7 @@ import time
 
 SUITE = "Total Control for LV1"                    # nom du pack (choisi par Joseph le 16/10/2026)
 OLD_SUITES = ["LV1 Suite"]                         # anciens noms : dossier et menu Démarrer remplacés à l'installation
-VERSION = "0.8"                                   # version de XTouch-LV1 (= xtouch_lv1_display.VERSION, build.py vérifie)
+VERSION = "0.9"                                   # version de XTouch-LV1 (= xtouch_lv1_display.VERSION, build.py vérifie)
 XT, RP, GR = "xtouch", "reaper", "gainrecall"
 # RP (« REAPER LV1 », demande de Joseph) = intégration REAPER, sans dossier à elle : scripts dans <XTouch-LV1>\reaper,
 # déclarés dans REAPER ; il lui faut XTouch-LV1 (le pont échange les scènes et les pistes avec les scripts).
@@ -48,7 +48,8 @@ APPS = {
     GR: {"name": "X32 Gain Recall", "exe": "XM32_Gain_Recall_LV1.exe", "manual": "MODE_EMPLOI.html",
          "about": ("X32 / M32 preamp gain recall for eMotion LV1", "Rappel des gains des préamplis X32 / M32 pour eMotion LV1")},
 }
-PERSONAL = ["xtouch_courbe_fader.json", "xtouch_ecran.json", "xtouch_couleurs.json"]
+PERSONAL = ["xtouch_courbe_fader.json", "xtouch_ecran.json", "xtouch_couleurs.json", "xtouch_lv1_choix.json",
+            "xtouch_rtpmidi.json"]                  # 0.9 : adresses des X-Touch en Ethernet (RTP-MIDI)
 # REAPER portable (demande de Joseph : « un vrai pack ») : TÉLÉCHARGÉ sur le site de Cockos au moment de l'installation
 # (la licence de REAPER ne permet de le redistribuer qu'avec un accord de distribution), installé en portable
 # (/S /PORTABLE /D=), empreinte SHA-256 relevée le 16/10/2026 + signature Authenticode de Cockos vérifiées.
@@ -63,6 +64,11 @@ BEGIN, END = "-- XTouch-LV1 begin (installer, do not edit)", "-- XTouch-LV1 end"
 GR_RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 GR_RUN_NAMES = ("XM32 Gain Recall LV1", "X32 Gain Recall")      # nom écrit par Gain Recall <= 3.0.1, ancien nom supposé
 GR_TASK = "XM32 Gain Recall LV1"                               # tâche planifiée de Gain Recall 3.1 (TASK_NAME)
+# Tablette TouchOSC de Gain Recall 3.2 (décision de Joseph, 28/10/2026) : règle de pare-feu entrante UDP 9300, réseaux
+# PRIVÉS seulement, créée par l'installeur (une demande UAC) ; template TouchOSC à côté de Gain Recall + raccourci.
+FW_RULE = "XM32_Gain_Recall_TouchOSC"
+FW_PORT = 9300
+TOSC_DIR = "TouchOSC"
 NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0
 
 # Langue de l'installeur (demande de Joseph : anglais ET français) : celle de Windows au départ, bouton EN / FR.
@@ -252,6 +258,11 @@ def schtasks(*args):
 
 def schtasks_admin(*args):
     """schtasks en administrateur (UNE demande UAC) : code de sortie, ou None si l'UAC est refusée / impossible."""
+    return admin_run("schtasks.exe", *args)
+
+
+def admin_run(exe, *args):
+    """Programme en administrateur (UNE demande UAC) : code de sortie, ou None si l'UAC est refusée / impossible."""
     import ctypes
     import ctypes.wintypes as wt
 
@@ -261,7 +272,7 @@ def schtasks_admin(*args):
                     ("nShow", ctypes.c_int), ("hInstApp", wt.HINSTANCE), ("lpIDList", ctypes.c_void_p),
                     ("lpClass", wt.LPCWSTR), ("hkeyClass", wt.HKEY), ("dwHotKey", wt.DWORD), ("hIcon", wt.HANDLE),
                     ("hProcess", wt.HANDLE)]
-    sei = SEI(cbSize=ctypes.sizeof(SEI), fMask=0x40, lpVerb="runas", lpFile="schtasks.exe",   # SEE_MASK_NOCLOSEPROCESS
+    sei = SEI(cbSize=ctypes.sizeof(SEI), fMask=0x40, lpVerb="runas", lpFile=exe,              # SEE_MASK_NOCLOSEPROCESS
               lpParameters=subprocess.list2cmdline(args), nShow=0)
     if not ctypes.windll.shell32.ShellExecuteExW(ctypes.byref(sei)) or not sei.hProcess:
         return None
@@ -274,6 +285,50 @@ def schtasks_admin(*args):
     k32.GetExitCodeProcess(sei.hProcess, ctypes.byref(code))
     k32.CloseHandle(sei.hProcess)
     return code.value
+
+
+def netsh(*args):
+    """(code, sortie) de netsh, sans fenêtre (la LECTURE des règles ne demande pas l'administrateur)."""
+    try:
+        r = subprocess.run(["netsh"] + list(args), capture_output=True, text=True, creationflags=NO_WINDOW, timeout=20)
+        return r.returncode, (r.stdout or "") + (r.stderr or "")
+    except (OSError, subprocess.SubprocessError) as e:
+        return -1, str(e)
+
+
+def fw_rule_exists():
+    return netsh("advfirewall", "firewall", "show", "rule", "name=" + FW_RULE)[0] == 0
+
+
+def fw_add_args():
+    return ["advfirewall", "firewall", "add", "rule", "name=" + FW_RULE, "dir=in", "action=allow", "protocol=UDP",
+            "localport=%d" % FW_PORT, "profile=private"]
+
+
+def touchosc_firewall(log, remove=False):
+    """Règle de pare-feu de la tablette TouchOSC (UDP 9300 entrant, réseaux privés) : ajoutée à l'installation de
+    Gain Recall, retirée à sa désinstallation. Déjà là / absente : rien (pas de demande UAC inutile)."""
+    if sys.platform != "win32":
+        return
+    if fw_rule_exists() != remove:
+        return
+    if remove:
+        code = admin_run("netsh.exe", "advfirewall", "firewall", "delete", "rule", "name=" + FW_RULE)
+        if code == 0:
+            log(_("Windows firewall: TouchOSC tablet rule removed", "Pare-feu Windows : règle de la tablette TouchOSC retirée"))
+        else:
+            log(_("Windows firewall: rule %s not removed (remove it in the Windows firewall)",
+                  "Pare-feu Windows : règle %s non retirée (à retirer dans le pare-feu de Windows)") % FW_RULE)
+        return
+    log(_("Windows firewall: allowing the TouchOSC tablet (UDP %d, private networks); Windows asks for permission",
+          "Pare-feu Windows : autorisation de la tablette TouchOSC (UDP %d, réseaux privés) ; Windows demande l'accord")
+        % FW_PORT)
+    if admin_run("netsh.exe", *fw_add_args()) == 0:
+        log(_("Windows firewall: TouchOSC tablet allowed", "Pare-feu Windows : tablette TouchOSC autorisée"))
+    else:
+        log(_("Windows firewall: rule NOT created. Without it the tablet cannot connect. In an administrator PowerShell:\n%s",
+              "Pare-feu Windows : règle NON créée. Sans elle la tablette ne peut pas se connecter. Dans un PowerShell "
+              "administrateur :\n%s") % ("netsh " + subprocess.list2cmdline(fw_add_args())))
 
 
 def task_exe(xml):
@@ -347,6 +402,8 @@ def shortcuts(root, log):
         if app["manual"]:
             links.append(("'%s'" % os.path.join(menu, app["name"] + " Manual.lnk"), os.path.join(d, app["manual"]), d,
                           None))
+        if key == GR:                                       # 0.9 : dossier du template de la tablette (Joseph, 10/11)
+            links.append(("'%s'" % os.path.join(menu, "TouchOSC template.lnk"), os.path.join(d, TOSC_DIR), d, None))
     if have and os.path.exists(uninst):
         links.append(("'%s'" % os.path.join(menu, "Uninstall %s.lnk" % SUITE), uninst, suite_dir(root), None))
     if have:
@@ -623,7 +680,7 @@ def gainrecall_link(root):
 
 # ---------------------------------------------------------------- étapes
 
-def install(sources, root, apps, reaper, log, do_shortcuts=True, reaper_setup=None):
+def install(sources, root, apps, reaper, log, do_shortcuts=True, reaper_setup=None, do_firewall=True):
     """sources : {appli: dossier source} ; apps : applis cochées ; reaper : REAPER habituel (%APPDATA%\\REAPER : carte
     son reprise, anciens réglages LV1 retirés) ; reaper_setup : installeur de REAPER local (sinon téléchargé)."""
     root = os.path.normpath(os.path.abspath(root))
@@ -655,6 +712,8 @@ def install(sources, root, apps, reaper, log, do_shortcuts=True, reaper_setup=No
                       "Votre REAPER habituel : scripts LV1 retirés (ils sont maintenant dans REAPER LV1)"))
         else:
             copy_gainrecall(src, target, log)
+            if do_firewall:
+                touchosc_firewall(log)
         versions[key] = source_version(key, src)
     save_installed(root, versions)
     gainrecall_link(root)                                  # XTouch-LV1 lance aussi Gain Recall
@@ -667,7 +726,7 @@ def install(sources, root, apps, reaper, log, do_shortcuts=True, reaper_setup=No
           "Terminé. Lancez les programmes avec leurs raccourcis du Bureau (modes d'emploi : menu Démarrer > %s).") % SUITE)
 
 
-def uninstall(root, apps, reaper, log, keep_settings, do_shortcuts=True):
+def uninstall(root, apps, reaper, log, keep_settings, do_shortcuts=True, do_firewall=True):
     root = os.path.normpath(os.path.abspath(root))
     versions = installed(root)
     if XT in apps and RP not in apps and RP in versions:
@@ -692,6 +751,8 @@ def uninstall(root, apps, reaper, log, keep_settings, do_shortcuts=True):
                 log(_("XTouch-LV1 removed", "XTouch-LV1 retiré"))
         else:
             gainrecall_autostart(target, log)
+            if do_firewall:
+                touchosc_firewall(log, remove=True)
             shutil.rmtree(target, ignore_errors=True)
             log(_("X32 Gain Recall removed (scenes and settings kept in %APPDATA%\\X32 Gain Recall)",
                   "X32 Gain Recall retiré (scènes et réglages gardés dans %APPDATA%\\X32 Gain Recall)"))
@@ -888,9 +949,9 @@ def gui(a, sources):
         ok = False
         try:
             if removing:
-                uninstall(r, apps, a.reaper, log, keep, not a.no_shortcuts)
+                uninstall(r, apps, a.reaper, log, keep, not a.no_shortcuts, not a.sans_pare_feu)
             else:
-                install(sources, r, apps, a.reaper, log, not a.no_shortcuts, a.reaper_setup)
+                install(sources, r, apps, a.reaper, log, not a.no_shortcuts, a.reaper_setup, not a.sans_pare_feu)
             ok = True
         except Exception as e:                             # message lisible plutôt qu'une fenêtre qui disparaît
             log(_("ERROR: %s", "ERREUR : %s") % e)
@@ -1017,6 +1078,7 @@ def main():
     ap.add_argument("--silencieux", action="store_true", help="sans fenêtre (tests)")
     ap.add_argument("--reaper-setup", help="installeur de REAPER local (sinon téléchargé sur reaper.fm)")
     ap.add_argument("--garder-reglages", action="store_true", help="désinstallation silencieuse : garder les réglages")
+    ap.add_argument("--sans-pare-feu", action="store_true", help="ne pas toucher au pare-feu de Windows (tests)")
     a = ap.parse_args()
     if os.path.basename(sys.executable).lower().startswith("uninstall"):
         # désinstalleur = <dossier choisi>\<SUITE>\Uninstall <SUITE>.exe : le dossier des programmes est au-dessus
@@ -1028,9 +1090,9 @@ def main():
         pool = installed(a.root) if a.uninstall else sources
         apps = [k for k in (a.apps.split(",") if a.apps else APPS) if k in pool]
         if a.uninstall:
-            uninstall(a.root, apps, a.reaper, print, a.garder_reglages, not a.no_shortcuts)
+            uninstall(a.root, apps, a.reaper, print, a.garder_reglages, not a.no_shortcuts, not a.sans_pare_feu)
         else:
-            install(sources, a.root, apps, a.reaper, print, not a.no_shortcuts, a.reaper_setup)
+            install(sources, a.root, apps, a.reaper, print, not a.no_shortcuts, a.reaper_setup, not a.sans_pare_feu)
         return 0
     gui(a, sources)
     return 0

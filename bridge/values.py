@@ -80,9 +80,18 @@ def fader_to_db(value):
     return FADER_MIN_DB
 
 
+# Témoin de saturation (essai --essai-vumetre de Joseph, 10/11/2026) : la valeur Mackie 14 allume la LED ROUGE du
+# vumètre X-Touch (12 et 13 : pas de différence visible, rouge éteinte) ; elle ne reste pas allumée seule (une valeur
+# plus basse la remplace) : le pont la tient CLIP_HOLD s (renvoyée toutes les 0,25 s : elle clignote). 15 = éteinte.
+METER_CLIP = 14
+CLIP_DB = 0.0          # dBFS : à partir de là, LED rouge au lieu du niveau
+
+
 def db_to_level(db):
     if db is None:
         return 0
+    if db >= CLIP_DB:
+        return METER_CLIP
     return sum(1 for step in METER_STEPS if db >= step)
 
 

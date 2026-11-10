@@ -1,4 +1,6 @@
-"""Touche SEND : faders et encodeurs sur les envois aux (Fx / Mon) de la LV1, touche FLIP (User Key « Flip Sends »).
+"""Touche SEND : faders et encodeurs sur les envois aux (Fx / Mon) de la LV1 ; touche USER : les 16 Select deviennent
+les User Keys 1-16 de la LV1 (comme le bouton User du contrôleur LV1, Joseph 10/11), une User Key « Flip Sends » met
+aussi la X-Touch en sends on fader.
 
 Déplacé de `xtouch_lv1_display.py` (étape 8d du refactor, 19/10/2026)."""
 import time
@@ -6,8 +8,16 @@ import time
 from bridge.journal import JOURNAL
 from bridge.values import FADER_MIN_DB, LV1_PAN_SCALE, db_to_fader
 from surface.display import fader_text, rgb_to_xtouch
-from surface.notes import (CC_VPOT, MASTER, NOTE_BANK_LEFT, NOTE_BANK_RIGHT, NOTE_F1, NOTE_MUTE, NOTE_SELECT,
-                           NOTE_SEND, NOTE_VPOT_PUSH, XT)
+from surface.notes import (CC_VPOT, MASTER, NOTE_BANK_LEFT, NOTE_BANK_RIGHT, NOTE_FLIP, NOTE_MUTE, NOTE_SELECT,
+                           NOTE_SEND, NOTE_SHIFT, NOTE_USER, NOTE_VPOT_PUSH, XT)
+
+USER_KEYS = 16        # User Keys de la LV1 = les 16 Select (Extender 1-8, X-Touch 9-16)
+
+
+def user_key_label(key):
+    """Ligne du haut en mode USER (7 car.) : nom court de la User Key, « - » si elle n'est pas assignée."""
+    short, _func, assigned = key if key else ("", "", False)
+    return (short.strip() or "UK")[:7] if assigned else "-"
 
 
 def flip_target(func, aux_tracks):
@@ -62,7 +72,9 @@ class SendControl:
         self.gain = gain                  # GainControl : en mode TRACK / PAN, les encodeurs restent à lui
         self.aux = None                   # index aux réglé, ou None
         self.picking = False
-        self.flip_key = None              # User Key (0..7) qui a mis la LV1 en Flip Sends (touches F1..F8)
+        self.flip_key = None              # User Key (0..15) qui a mis la LV1 en Flip Sends (mode USER)
+        self.user_mode = False            # touche USER : les Select appuient sur les User Keys 1-16
+        self.shift = False                # SHIFT tenu : FLIP passe à ButtonControl (Flip A/B)
         self.page = 0                     # choix : 0 = aux 0..15, 1 = aux 16..31
         self.lv1_sof = "?"                # dernier bus « sur les faders » de la LV1 déjà suivi (les 2 Mixers)
 
@@ -127,24 +139,24 @@ class SendControl:
             self.flip_key = None
         self.picking, self.aux = False, None
 
-    def on_fkey(self, k):
-        """F1..F8 (demande de Joseph, 15/10) : User Key k+1 de la LV1. Si elle est assignée à un Flip Sends, la
-        X-Touch passe aussi en sends on fader vers cet aux ; un 2e appui ramène LV1 et X-Touch en mode normal."""
+    def on_user_key(self, k):
+        """Select k+1 en mode USER (avant le 10/11 : F1..F8) : User Key k+1 de la LV1. Si elle est assignée à un Flip
+        Sends, la X-Touch passe aussi en sends on fader vers cet aux ; un 2e appui ramène LV1 et X-Touch en mode normal."""
         with self.state.lock:
             _short, func, assigned = self.state.user_keys.get(k, ("", "", False))
             target = flip_target(func, self.state.aux_tracks) if assigned else None
         if target is None:
             self.press_user_key(k)
-            JOURNAL.mark("XT F%d -> User Key %d (%s)" % (k + 1, k + 1, func or "non assignée"))
+            JOURNAL.mark("XT User %d -> User Key %d (%s)" % (k + 1, k + 1, func or "non assignée"))
             return
         if self.flip_key == k:                       # même touche : retour au mode normal
             self.leave()
-            JOURNAL.mark("XT F%d -> fin du Flip Sends" % (k + 1))
+            JOURNAL.mark("XT User %d -> fin du Flip Sends" % (k + 1))
             return
         self.leave()                                 # autre mode sends en cours : on en sort proprement
         self.press_user_key(k)
         self.flip_key, self.aux, self.picking = k, target, False
-        JOURNAL.mark("XT F%d -> Flip Sends vers l'aux %d (%s)" % (k + 1, target, self.label()))
+        JOURNAL.mark("XT User %d -> Flip Sends vers l'aux %d (%s)" % (k + 1, target, self.label()))
 
     def follow_lv1(self, now, busy=False):
         """Sends on Fader activé / coupé SUR LA LV1 (menu Fx / Mon, User Key appuyée à l'écran), demande de Joseph du
@@ -174,30 +186,50 @@ class SendControl:
             return
         if target == self.aux and not self.picking:
             return
-        self.flip_key = next((k for k in range(8) if keys.get(k, (None, None, False))[2]
+        self.flip_key = next((k for k in range(USER_KEYS) if keys.get(k, (None, None, False))[2]
                               and flip_target(keys[k][1], aux) == target), None)
         self.aux, self.picking = target, False
         JOURNAL.mark("LV1 : Sends on Fader vers l'aux %d (%s) -> X-Touch en sends%s"
-                     % (target, self.label(), " (F%d)" % (self.flip_key + 1) if self.flip_key is not None else ""))
+                     % (target, self.label(), " (User %d)" % (self.flip_key + 1) if self.flip_key is not None else ""))
 
-    def fkey_leds(self):
-        """LED des touches F1..F8 : allumée = son Flip Sends est actif."""
-        return [self.flip_key == k and self.aux is not None for k in range(8)]
+    def mode_led(self, now):
+        """LED de SEND et FLIP : allumée en sends on fader, clignote pendant le choix de l'aux."""
+        return self.aux is not None or (self.picking and int(now * 3) % 2 == 0)
+
+    def user_key_leds(self):
+        """LED des Select en mode USER : allumée = le Flip Sends de cette User Key est actif."""
+        return [self.flip_key == k and self.aux is not None for k in range(USER_KEYS)]
 
     def on_midi(self, unit, status, d1, d2, t, entries, surface):
         kind = status & 0xF0
-        if kind == 0x90 and NOTE_F1 <= d1 < NOTE_F1 + 8:
+        if kind == 0x90 and d1 == NOTE_USER:
             if d2:
-                self.on_fkey(d1 - NOTE_F1)
+                self.user_mode = not self.user_mode
+                if self.user_mode:
+                    self.picking = False             # choix de l'aux abandonné : les Select passent aux User Keys
+                JOURNAL.mark("XT bouton User -> Select = %s" % ("User Keys" if self.user_mode else "sélection"))
             return True
-        if kind == 0x90 and d1 == NOTE_SEND:
+        if kind == 0x90 and d1 == NOTE_SHIFT:
+            if self.shift != bool(d2):
+                JOURNAL.mark("XT SHIFT %s" % ("tenu" if d2 else "relâché"))
+            self.shift = bool(d2)
+            return True
+        if kind == 0x90 and d1 == NOTE_FLIP and self.shift:
+            return False                             # SHIFT + FLIP : Flip A/B (ButtonControl)
+        if kind == 0x90 and d1 in (NOTE_SEND, NOTE_FLIP):
+            # FLIP = sends on fader comme le contrôleur LV1 (Joseph, 10/11) ; SEND fait la même chose.
+            name = "Send" if d1 == NOTE_SEND else "Flip"
             if d2:
                 if self.picking or self.aux is not None:
                     self.leave()
-                    JOURNAL.mark("XT bouton Send -> retour aux faders des canaux")
+                    JOURNAL.mark("XT bouton %s -> retour aux faders des canaux" % name)
                 else:
-                    self.picking, self.page = True, 0
-                    JOURNAL.mark("XT bouton Send -> choix de l'aux")
+                    self.picking, self.page, self.user_mode = True, 0, False
+                    JOURNAL.mark("XT bouton %s -> choix de l'aux" % name)
+            return True
+        if self.user_mode and not self.picking and kind == 0x90 and NOTE_SELECT <= d1 < NOTE_SELECT + 8:
+            if d2:
+                self.on_user_key(8 * unit + (d1 - NOTE_SELECT))
             return True
         if self.picking:
             if kind == 0x90 and d1 in (NOTE_BANK_LEFT, NOTE_BANK_RIGHT):
@@ -300,4 +332,11 @@ class SendControl:
                     bot[i] = send_label(short, f)            # « F1 -12 » : on voit qu'on est en sends
                     fads[i] = db_to_fader(f)
                     mutes[i] = s.get("on") is False
+        if self.user_mode and not self.picking:          # USER : nom des User Keys en haut, LED = Flip Sends actif
+            with self.state.lock:
+                keys = dict(self.state.user_keys)
+            leds = self.user_key_leds()
+            for i in range(min(n, USER_KEYS)):
+                top[i] = user_key_label(keys.get(i))
+                selects[i] = leds[i]
         return mutes, solos, selects

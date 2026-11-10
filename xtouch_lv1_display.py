@@ -45,6 +45,7 @@ import xtouch_probe as X
 from surface.notes import (XT, TOUCH_NOTES, MASTER, NOTE_REC, NOTE_SOLO, NOTE_MUTE, NOTE_SELECT,
                            NOTE_BANK_LEFT, NOTE_BANK_RIGHT, NOTE_CHANNEL_LEFT, NOTE_CHANNEL_RIGHT, CC_JOG,
                            NOTE_FLIP, NOTE_GLOBAL_VIEW, NOTE_INPUTS, NOTE_BUSES, NOTE_USER, NOTE_GROUP,
+                           NOTE_AUDIO_TRACKS, NOTE_SHIFT,
                            NOTE_SMPTE, NOTE_LED_SMPTE, NOTE_SOLO_ALL, NOTE_TRACK, NOTE_PAN, NOTE_VPOT_PUSH,
                            CC_VPOT, CC_RING, CC_TIMECODE, CC_ASSIGN_L, CC_ASSIGN_R, NOTE_RUDE_SOLO,
                            NOTE_SEND, NOTE_F1, NOTE_MARKER, NOTE_NUDGE, NOTE_CYCLE, NOTE_DROP, NOTE_REPLACE,
@@ -53,23 +54,24 @@ from surface.notes import (XT, TOUCH_NOTES, MASTER, NOTE_REC, NOTE_SOLO, NOTE_MU
                            NOTE_DISPLAY, NOTE_SAVE, NOTE_ENTER)
 # Étape 6 : MIDI, envoi vers la X-Touch et textes affichés dans surface/ (réexportés : D.Surface, D.seg_codes…)
 from surface.display import ascii7, fader_text, rgb_to_xtouch, SIDE_NAMES, gain_label, seg_codes, time_display
+from surface.banner import apply_banner, banner_cells, compact, mode_message, shift_message
 from surface.midi import WinMidiIn, SafeMidi
 from surface.xtouch import METER_REFRESH, FADER_TOL
 from surface import xtouch as _xtouch
 from bridge.journal import JOURNAL_SKIP, Journal, JournalSlot, JOURNAL
 # FADER_CURVE / INF_POS : PAS réexportés (load_fader_curve les remplace dans bridge.values : lire _values.FADER_CURVE)
 from bridge.values import (METER_STEPS, db_to_fader, CURVE_FILE, FADER_MIN_DB, load_fader_curve, fader_to_db,
-                           db_to_level, LV1_PAN_SCALE, pan_label)
+                           db_to_level, LV1_PAN_SCALE, pan_label, METER_CLIP)
 from bridge import values as _values
 from bridge.gain import GainControl
 from bridge.sends import flip_target, send_label, aux_short, SendControl
 from bridge.faders import (HOLD_AFTER, MOTOR_BUSY, NAIL_SHOW, UNTOUCHED_MIN, STALE_FOR, SEND_EVERY, label_of,
                            FaderControl)
 from bridge.lv1_watch import FollowsView, LV1Clicker, LayerModeWatcher, ViewFollower, LV1SelectionWatcher
-from bridge.buttons import view_leds, ButtonControl
+from bridge.buttons import layer_leds, view_leds, ButtonControl
 from bridge.reaper import TransportControl, ACT_REAPER_SAVE_AS, AppControl
 
-VERSION = "0.8"
+VERSION = "0.9"
 # Dossier des fichiers de Joseph (réglages, courbe, journaux, reaper/) : à côté de l'exe une fois compilé (build.py)
 HERE = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.abspath(__file__))
 COLOR_FILE = os.path.join(HERE, "xtouch_couleurs.json")
@@ -82,8 +84,27 @@ REFRESH_EVERY = 30.0    # s : tout est renvoyé à la X-Touch (sauf les moteurs)
 
 # ─── Conversions ──────────────────────────────────────────────────────────────
 
+def fit7(n):
+    """Nom trop long pour un écran (7 car.), comme les logiciels de studio (Joseph, 10/11) : d'abord sans espaces, puis
+    sans voyelles en partant de la fin (jamais la 1re lettre d'un mot ni une majuscule), puis sans « _ » / « - », puis
+    coupé. « Lead Vocal » -> « LeadVcl », « Overhead L » -> « OverhdL », « Out_CtrlRoom » -> « OtCtrlR »."""
+    if len(n) <= 7:
+        return n
+    chars = list("".join(n.split()))
+    keep = {i for i, c in enumerate(chars) if i == 0 or c.isupper() or chars[i - 1] in "_-"}
+    for i in range(len(chars) - 1, -1, -1):
+        if len("".join(chars)) <= 7:
+            break
+        if i not in keep and chars[i].lower() in "aeiouy":
+            chars[i] = ""
+    out = "".join(chars)
+    if len(out) > 7:
+        out = out.replace("_", "").replace("-", "")
+    return out[:7]
+
+
 def short_name(name, group, ch):
-    """« Channel 6 » -> « In 6 » (comme dans X/M32 Gain Recall), sinon le nom LV1 sur 7 caractères."""
+    """« Channel 6 » -> « In 6 » (comme dans X/M32 Gain Recall), sinon le nom LV1 raccourci à 7 caractères (fit7)."""
     n = ascii7(name)
     if not n:
         n = default_label(group, ch)
@@ -92,7 +113,7 @@ def short_name(name, group, ch):
         n = "In " + n[8:].strip()
     elif low.startswith("group "):
         n = "Grp " + n[6:].strip()
-    return n[:7]
+    return fit7(n)
 
 
 GROUP_TAG = {0: "In", 1: "Grp", 2: "Fx", 3: "LR", 4: "C", 5: "M", 6: "Mtx", 7: "Cue", 8: "TB", 12: "DCA", 25: "Mon"}
@@ -238,6 +259,19 @@ class BridgeState:
                 return k
             k += step
         return None
+
+    def goto_layer(self, page, k):
+        """F1..F8 : couche k (0..7) du jeu affiché, en accès direct comme les touches de couche du contrôleur LV1.
+        Locale comme ◄ BANK ► ; couche absente ou vide : None (rien ne change)."""
+        layers, _ = self.layer_set(page)
+        if not layers or not 0 <= k < len(layers) or not any(layers[k][1]):
+            return None
+        self.local[page] = k
+        return k
+
+    def shown_layer(self, page):
+        """Index de la couche affichée sur la X-Touch (banque locale, sinon celle de la LV1), ou None."""
+        return self.local.get(page, self.current.get(page))
 
     def layer_entries(self, mixer_page):
         """Les 16 tranches de la couche affichée, ou (None, None) si inconnue."""
@@ -484,9 +518,16 @@ class LV1Link(threading.Thread):
     # effet, « aucune User Key Flip AB »). La LV1 envoie les 16 User Keys même non assignées (« None », 17/10), mais
     # aucune demande connue ne les fait renvoyer : seule une reconnexion. Si elles manquent encore après KEYS_TRIES
     # reconnexions, l'état est accepté sans elles (pas de boucle de reconnexion sur une LV1 qui ne les enverrait pas).
+    # 10/11/2026, LV1 de emo-lv1 (VM) : à presque chaque connexion l'envoi de l'état est COUPÉ en route (canaux + une
+    # partie des couleurs, puis rien ; « NewSession » à ~0,1 s) ; un état complet arrive en moins de 0,1 s quand il
+    # arrive (63 journaux du portable : 0,03 à 0,09 s). Sondes : reconnexion toutes les 10 à 13 s = jamais complet,
+    # toutes les 1 à 5 s = complet 1 fois sur 3 environ. Donc : attendre peu (STATE_ASK / STATE_GIVEUP), réessayer vite
+    # avec un délai au hasard (RETRY_STATE), et n'accepter un état sans User Keys (= tronqué : il y manque aussi des
+    # couleurs, journal 164702 : 49 couleurs sur 150 affichées) qu'après KEYS_TRIES essais.
     STATE_MSGS = ("/Channels", "/Notify/Layers", "/Notify/UserKeyInfo")
-    STATE_ASK, STATE_GIVEUP = 5.0, 10.0
-    KEYS_TRIES = 2
+    STATE_ASK, STATE_GIVEUP = 1.5, 3.0
+    KEYS_TRIES = 20
+    RETRY, RETRY_STATE = 3.0, (0.2, 1.5)     # pause avant de se reconnecter ; (mini, maxi) après un état incomplet
 
     def state_complete(self, seen):
         """Canaux + couches reçus, et User Keys reçues (ou déjà KEYS_TRIES reconnexions pour elles seules)."""
@@ -504,6 +545,20 @@ class LV1Link(threading.Thread):
         self.send_lock = threading.Lock()
         self.on_connect = None    # appelée (sur un fil à part) à chaque connexion : pans de départ…
         self.keys_missing = 0     # reconnexions faites pour les seules User Keys (remis à 0 quand elles arrivent)
+        self.state_cut = False    # dernière session finie sur un état incomplet : reconnexion rapide
+        self.finder = None        # lv1_finder.LV1Finder (0.8.1) : LV1 choisie, sinon celle de ce PC
+        self.current = None       # annonce de la LV1 jointe (nom du PC dans "host", "local")
+        self.restart = False      # changement de LV1 demandé (menu de l'icône) : fin de la session en cours
+        self.relay_check = None   # (nom) -> True si la X-Touch part en relais vers ce PC (netmidi, 0.8.1)
+
+    def switch(self, name):
+        """Menu de l'icône : retenir la LV1 ``name`` (None = automatique, ce PC d'abord) et s'y reconnecter."""
+        if self.finder:
+            self.finder.set_choice(name)
+        JOURNAL.mark("LV1 choisie : %s" % (name or "automatique (ce PC d'abord)"))
+        if self.relay_check and self.relay_check(name):      # XTouch-LV1 tourne sur ce PC-là : relais (redémarrage)
+            return
+        self.restart = True
 
     def send(self, address, args):
         """Envoie un message à la LV1 (ignoré si pas connectée)."""
@@ -524,18 +579,40 @@ class LV1Link(threading.Thread):
                 print("  LV1 : %s" % e)
             with self.state.lock:
                 self.state.connected = False
-            if not self.stop_flag:
-                time.sleep(3)
+            self.current = None
+            if self.restart:
+                self.restart = False
+            elif not self.stop_flag:
+                if self.state_cut:
+                    import random
+                    self.state_cut = False
+                    time.sleep(random.uniform(*self.RETRY_STATE))
+                else:
+                    time.sleep(self.RETRY)
 
     def locate(self):
         if self.host and self.port:
             return [self.host], self.port
-        found = L.discover(timeout=6)
-        if self.host:
-            found = [e for e in found if self.host in e["ipv4"]] or found
-        if not found:
-            raise OSError("LV1 introuvable (nouvel essai dans 3 s)")
-        e = found[0]
+        if self.finder:
+            import lv1_finder
+            found = self.finder.wait_entries(6)
+            if self.host:
+                found = [e for e in found if self.host in e["ipv4"]] or found
+            e = lv1_finder.pick(found, self.finder.choice)
+            if e is None:
+                raise OSError("LV1 introuvable (nouvel essai dans 3 s)")
+            if self.finder.choice and lv1_finder.lv1_key(e) != self.finder.choice.lower():
+                JOURNAL.mark("LV1 choisie (%s) absente : %s" % (self.finder.choice, e["host"]))
+            if not e["local"]:
+                print("  LV1 d'un autre PC : %s (%s)" % (e["host"], ", ".join(e["ipv4"]) or e["source"]))
+            self.current = e
+        else:
+            found = L.discover(timeout=6)
+            if self.host:
+                found = [e for e in found if self.host in e["ipv4"]] or found
+            if not found:
+                raise OSError("LV1 introuvable (nouvel essai dans 3 s)")
+            e = found[0]
         addrs = ([self.host] if self.host else [])
         if any(ip in L.local_ipv4s() for ip in e["ipv4"]):
             addrs.append("127.0.0.1")
@@ -543,6 +620,7 @@ class LV1Link(threading.Thread):
         return list(dict.fromkeys(addrs)), self.port or e["port"]
 
     def session(self):
+        self.restart = False
         addrs, port = self.locate()
         sock, ip = L.connect_any(addrs, port)
         ack = threading.Event()
@@ -554,6 +632,8 @@ class LV1Link(threading.Thread):
             t_ack = time.time() + 3
             got_state, t_conn, reasked, seen = False, None, False, set()
             while not self.stop_flag:
+                if self.restart:
+                    raise OSError("changement de LV1")
                 try:
                     chunk = sock.recv(65536)
                 except socket.timeout:
@@ -586,7 +666,7 @@ class LV1Link(threading.Thread):
                         self.sock = sock
                     with self.state.lock:
                         self.state.connected = True
-                    print("  LV1 connectée (%s:%d)" % (ip, port))
+                    print("  LV1 connectée (%s:%d%s)" % (ip, port, ", %s" % self.current["host"] if self.current else ""))
                     if self.on_connect:
                         threading.Thread(target=self.on_connect, daemon=True).start()
                     sock.sendall(osc.frame("/Get/Aux/Tracks") + osc.frame("/Get/Layers", [("i", 0), ("i", 0)]))
@@ -599,6 +679,7 @@ class LV1Link(threading.Thread):
                             JOURNAL.mark("User Keys LV1 non reçues : reconnexion %d / %d" % (self.keys_missing,
                                                                                             self.KEYS_TRIES))
                         JOURNAL.mark("état initial LV1 non reçu en %.0f s : reconnexion" % waited)
+                        self.state_cut = True
                         raise OSError("la LV1 n'envoie pas son état (en cours de chargement ?) : reconnexion")
                     if waited > self.STATE_ASK and not reasked:
                         reasked = True
@@ -816,6 +897,12 @@ def scene_relay(state, bridge, link, now, write=True):
 RECALL_HOLD = 0.5        # s : le rappel de pistes reste affiché après le relâchement du dernier fader
 RECALL_EVERY = 0.05      # s : rafraîchissement du rappel (vumètres) pendant qu'il est affiché
 RECALL_EVERY_IDLE = 0.1  # s : rafraîchissement quand il reste affiché sans geste (option « toujours visible »)
+DB_SHOW = 1.0            # s : la ligne du bas garde le niveau du fader après le relâchement (puis l'encodeur, 10/11)
+BANNER_SECS = 1.5        # s : message sur toute la largeur des écrans (couche, mode… ; Joseph, 10/11)
+VU_TEST_STEP = 4.0       # s par étape de --essai-vumetre
+CLIP_HOLD = 1.0          # s : LED rouge du vumètre tenue après une saturation (0 dBFS sur la LV1)
+PREAMP_CLIP_DB = -0.5    # dBFS : préampli X32 (vumètre d'entrée lu dans Gain Recall) considéré saturé (Joseph, 10/11 :
+                         # « ça a saturé quand j'ai augmenté le gain, pas le fader » ; le vumètre LV1 est post-fader)
 RECALL_BUTTON_HOLD = 1.5  # s : rappel affiché après un appui sur un bouton de tranche / un cran d'encodeur (31/10)
 
 
@@ -1091,8 +1178,73 @@ def already_running():
     import ctypes
     k32 = ctypes.windll.kernel32
     k32.CreateMutexW.restype = ctypes.c_void_p
-    already_running.handle = k32.CreateMutexW(None, False, "Local\\XTouchLV1_Bridge")
-    return k32.GetLastError() == 183                       # ERROR_ALREADY_EXISTS
+    k32.CloseHandle.argtypes = [ctypes.c_void_p]
+    end = time.time() + (15 if os.environ.pop("XTOUCH_RELANCE", None) else 0)   # redémarrage : l'ancien se ferme
+    while True:
+        already_running.handle = k32.CreateMutexW(None, False, "Local\\XTouchLV1_Bridge")
+        if k32.GetLastError() != 183:                      # ERROR_ALREADY_EXISTS
+            return False
+        if time.time() > end:
+            return True
+        k32.CloseHandle(already_running.handle)
+        time.sleep(0.3)
+
+
+def restart_self():
+    """Relance XTouch-LV1 (passage normal <-> relais, 0.8.1) : le nouveau attend que celui-ci soit fermé."""
+    import subprocess
+    cmd = [sys.executable] + (sys.argv[1:] if getattr(sys, "frozen", False) else sys.argv)
+    env = dict(os.environ, XTOUCH_RELANCE="1")
+    JOURNAL.mark("redémarrage : %s" % cmd)
+    subprocess.Popen(cmd, env=env, cwd=HERE, creationflags=0x08000000 if sys.platform == "win32" else 0)
+    STOP.set()
+
+
+def relay_hosts(finder, name):
+    """Adresses du PC de la LV1 ``name`` si XTouch-LV1 y tourne (X-Touch envoyée par le réseau), sinon None. Jamais
+    pour la LV1 de ce PC."""
+    import lv1_finder
+    import netmidi
+    if not finder or not name:
+        return None
+    for e in finder.entries():
+        if lv1_finder.lv1_key(e) == name.lower() and not e["local"]:
+            ips = list(dict.fromkeys(e["ipv4"] + [e["source"]]))
+            ip = netmidi.relay_reachable(ips)
+            return [ip] + [x for x in ips if x != ip] if ip else None
+    return None
+
+
+class RelayLink:
+    """Pour le menu de l'icône en mode relais : LV1 « connectée » = celle du PC hôte ; tout autre choix redémarre."""
+
+    def __init__(self, finder, entry):
+        self.finder, self.current = finder, entry
+
+    def switch(self, name):
+        self.finder.set_choice(name)
+        JOURNAL.mark("LV1 choisie : %s (fin du relais)" % (name or "automatique"))
+        restart_self()
+
+
+def run_relay(a, hosts, finder, entry):
+    """Mode relais (0.8.1) : la X-Touch branchée ici est pilotée par XTouch-LV1 du PC de la LV1 (VM sans écran de
+    Joseph, vue en RDP) ; ce PC ne fait que transmettre le MIDI. Rien d'autre n'est lancé (Gain Recall, REAPER LV1)."""
+    import netmidi
+    print("  Mode relais : X-Touch -> XTouch-LV1 de %s (%s)" % (entry.get("host"), hosts[0]))
+    JOURNAL.mark("mode relais vers %s %s" % (entry.get("host"), hosts))
+    link = RelayLink(finder, entry)
+    tray_icon = start_tray(None, None, finder, lambda: link) if getattr(sys, "frozen", False) else None
+    events = queue.Queue()
+    relay = netmidi.Relay(hosts, socket.gethostname(), VERSION, X.WinMidiOut(), lambda: WinMidiIn(events),
+                          X.pick_ports, STOP, log=print)
+    try:
+        relay.run(events)
+    except KeyboardInterrupt:
+        pass
+    if tray_icon:
+        tray_icon.stop()
+    return 0
 
 
 RELEASES_API = "https://api.github.com/repos/thaleosguest/xtouch-lv1/releases/latest"
@@ -1210,7 +1362,61 @@ def quit_all_label(gr_url, reaper_exe):
     return "Tout quitter (XTouch-LV1 + %s)" % " + ".join(extra) if extra else None
 
 
-def start_tray(gr_url=None, reaper_exe=None):
+LV1_SLOTS = 4      # LV1 listées au plus dans le menu de l'icône (0.8.1)
+
+
+def lv1_menu(finder, link):
+    """Entrées « LV1 » du menu de l'icône : [(nom ou None = automatique, libellé)] ; la LV1 choisie reste listée
+    (« absente ») quand on ne l'entend plus, pour pouvoir revenir en automatique."""
+    import lv1_finder
+    cur = lv1_finder.lv1_key(link.current) if link and link.current else None
+    rows = []
+    for e in finder.entries():
+        k = lv1_finder.lv1_key(e)
+        where = "ce PC" if e["local"] else (", ".join(e["ipv4"][:1]) or e["source"])
+        rows.append((e.get("host") or k, "LV1 de %s (%s)%s" % (e.get("host") or k, where,
+                                                            " - connectée" if k == cur else "")))
+    if finder.choice and all(k.lower() != finder.choice.lower() for k, _ in rows):
+        rows.append((finder.choice, "LV1 de %s (absente)" % finder.choice))
+    auto = "LV1 automatique (ce PC d'abord)"
+    if not finder.choice and cur:
+        auto += " - %s" % (link.current.get("host") or cur)
+    return [(None, auto)] + rows[:LV1_SLOTS]
+
+
+def rtp_devices(a):
+    """Appareils RTP-MIDI (X-Touch par Ethernet) : ``--rtpmidi`` sinon ``xtouch_rtpmidi.json`` ; [] = aucun."""
+    import rtpmidi
+    spec = getattr(a, "rtpmidi", None)
+    if spec is None:
+        return rtpmidi.load_config(os.path.join(HERE, rtpmidi.CONFIG))
+    if spec.strip().lower() in ("", "aucun", "none", "off"):
+        return []
+    out = []
+    for i, part in enumerate(x for x in spec.split(",") if x.strip()):
+        f = part.strip().split(":")
+        try:
+            ip, port = f[0], int(f[1])
+        except (IndexError, ValueError):
+            print("  --rtpmidi : « %s » ignoré (attendu ip:port[:nom])" % part)
+            continue
+        if not rtpmidi.is_private(ip):
+            print("  --rtpmidi : %s ignoré (pas un réseau local)" % ip)
+            continue
+        out.append({"name": f[2] if len(f) > 2 and f[2] else ("X-TOUCH", "X-TOUCH-EXT")[min(i, 1)] + " (network)",
+                    "ip": ip, "port": port})
+    return out
+
+
+def rtp_label(hub):
+    """Ligne du menu de l'icône : état des X-Touch par Ethernet (None = pas de ligne)."""
+    if hub is None:
+        return None
+    st = hub.status()
+    return "X-Touch Ethernet : %d / %d" % (sum(1 for x in st if x["up"]), len(st)) if st else None
+
+
+def start_tray(gr_url=None, reaper_exe=None, finder=None, get_link=None, get_rtp=None):
     """Icône près de l'horloge (comme X/M32 Gain Recall) : mise à jour (si disponible), mode d'emploi, dossier des
     journaux, Quitter ; « Tout quitter » avec X/M32 Gain Recall (gr_url) et / ou REAPER LV1 (reaper_exe)."""
     try:
@@ -1225,17 +1431,40 @@ def start_tray(gr_url=None, reaper_exe=None):
             subprocess.Popen(["explorer.exe", path], creationflags=0x08000000)
         except OSError:
             pass
+    lv1_items, checked, shown = [], {}, {}
+    if finder:
+        def label(n):
+            def f():
+                rows = lv1_menu(finder, get_link() if get_link else None)
+                shown[n] = rows[n] if n < len(rows) else None
+                return shown[n][1] if shown[n] else None
+            return f
+
+        def choose(n):
+            row, link = shown.get(n), get_link() if get_link else None
+            if row and link:
+                link.switch(row[0])
+
+        def is_checked(n):
+            row = shown.get(n)
+            return bool(row) and ((row[0] or "").lower() == (finder.choice or "").lower())
+        for n in range(LV1_SLOTS + 1):
+            lab = label(n)
+            lv1_items.append((lab, lambda n=n: choose(n)))
+            checked[lab] = lambda n=n: is_checked(n)
+        lv1_items.append(None)
     return tray.TrayIcon(
         "XTouch-LV1 v%s" % VERSION,
         [(lambda: ("Mise à jour %s disponible..." % UPDATE["version"]) if UPDATE["version"] else None,
           lambda: open_path(UPDATE["url"] or RELEASES_PAGE)),
          ("Mode d'emploi", lambda: open_path(os.path.join(HERE, "MODE_EMPLOI.html"))),
          ("Dossier des journaux", lambda: open_path(HERE)),
-         None,
+         (lambda: rtp_label(get_rtp() if get_rtp else None), lambda: None),
+         None] + lv1_items + [
          ("Quitter XTouch-LV1", STOP.set),
          (lambda: quit_all_label(gr_url, reaper_exe),
           lambda: threading.Thread(target=quit_all, args=(gr_url, reaper_exe), daemon=True).start())],
-        icon_path=os.path.join(HERE, "assets", "icon.ico"),
+        checked=checked, icon_path=os.path.join(HERE, "assets", "icon.ico"),
     ).start()
 
 
@@ -1252,6 +1481,8 @@ def parse_args():
     ap.add_argument("--port", type=int, help="port TCP de la LV1")
     ap.add_argument("--dry-run", action="store_true", help="n'ouvre pas de port MIDI, affiche les octets")
     ap.add_argument("--seconds", type=float, default=0, help="arrêt automatique après N s (test)")
+    ap.add_argument("--essai-vumetre", action="store_true",
+                    help="essai du témoin de saturation : 1re tranche de la X-Touch, valeurs Mackie 12 à 15 en boucle")
     ap.add_argument("--no-journal", action="store_true", help="ne pas écrire le journal des messages LV1")
     ap.add_argument("--lecture-seule", action="store_true", help="n'envoie rien à la LV1 (faders sans effet)")
     ap.add_argument("--x32", default="http://127.0.0.1:8032",
@@ -1276,12 +1507,23 @@ def parse_args():
                     help="ne pas lancer REAPER LV1 (installé par Total Control for LV1) avec le pont")
     ap.add_argument("--sans-gain-recall", action="store_true",
                     help="ne pas lancer X/M32 Gain Recall avec le pont")
+    ap.add_argument("--rtpmidi", default=None,
+                    help="X-Touch par Ethernet (RTP-MIDI) : ip:port[:nom],... (défaut : xtouch_rtpmidi.json), "
+                         "ou « aucun »")
+    ap.add_argument("--sans-usb", action="store_true",
+                    help="n'ouvre pas les ports MIDI USB de ce PC (X-Touch par Ethernet ou relais seulement)")
     ap.add_argument("--attendre", action="store_true",
                     help="attendre que les X-Touch soient branchées (défaut de l'exe compilé)")
     argv = sys.argv[1:]
     if getattr(sys, "frozen", False) and not argv:      # exe lancé d'un double-clic : réglage de Joseph
         argv = ["--clic-lv1", "--attendre"]
     return ap.parse_args(argv)
+
+
+def rtp_log(msg):
+    """Connexions / pertes RTP-MIDI : console et journal (diagnostic chez Joseph)."""
+    print(msg)
+    JOURNAL.mark(msg.strip())
 
 
 class App:
@@ -1298,6 +1540,8 @@ class App:
         self.tray_icon = None
         self.midi = None
         self.midi_in = None
+        self.hub = None                  # netmidi.RelayHub : X-Touch d'un autre PC (relais)
+        self.rtp = None                  # rtpmidi.RtpHub : X-Touch par leur prise Ethernet (RTP-MIDI)
         self.units = []
         self.wanted = []                 # unités du démarrage : on les veut toutes après une coupure
         self.inputs_open = 0
@@ -1321,6 +1565,11 @@ class App:
         self.diag_t, self.diag_warn = 0.0, None   # dernière vérification de la diagonale B, alerte affichée
         self.diag_bad = None             # canaux dont l'entrée B sort de la diagonale (None : inconnu)
         self.recall_until, self.recall_sent, self.recall_touched = 0.0, 0.0, None
+        self.banner = (None, 0.0)        # message sur toute la largeur des écrans (cases, jusqu'à quand)
+        self.banner_sig = None           # (mode encodeurs, choix aux, aux, USER) déjà annoncé
+        self.db_until = {}               # tranche -> jusqu'à quand la ligne du bas montre le niveau du fader
+        self.vu_test_t0 = None           # --essai-vumetre : début de l'essai
+        self.clip_until = {}             # tranche -> jusqu'à quand la LED rouge (saturation) reste allumée
         self.ab_seen = 0.0
         self.ch_at = 0.0
         self.refresh_at = None           # prochain renvoi complet à la X-Touch (None = jamais : test de référence)
@@ -1336,7 +1585,20 @@ class App:
         redirect_output_to_log()
         gr_url = None if a.x32.lower() in ("aucun", "none", "off") else a.x32
         reaper_exe = None if a.sans_reaper_lv1 else reaper_lv1_exe()
-        self.tray_icon = start_tray(gr_url, reaper_exe) if (getattr(sys, "frozen", False) and not a.dry_run) else None
+        self.link = None
+        self.finder = None
+        if not (a.host and a.port):                  # LV1 choisie / celle de ce PC (0.8.1)
+            import lv1_finder
+            self.finder = lv1_finder.LV1Finder(os.path.join(HERE, "xtouch_lv1_choix.json"))
+            self.finder.start()
+            if self.finder.choice and not a.dry_run:     # LV1 d'un autre PC où tourne XTouch-LV1 : relais
+                self.finder.wait_entries(5)
+                hosts = relay_hosts(self.finder, self.finder.choice)
+                if hosts:
+                    entry = lv1_finder.pick(self.finder.entries(), self.finder.choice)
+                    return run_relay(a, hosts, self.finder, entry)
+        self.tray_icon = (start_tray(gr_url, reaper_exe, self.finder, lambda: self.link, lambda: self.rtp)
+                          if (getattr(sys, "frozen", False) and not a.dry_run) else None)
         if self.tray_icon:
             threading.Thread(target=update_loop, args=(self.tray_icon,), daemon=True).start()
         print("  XTouch-LV1 v%s" % VERSION)
@@ -1352,26 +1614,51 @@ class App:
 
         if a.dry_run:
             midi = X.DryOut()
-        elif sys.platform != "win32":
-            print("Windows uniquement (ou --dry-run).")
-            return 2
         else:
-            midi = X.WinMidiOut()
+            devices = rtp_devices(a)                 # X-Touch par leur prise Ethernet (RTP-MIDI direct)
+            usb = sys.platform == "win32" and not a.sans_usb
+            if sys.platform != "win32" and not devices:
+                print("Windows uniquement (ou --dry-run, ou X-Touch par Ethernet : --rtpmidi).")
+                return 2
+            import netmidi                           # X-Touch d'un autre PC par le réseau (relais, 0.8.1)
+            self.hub = netmidi.RelayHub(log=print)
+            self.hub.start()
+            midi = netmidi.CombinedOut(X.WinMidiOut() if usb else None, self.hub)
+            if devices:                              # l'USB reste prioritaire : ses ports sont listés d'abord
+                import atexit
+                import rtpmidi
+                self.rtp = rtpmidi.RtpHub(devices, log=rtp_log)
+                self.rtp.start()
+                atexit.register(self.rtp.stop)       # BY aux appareils même si le pont s'arrête sur une erreur
+                midi = rtpmidi.RtpOut(midi, self.rtp)
+                print("  X-Touch par Ethernet (RTP-MIDI) : %s"
+                      % ", ".join("%s %s:%d" % (d["name"], d["ip"], d["port"]) for d in devices))
+                t_up = time.time() + 3.0             # sessions faites en quelques ms : les attendre toutes un peu
+                while time.time() < t_up and not all(x["up"] for x in self.rtp.status()):
+                    if STOP.wait(0.05):
+                        break
         self.midi = midi = SafeMidi(midi)
 
         units = open_units(midi, a, wait=a.attendre)
         if units is None:                                  # « Quitter » pendant l'attente des X-Touch
             if self.tray_icon:
                 self.tray_icon.stop()
+            self.stop_rtp()
             return 0
         if not units:
             print("Aucune X-Touch utilisable. Liste des ports : py xtouch_probe.py --list")
+            self.stop_rtp()
             return 3
         self.units = units
 
         self.wanted = [label for label, _, _ in units]
         if not a.dry_run:
-            self.midi_in = WinMidiIn(self.events)
+            import netmidi
+            usb = sys.platform == "win32" and not a.sans_usb
+            self.midi_in = netmidi.CombinedIn(WinMidiIn(self.events) if usb else None, self.hub, self.events)
+            if self.rtp:
+                import rtpmidi
+                self.midi_in = rtpmidi.RtpIn(self.midi_in, self.rtp, self.events)
             self.inputs_open = open_inputs(self.midi_in, units)
         self.ports_check = time.time()
         load_fader_curve()
@@ -1384,11 +1671,15 @@ class App:
         self.fixed_view = fixed_view = None if a.mixer == "auto" else int(a.mixer) - 1
         state.view = fixed_view or 0
         self.link = link = LV1Link(state, a.host, a.port)
+        link.finder = self.finder
+        link.relay_check = self.relay_choice
         link.start()
         self.xt = Surface(midi, units)
         self.faders = faders = FaderControl(state, link, write=not a.lecture_seule)
+        # BANK / F1-F8 / CHANNEL bloqués pendant un toucher de fader de TRANCHE (pas le master : il ne dépend pas de la
+        # couche ; journal du 10/11 : F2 refusé 0,2 s après avoir effleuré le master)
         self.buttons = buttons = ButtonControl(state, link, write=not a.lecture_seule, page=state.view,
-                                               busy=lambda: bool(faders.held(time.time())))
+                                               busy=lambda: bool(faders.held(time.time()) - {MASTER}))
         if a.x32.lower() not in ("aucun", "none", "off"):
             import xgr_link
             self.xlink = xgr_link.GainRecallLink(a.x32)
@@ -1463,6 +1754,13 @@ class App:
         self.refresh_at = time.time() + REFRESH_EVERY
         self.t_end = time.time() + a.seconds if a.seconds else None
         return None
+
+    def relay_choice(self, name):
+        """Menu de l'icône : LV1 d'un autre PC où tourne XTouch-LV1 -> redémarrage en relais (True)."""
+        if relay_hosts(self.finder, name):
+            restart_self()
+            return True
+        return False
 
     def on_overlay_action(self, action):
         """Clic à l'écran (overlay) : « fix_patch » = bouton REALIGN, comme ENTER de la X-Touch."""
@@ -1579,6 +1877,11 @@ class App:
                 JOURNAL.mark("nouvel essai des entrées MIDI : %s" % why_missing)
                 midi_in.close_all()
                 self.inputs_open = open_inputs(midi_in, self.units)
+        if self.rtp and not midi.lost:               # session RTP-MIDI tombée (X-Touch Ethernet éteinte, câble) : vu
+            for label, _, h in self.units:           # tout de suite, même si rien n'est envoyé à ce moment-là
+                if self.rtp.stale(h):
+                    midi.lost = "%s : session RTP-MIDI perdue" % label
+                    break
         if midi.lost:                                # X-Touch disparue : on attend qu'elle revienne, puis on rouvre
             print("  X-Touch perdue (%s) : en attente de son retour..." % midi.lost)
             JOURNAL.mark("X-Touch perdue : %s" % midi.lost)
@@ -1647,6 +1950,7 @@ class App:
                 apps.mixer = view + 1
         top, bot, cols, lvls, fads, layer_name, entries = build_frame(state, view, xt.strips, self.overrides)
         send_leds = sends.frame(entries, top, bot, cols, fads, self.overrides)
+        fader_bot = list(bot)            # niveau du fader (ou de l'envoi) : ligne du bas pendant qu'on touche le fader
         master_now = sends.aux_track() or self.master_target      # mode SEND : fader master = master de l'aux
         entries = list(entries) + [None] * (MASTER - len(entries)) + [master_now]
         self.entries, self.master_now = entries, master_now
@@ -1664,23 +1968,58 @@ class App:
                 if overlay and toast and (view, toast) != self.last_toast:   # banque X-Touch puis LV1 : une notif
                     self.last_toast = (view, toast)                          # (re-notifiée en changeant de Mixer)
                     overlay.set_layer(toast)
+                if toast:                                                    # et sur les écrans de la X-Touch
+                    with state.lock:
+                        k = state.shown_layer(view)
+                    self.show_banner(banner_cells("LAYER %d" % (k + 1) if k is not None else "LAYER", compact(toast)),
+                                     now)
             self.last_layer = layer_name
-        rings, recs = gain.frame(entries[:xt.strips], bot)
+        # Ligne du bas = l'encodeur (comme le contrôleur LV1, Joseph 10/11) ; pendant le choix de l'aux, elle garde
+        # les niveaux des masters d'aux
+        rings, recs = gain.frame(entries[:xt.strips], list(bot) if sends.picking else bot)
+        if sends.aux is not None and gain.pan_mode and not sends.picking:    # pan d'envoi : « M16 L12 »
+            short = sends.label() or ""
+            for i, e in enumerate(entries[:xt.strips]):
+                if e is not None:
+                    bot[i] = ("%s %s" % (short, bot[i].strip()))[:7]
+        for s in (self.faders.touch_display(now) if self.faders else ()):   # fader touché (ou ongle) : niveau en dB
+            self.db_until[s] = now + DB_SHOW
+        for s, until in list(self.db_until.items()):
+            if now >= until:
+                del self.db_until[s]
+            elif s < len(bot):
+                bot[s] = fader_bot[s]
+        xlink = self.xlink
+        for i, lv in enumerate(lvls):                    # saturation : LED rouge tenue CLIP_HOLD s
+            e = entries[i] if i < len(entries) else None
+            if xlink is not None and e is not None and lv != METER_CLIP:   # saturation à l'entrée (préampli X32)
+                pre = xlink.input_level(e, now) if hasattr(xlink, "input_level") else None
+                if pre is not None and pre >= PREAMP_CLIP_DB:
+                    lv = lvls[i] = METER_CLIP
+            if lv == METER_CLIP:
+                self.clip_until[i] = now + CLIP_HOLD
+            elif now < self.clip_until.get(i, 0.0):
+                lvls[i] = METER_CLIP
+        top, bot = self.banner_rows(now, top, bot)
+        if self.vu_test_t0 is not None or getattr(self.a, "essai_vumetre", False):
+            self.vu_test(now, top, bot, lvls)
         xt.push(top, bot, cols, lvls, fads, now, held, master_fv)
         xt.push_leds(*send_leds, recs=recs)
         xt.push_rings(rings)
         xt.set_main_led(NOTE_TRACK, gain.mode or (gain.trim_mode and int(now * 2) % 2 == 0))   # trim : clignote
         xt.set_main_led(NOTE_PAN, gain.pan_mode)
-        xt.set_main_led(NOTE_SEND, sends.aux is not None or (sends.picking and int(now * 3) % 2 == 0))
+        xt.set_main_led(NOTE_SEND, sends.mode_led(now))
         if apps is not None:
             xt.set_main_led(NOTE_DISPLAY, apps.front == "reaper")      # LED DISPLAY = Reaper devant
         if reaper:
             for note, on in self.transport.leds().items():
                 xt.set_main_led(note, on)
-        for k, on in enumerate(sends.fkey_leds()):
-            xt.set_main_led(NOTE_F1 + k, on)
         with state.lock:
             lmode, ltab, lspill = state.layer_mode.get(state.view), state.lv1_tab, state.spill_lit
+            shown = state.shown_layer(view)
+        for k, on in enumerate(layer_leds(shown)):                   # F1-F8 = couches 1-8 : la couche affichée
+            xt.set_main_led(NOTE_F1 + k, on)
+        xt.set_main_led(NOTE_USER, sends.user_mode)                   # USER : Select = User Keys
         for note, on in view_leds(lmode, ltab, lspill).items():       # touches View = mode de couche / onglet All
             xt.set_main_led(note, on)
         xt.set_main_led(NOTE_SMPTE, buttons.reaper_tc)   # SMPTE : timecode choisi ; LED SMPTE : affiché
@@ -1707,7 +2046,60 @@ class App:
         xt.set_main_led(NOTE_SOLO_ALL, any_solo)                                # SOLO : allumé si un solo
         with state.lock:
             on_b, self.ch_at = state.on_b, state.channels_at
-        xt.set_main_led(NOTE_FLIP, bool(on_b))                                  # FLIP : entrées sur B
+        # FLIP = sends on fader (comme SEND) ; SHIFT tenu : FLIP montre A/B (allumée = entrées sur B)
+        xt.set_main_led(NOTE_FLIP, bool(on_b) if sends.shift else sends.mode_led(now))
+
+    def show_banner(self, cells, now, secs=None):
+        """Message sur toute la largeur des écrans (ligne du bas) pendant BANNER_SECS."""
+        self.banner = (cells, now + (BANNER_SECS if secs is None else secs))
+
+    def banner_rows(self, now, top, bot):
+        """Messages : changement de mode (encodeurs, choix de l'aux, sends, USER) et SHIFT tenu (Joseph, 10/11)."""
+        gain, sends = self.gain, self.sends
+        sig = (gain.mode_name(), sends.picking, sends.aux, sends.user_mode)
+        old, self.banner_sig = self.banner_sig, sig
+        if old is not None and sig != old:
+            msg = None
+            if sig[0] != old[0]:
+                msg = mode_message(sig[0])
+            elif sig[1] and not old[1]:
+                msg = banner_cells("SELECT", "AN AUX")
+            elif sig[2] != old[2]:
+                if sig[2] is None:
+                    msg = banner_cells("SENDS", "OFF")
+                else:
+                    with self.state.lock:
+                        aux = self.state.aux_tracks
+                        name = aux[sig[2]][2] if sig[2] < len(aux) else (sends.label() or "")
+                    msg = banner_cells("SENDS", "TO", name)
+            elif sig[3] != old[3]:
+                msg = banner_cells("USER", "KEYS ON", "SELECT") if sig[3] else banner_cells("SELECT", "=", "CHANNEL")
+            if msg:
+                self.show_banner(msg, now)
+        if sends.shift:                                  # SHIFT tenu : rappel de SHIFT + FLIP et A/B
+            with self.state.lock:
+                on_b = self.state.on_b
+            return top, apply_banner(bot, shift_message(on_b))
+        cells, until = self.banner
+        if cells and now < until:
+            return top, apply_banner(bot, cells)
+        return top, bot
+
+    def vu_test(self, now, top, bot, lvls):
+        """--essai-vumetre : 1re tranche de la X-Touch, valeurs Mackie du vumètre 12 (plein), 13, 14 (= saturation
+        allumée selon la norme), 6 (la saturation reste-t-elle ?), 15 (= saturation éteinte), 0 ; 4 s chacune, en
+        boucle. Joseph note ce qu'il voit pour chaque étiquette."""
+        if self.vu_test_t0 is None:
+            self.vu_test_t0 = now
+            print("  Essai des vumètres : regarde la 1re tranche de la X-Touch (écran = étape en cours).")
+        steps = ((12, "LVL 12"), (13, "LVL 13"), (14, "CLIP ON"), (6, "LVL 6"), (15, "CLIPOFF"), (0, "LVL 0"))
+        k = int((now - self.vu_test_t0) // VU_TEST_STEP) % len(steps)
+        value, label = steps[k]
+        if k != getattr(self, "vu_test_k", None):
+            self.vu_test_k = k
+            JOURNAL.mark("essai vumètre : %s (valeur Mackie %d)" % (label, value))
+        s = 8 if len(lvls) > 8 else 0                    # 1re tranche de la X-Touch (l'Extender est à gauche)
+        top[s], bot[s], lvls[s] = "TEST VU", label, value
 
     def tick_integrations(self, now):
         """Ce qui ne part pas vers la X-Touch : scènes et pistes vers REAPER, overlay (rappel des pistes, info sends,
@@ -1789,9 +2181,16 @@ class App:
         self.xt.clear()
         for _, _, h in self.units:
             self.midi.close(h)
+        self.stop_rtp()
         print("\nArrêté, écrans remis à zéro.")
         if self.tray_icon:
             self.tray_icon.stop()
+
+    def stop_rtp(self):
+        """Fin des sessions RTP-MIDI (``BY``) : sinon les X-Touch gardent la session jusqu'à leur propre délai."""
+        if self.rtp:
+            time.sleep(0.05)                         # laisser partir les derniers écrans avant le BY
+            self.rtp.stop()
 
 
 def main():

@@ -1,4 +1,6 @@
-"""Touche TRACK : encodeurs sur le gain des préamplis X32 (via X/M32 Gain Recall), Rec tenu = 48 V ; PAN.
+"""Modes des encodeurs, comme le contrôleur LV1 (Joseph, 10/11/2026) : PAN par défaut ; TRACK = GAIN automatique (préampli
+X32 via X/M32 Gain Recall si la tranche en a un, sinon trim LV1), TRACK à nouveau = TRIM forcé (appui = phase), puis PAN.
+Rec tenu = 48 V.
 
 Déplacé de `xtouch_lv1_display.py` (étape 8c du refactor, 19/10/2026)."""
 import time
@@ -32,38 +34,41 @@ class GainControl:
     def __init__(self, state, link, write=True, lv1=None):
         self.state, self.link, self.write = state, link, write
         self.lv1 = lv1                    # LV1Link (envoi /Set/Track/Pan)
-        self.mode = False                 # mode gain (TRACK)
-        self.pan_mode = False             # mode pan (PAN) ; exclusif avec le mode gain
-        self.trim_mode = False            # mode trim LV1 (2e appui sur TRACK, Joseph 19/10) ; appui encodeur = phase
+        self.mode = False                 # mode gain (TRACK) : X32 si la tranche a un préampli, sinon trim
+        self.pan_mode = True              # mode pan (PAN) : le mode de départ, comme le contrôleur LV1 (Joseph, 10/11)
+        self.trim_mode = False            # mode trim LV1 forcé (2e appui sur TRACK, Joseph 19/10) ; appui encodeur = phase
         self.pan_last = {}                # tranche -> instant du dernier cran (accélération)
         self.rec_down = {}                # tranche -> instant d'appui sur Rec
         self.side = {}                    # piste stéréo -> 0 (L, défaut) / 1 (R) : appui encodeur ; jamais les deux
         self.warned = set()
         self.send_aux = lambda: None      # aux en sends on fader (branché sur SendControl) : PAN = pan de l'envoi
 
+    def mode_name(self):
+        return "gain" if self.mode else "trim" if self.trim_mode else "pan"
+
+    def uses_x32(self, e):
+        """En mode GAIN : la tranche règle-t-elle un préampli X32 (sinon : le trim LV1, comme le contrôleur LV1) ?"""
+        return bool(e is not None and self.link and self.link.preamps(e))
+
     def on_midi(self, unit, status, d1, d2, t, entries, surface):
         kind = status & 0xF0
         if kind == 0x90 and d1 == NOTE_TRACK:
-            if d2:                                # TRACK : normal -> gain X32 -> trim LV1 -> normal (Joseph, 19/10)
+            if d2:                                # TRACK : pan -> gain -> trim -> pan (Joseph, 10/11)
                 if self.mode or (not self.trim_mode and not self.link):      # sans Gain Recall : directement trim
-                    self.mode, self.trim_mode = False, True
+                    self.mode, self.trim_mode, self.pan_mode = False, True, False
                 elif self.trim_mode:
-                    self.trim_mode = False
+                    self.trim_mode, self.pan_mode = False, True
                 else:
-                    self.mode = True
-                self.pan_mode = False
+                    self.mode, self.pan_mode = True, False
                 if not self.mode:
                     self.side.clear()             # en sortant du mode gain : stéréo de nouveau sur L
-                JOURNAL.mark("XT bouton Track -> mode %s" % ("gain" if self.mode else "trim" if self.trim_mode
-                                                              else "normal"))
+                JOURNAL.mark("XT bouton Track -> mode %s" % self.mode_name())
             return True
         if kind == 0x90 and d1 == NOTE_PAN:
-            if d2:
-                self.pan_mode = not self.pan_mode
-                if self.pan_mode:
-                    self.mode = self.trim_mode = False
-                    self.side.clear()
-                JOURNAL.mark("XT bouton Pan -> mode pan %s" % ("ON" if self.pan_mode else "OFF"))
+            if d2:                                # PAN : retour au mode de départ (il ne s'éteint plus)
+                self.pan_mode, self.mode, self.trim_mode = True, False, False
+                self.side.clear()
+                JOURNAL.mark("XT bouton Pan -> mode pan")
             return True
         if self.pan_mode and kind == 0x90 and NOTE_VPOT_PUSH <= d1 < NOTE_VPOT_PUSH + 8:
             strip = 8 * unit + (d1 - NOTE_VPOT_PUSH)
@@ -89,6 +94,13 @@ class GainControl:
             self._set_pan(e, max(-1.0, min(1.0, round((cur + delta * step) * 45) / 45.0)),
                           "encodeur %d %+d%s" % (strip + 1, delta, " rapide" if fast else ""))
             return True
+        if self.mode and kind == 0xB0 and CC_VPOT <= d1 < CC_VPOT + 8:
+            strip = 8 * unit + (d1 - CC_VPOT)
+            e = entries[strip] if strip < len(entries) else None
+            if e is not None and not self.uses_x32(e):     # GAIN sans préampli X32 : trim (comme le contrôleur LV1)
+                n = d2 & 0x0F
+                self._trim_turn(e, -n if d2 & 0x40 else n, strip)
+                return True
         if self.trim_mode and kind == 0x90 and NOTE_VPOT_PUSH <= d1 < NOTE_VPOT_PUSH + 8:
             strip = 8 * unit + (d1 - NOTE_VPOT_PUSH)
             e = entries[strip] if strip < len(entries) else None
@@ -107,23 +119,9 @@ class GainControl:
         if self.trim_mode and kind == 0xB0 and CC_VPOT <= d1 < CC_VPOT + 8:
             strip = 8 * unit + (d1 - CC_VPOT)
             n = d2 & 0x0F
-            delta = -n if d2 & 0x40 else n
             e = entries[strip] if strip < len(entries) else None
-            if e is None or not delta:
-                return True
-            with self.state.lock:
-                t = self.state.track(*e)
-                cur = t.get("trim", {}).get(0)
-                if cur is None:
-                    cur = 0.0                     # pas encore reçu : la LV1 l'envoie à la connexion ; 0 par défaut
-                new = max(self.TRIM_RANGE[0], min(self.TRIM_RANGE[1], round((cur + delta * self.TRIM_STEP) * 2) / 2))
-                t.setdefault("trim", {})[0] = new
-                if t.get("stereo"):
-                    t["trim"][1] = new
-                stereo = 1 if t.get("stereo") else 0
-            if self.write and self.lv1:
-                self.lv1.send("/SetTrackTrim", [("i", e[0]), ("i", e[1]), ("i", stereo), ("f", new)])
-            JOURNAL.mark("XT encodeur %d %+d -> trim %s %+.1f dB" % (strip + 1, delta, e, new))
+            if e is not None:
+                self._trim_turn(e, -n if d2 & 0x40 else n, strip)
             return True
         if kind == 0x90 and NOTE_VPOT_PUSH <= d1 < NOTE_VPOT_PUSH + 8:
             strip = 8 * unit + (d1 - NOTE_VPOT_PUSH)
@@ -173,6 +171,24 @@ class GainControl:
             return True
         return False
 
+    def _trim_turn(self, e, delta, strip):
+        """Encodeur sur le trim LV1 (mode TRIM, ou GAIN sur une tranche sans préampli X32)."""
+        if not delta:
+            return
+        with self.state.lock:
+            t = self.state.track(*e)
+            cur = t.get("trim", {}).get(0)
+            if cur is None:
+                cur = 0.0                     # pas encore reçu : la LV1 l'envoie à la connexion ; 0 par défaut
+            new = max(self.TRIM_RANGE[0], min(self.TRIM_RANGE[1], round((cur + delta * self.TRIM_STEP) * 2) / 2))
+            t.setdefault("trim", {})[0] = new
+            if t.get("stereo"):
+                t["trim"][1] = new
+            stereo = 1 if t.get("stereo") else 0
+        if self.write and self.lv1:
+            self.lv1.send("/SetTrackTrim", [("i", e[0]), ("i", e[1]), ("i", stereo), ("f", new)])
+        JOURNAL.mark("XT encodeur %d %+d -> trim %s %+.1f dB" % (strip + 1, delta, e, new))
+
     def _set_pan(self, e, value, why):
         with self.state.lock:
             self.state.track(*e)["pan"] = value
@@ -187,7 +203,7 @@ class GainControl:
             self.warned.add(text)
 
     def frame(self, entries, bot):
-        """Ligne du bas (gain en mode gain), couronnes, LED Rec (48 V) pour les tranches affichées."""
+        """Ligne du bas (valeur de l'encodeur), couronnes, LED Rec (48 V) pour les tranches affichées."""
         rings, recs = [], []
         if self.pan_mode:
             aux = self.send_aux()        # sends on fader : on montre le pan de l'ENVOI (c'est lui que règlent les encodeurs)
@@ -197,11 +213,12 @@ class GainControl:
                             for e in entries]
                 else:
                     pans = [self.state.tracks.get(e, {}).get("pan") if e is not None else None for e in entries]
-        if self.trim_mode:                       # trim LV1 : « T+3.5 », couronne depuis le centre, LED Rec = phase
+        if self.trim_mode or self.mode:          # trim LV1 : « T+3.5 », couronne depuis le centre, LED Rec = phase
             with self.state.lock:
                 vals = [(self.state.tracks.get(e, {}).get("trim", {}).get(0),
                          self.state.tracks.get(e, {}).get("phase", {}).get(0, False)) if e is not None else (None, False)
                         for e in entries]
+        if self.trim_mode:
             for i, (e, (tr, ph)) in enumerate(zip(entries, vals)):
                 recs.append(bool(ph))
                 if tr is None:
@@ -218,6 +235,13 @@ class GainControl:
                 rings.append(0 if p is None else (6 + int(round(p * 5))))     # mode 0 : un point, centre = 6
                 if e is not None and i < len(bot):
                     bot[i] = pan_label(p)
+                continue
+            if self.mode and e is not None and not self.uses_x32(e):    # GAIN sans préampli X32 : trim
+                tr = vals[i][0]
+                recs.append(False)
+                rings.append(0 if tr is None else 0x10 | max(1, min(11, 6 + int(round(tr / 3.0)))))
+                if i < len(bot):
+                    bot[i] = trim_label(tr)
                 continue
             side = self.side.get(e, 0)
             g = self.link.gain(e, side) if (self.link and e is not None) else None

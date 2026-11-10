@@ -41,6 +41,10 @@ def lv1():
     threading.Thread(target=rx, daemon=True).start()
     send("/handshake", [("i", 1)])
     send("/Channels", [("i", 1)] + track("Ch1", 0, 0))
+    lay = [("i", 0), ("i", 0), ("i", 1), ("s", "Ch 1-16"), ("i", 16)] + [("i", 0), ("i", 0)] * 16
+    send("/Notify/Layers", lay); send("/Notify/CurrentLayer", [("i", 0), ("i", 0)])
+    for k in range(16):              # une vraie LV1 envoie ses 16 User Keys à la connexion (17/10) ; sans elles le pont
+        send("/Notify/UserKeyInfo", [("i", k), ("s", "None"), ("s", "None"), ("i", 0)])   # se reconnecte à 3 s (10/11)
     send("/Notify/Scene/Name", [("s", "Intro")])
     send("/Notify/SceneList", [("i", 3), ("i", 0), ("s", "Intro"), ("i", 1), ("s", "Chanson 1"), ("i", 2), ("s", "Rappel")])
     send("/Notify/CurSceneIndex", [("i", 0)])                         # connexion : pas transmis

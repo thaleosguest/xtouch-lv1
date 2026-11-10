@@ -42,7 +42,7 @@ clk.start()
 st.view = 1                                         # l'onglet Mixer 2 est affiché
 b.on_midi(1, 0x90, D.NOTE_BANK_RIGHT, 127, 0, [], None)
 st.n_inputs = 80
-b.on_midi(1, 0x90, D.NOTE_USER, 127, 0, [], None)
+b.on_midi(1, 0x90, D.NOTE_AUDIO_TRACKS, 127, 0, [], None)
 time.sleep(0.4)
 check("BANK sur Mixer 2", st.local.get(1) == 1 and 0 not in st.local and clicks == [(1, 2)])
 check("mode sur Mixer 2", modes == [("custom", 80, 2)])
