@@ -176,14 +176,23 @@ def stage_gain_recall(stage, exe, tag, tosc=None):
         f.write(tag.lstrip("vV"))
     md = None
     if os.path.isdir(GR_WORKSPACE):                        # mode d'emploi du même tag que l'exe
-        r = subprocess.run(["git", "show", "%s:MODE_EMPLOI.md" % tag], cwd=GR_WORKSPACE, capture_output=True)
-        if r.returncode == 0:
-            md = r.stdout.decode("utf-8")
+        try:
+            r = subprocess.run(["git", "show", "%s:MODE_EMPLOI.md" % tag], cwd=GR_WORKSPACE, capture_output=True)
             logo = subprocess.run(["git", "show", "%s:assets/logo.svg" % tag], cwd=GR_WORKSPACE, capture_output=True)
-            if logo.returncode == 0:
-                os.makedirs(os.path.join(stage, "assets"))
-                with open(os.path.join(stage, "assets", "logo.svg"), "wb") as f:
-                    f.write(logo.stdout)
+            if r.returncode == 0:
+                md, logo = r.stdout.decode("utf-8"), (logo.stdout if logo.returncode == 0 else None)
+        except OSError:                                    # pas de git (ex. VM de compilation) : copie posée à côté
+            p = os.path.join(GR_WORKSPACE, "MODE_EMPLOI.md")
+            if os.path.exists(p):
+                print("  (pas de git : MODE_EMPLOI.md de %s pris tel quel, vérifier qu'il est au tag %s)" % (GR_WORKSPACE, tag))
+                with open(p, encoding="utf-8") as f:
+                    md = f.read()
+                lp = os.path.join(GR_WORKSPACE, "assets", "logo.svg")
+                logo = open(lp, "rb").read() if os.path.exists(lp) else None
+        if md is not None and logo:
+            os.makedirs(os.path.join(stage, "assets"))
+            with open(os.path.join(stage, "assets", "logo.svg"), "wb") as f:
+                f.write(logo)
     if md is None:
         print("  (mode d'emploi de Gain Recall introuvable : lien vers la page GitHub)")
         md = "# X32 Gain Recall\n\n[Mode d'emploi en ligne](https://github.com/%s/blob/%s/MODE_EMPLOI.md)\n" % (GR_REPO, tag)
