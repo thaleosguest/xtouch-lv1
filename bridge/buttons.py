@@ -1,21 +1,29 @@
-"""Boutons des tranches et de la X-Touch : Mute / Solo / Select, BANK / CHANNEL, touches View (INPUTS, BUSES, USER,
-GROUP, GLOBAL VIEW) et leurs voyants, SMPTE, User Keys F1-F8.
+"""Boutons des tranches et de la X-Touch : Mute / Solo / Select, BANK / CHANNEL, F1-F8 (couches 1-8), touches View
+(INPUTS, BUSES, AUDIO TRACKS, GROUP, GLOBAL VIEW) et leurs voyants, SMPTE.
+(USER = User Keys sur les Select : bridge/sends.py, avec les Flip Sends.)
 
 Déplacé de `xtouch_lv1_display.py` (étape 8g du refactor, 19/10/2026)."""
 from bridge.journal import JOURNAL
 from bridge.lv1_watch import FollowsView
-from surface.notes import (CC_JOG, MASTER, NOTE_BANK_LEFT, NOTE_BANK_RIGHT, NOTE_BUSES, NOTE_CHANNEL_LEFT,
-                           NOTE_CHANNEL_RIGHT, NOTE_FLIP, NOTE_GLOBAL_VIEW, NOTE_GROUP, NOTE_INPUTS, NOTE_MUTE,
-                           NOTE_REC, NOTE_SELECT, NOTE_SMPTE, NOTE_SOLO, NOTE_SOLO_ALL, NOTE_USER)
+from surface.notes import (CC_JOG, MASTER, NOTE_AUDIO_TRACKS, NOTE_BANK_LEFT, NOTE_BANK_RIGHT, NOTE_BUSES,
+                           NOTE_CHANNEL_LEFT, NOTE_CHANNEL_RIGHT, NOTE_F1, NOTE_FLIP, NOTE_GLOBAL_VIEW, NOTE_GROUP,
+                           NOTE_INPUTS, NOTE_MUTE, NOTE_REC, NOTE_SELECT, NOTE_SMPTE, NOTE_SOLO, NOTE_SOLO_ALL)
+
+VIEW_NOTES = (NOTE_INPUTS, NOTE_BUSES, NOTE_AUDIO_TRACKS, NOTE_GROUP, NOTE_GLOBAL_VIEW)
 
 
 def view_leds(mode, tab=None, spill=False):
     """Voyants des touches View : mode de couche (lv1_db.MODE_*), onglet affiché, Spill lu à l'écran ; {note: allumée}.
     Inconnu : éteint. Spill allumé : la base garde le mode d'avant (4), mais seul Spill est allumé sur la LV1 -> seul
-    GROUP. GLOBAL VIEW = onglet All (Joseph, 16/10)."""
+    GROUP. GLOBAL VIEW = onglet All (Joseph, 16/10). Custom = AUDIO TRACKS (Joseph, 10/11 ; avant : USER)."""
     spill = bool(spill or mode == 3)
     return {NOTE_INPUTS: mode in (0, 4) and not spill, NOTE_BUSES: mode == 5 and not spill,
-            NOTE_USER: mode == 1 and not spill, NOTE_GROUP: spill, NOTE_GLOBAL_VIEW: tab == "All"}
+            NOTE_AUDIO_TRACKS: mode == 1 and not spill, NOTE_GROUP: spill, NOTE_GLOBAL_VIEW: tab == "All"}
+
+
+def layer_leds(shown):
+    """LED de F1..F8 : la couche affichée (index 0..7, ou None)."""
+    return [shown == k for k in range(8)]
 
 
 class ButtonControl(FollowsView):
@@ -42,6 +50,18 @@ class ButtonControl(FollowsView):
             self.lv1.layer(k)
         return True
 
+    def on_layer(self, k):
+        """F1..F8 : couche k+1 en accès direct (comme les touches de couche du contrôleur LV1, Joseph 10/11)."""
+        if self.busy():
+            JOURNAL.mark("XT F%d ignoré (fader tenu)" % (k + 1))
+            return True
+        with self.state.lock:
+            got = self.state.goto_layer(self.page, k)
+        JOURNAL.mark("XT F%d -> couche %s" % (k + 1, k + 1 if got is not None else "inchangée (absente ou vide)"))
+        if got is not None and self.lv1:
+            self.lv1.layer(got)
+        return True
+
     def on_view(self, d1):
         """Touches View -> bouton de mode de couche de la LV1 (clic simulé, --clic-lv1)."""
         with self.state.lock:
@@ -51,7 +71,7 @@ class ButtonControl(FollowsView):
             if self.lv1:
                 self.lv1.all_tab()
             return
-        name = {NOTE_INPUTS: "input" if n == 80 else "factory", NOTE_BUSES: "mix", NOTE_USER: "custom",
+        name = {NOTE_INPUTS: "input" if n == 80 else "factory", NOTE_BUSES: "mix", NOTE_AUDIO_TRACKS: "custom",
                 NOTE_GROUP: "spill"}[d1]
         JOURNAL.mark("XT bouton View %02X -> mode %s (%s canaux)" % (d1, name, n))
         if name == "mix" and n != 80:
@@ -60,7 +80,7 @@ class ButtonControl(FollowsView):
         if self.lv1:
             self.lv1.mode(name)
         elif "view" not in self.warned:
-            print("  Touches INPUTS / BUSES / USER / GROUP / GLOBAL VIEW : avec --clic-lv1 seulement.")
+            print("  Touches INPUTS / BUSES / AUDIO TRACKS / GROUP / GLOBAL VIEW : avec --clic-lv1 seulement.")
             self.warned.add("view")
 
     def on_channel(self, d1, entries):
@@ -115,21 +135,23 @@ class ButtonControl(FollowsView):
                     keys = [k for k, (_s, func, on) in sorted(self.state.user_keys.items())
                             if on and "flip ab" in (func or "").lower()]
                 if not keys:
-                    JOURNAL.mark("XT bouton Flip : aucune User Key « Flip AB » dans la LV1")
+                    JOURNAL.mark("XT SHIFT + Flip : aucune User Key « Flip AB » dans la LV1")
                     if "flip" not in self.warned:
-                        print("  FLIP : assigne une User Key de la LV1 à « Flip AB Input channel ».")
+                        print("  SHIFT + FLIP : assigne une User Key de la LV1 à « Flip AB Input channel ».")
                         self.warned.add("flip")
                 elif self.write:
                     self.link.send("/Set/UserKey", [("i", keys[0]), ("T", True)])
                     self.link.send("/Set/UserKey", [("i", keys[0]), ("F", False)])
-                    JOURNAL.mark("XT bouton Flip -> User Key %d (Flip A/B)" % (keys[0] + 1))
+                    JOURNAL.mark("XT SHIFT + Flip -> User Key %d (Flip A/B)" % (keys[0] + 1))
             return True
         if (status & 0xF0) == 0x90 and d1 == NOTE_SMPTE:
             if d2:
                 self.reaper_tc = not self.reaper_tc
                 JOURNAL.mark("XT bouton SMPTE -> afficheur : %s" % ("timecode REAPER" if self.reaper_tc else "heure"))
             return True
-        if (status & 0xF0) == 0x90 and d1 in (NOTE_INPUTS, NOTE_BUSES, NOTE_USER, NOTE_GROUP, NOTE_GLOBAL_VIEW):
+        if (status & 0xF0) == 0x90 and NOTE_F1 <= d1 < NOTE_F1 + 8:
+            return True if d2 == 0 else self.on_layer(d1 - NOTE_F1)
+        if (status & 0xF0) == 0x90 and d1 in VIEW_NOTES:
             if d2:
                 self.on_view(d1)
             return True

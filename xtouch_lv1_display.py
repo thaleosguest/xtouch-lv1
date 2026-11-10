@@ -45,6 +45,7 @@ import xtouch_probe as X
 from surface.notes import (XT, TOUCH_NOTES, MASTER, NOTE_REC, NOTE_SOLO, NOTE_MUTE, NOTE_SELECT,
                            NOTE_BANK_LEFT, NOTE_BANK_RIGHT, NOTE_CHANNEL_LEFT, NOTE_CHANNEL_RIGHT, CC_JOG,
                            NOTE_FLIP, NOTE_GLOBAL_VIEW, NOTE_INPUTS, NOTE_BUSES, NOTE_USER, NOTE_GROUP,
+                           NOTE_AUDIO_TRACKS, NOTE_SHIFT,
                            NOTE_SMPTE, NOTE_LED_SMPTE, NOTE_SOLO_ALL, NOTE_TRACK, NOTE_PAN, NOTE_VPOT_PUSH,
                            CC_VPOT, CC_RING, CC_TIMECODE, CC_ASSIGN_L, CC_ASSIGN_R, NOTE_RUDE_SOLO,
                            NOTE_SEND, NOTE_F1, NOTE_MARKER, NOTE_NUDGE, NOTE_CYCLE, NOTE_DROP, NOTE_REPLACE,
@@ -53,20 +54,21 @@ from surface.notes import (XT, TOUCH_NOTES, MASTER, NOTE_REC, NOTE_SOLO, NOTE_MU
                            NOTE_DISPLAY, NOTE_SAVE, NOTE_ENTER)
 # Étape 6 : MIDI, envoi vers la X-Touch et textes affichés dans surface/ (réexportés : D.Surface, D.seg_codes…)
 from surface.display import ascii7, fader_text, rgb_to_xtouch, SIDE_NAMES, gain_label, seg_codes, time_display
+from surface.banner import apply_banner, banner_cells, compact, mode_message, shift_message
 from surface.midi import WinMidiIn, SafeMidi
 from surface.xtouch import METER_REFRESH, FADER_TOL
 from surface import xtouch as _xtouch
 from bridge.journal import JOURNAL_SKIP, Journal, JournalSlot, JOURNAL
 # FADER_CURVE / INF_POS : PAS réexportés (load_fader_curve les remplace dans bridge.values : lire _values.FADER_CURVE)
 from bridge.values import (METER_STEPS, db_to_fader, CURVE_FILE, FADER_MIN_DB, load_fader_curve, fader_to_db,
-                           db_to_level, LV1_PAN_SCALE, pan_label)
+                           db_to_level, LV1_PAN_SCALE, pan_label, METER_CLIP)
 from bridge import values as _values
 from bridge.gain import GainControl
 from bridge.sends import flip_target, send_label, aux_short, SendControl
 from bridge.faders import (HOLD_AFTER, MOTOR_BUSY, NAIL_SHOW, UNTOUCHED_MIN, STALE_FOR, SEND_EVERY, label_of,
                            FaderControl)
 from bridge.lv1_watch import FollowsView, LV1Clicker, LayerModeWatcher, ViewFollower, LV1SelectionWatcher
-from bridge.buttons import view_leds, ButtonControl
+from bridge.buttons import layer_leds, view_leds, ButtonControl
 from bridge.reaper import TransportControl, ACT_REAPER_SAVE_AS, AppControl
 
 VERSION = "0.8.1"
@@ -82,8 +84,27 @@ REFRESH_EVERY = 30.0    # s : tout est renvoyé à la X-Touch (sauf les moteurs)
 
 # ─── Conversions ──────────────────────────────────────────────────────────────
 
+def fit7(n):
+    """Nom trop long pour un écran (7 car.), comme les logiciels de studio (Joseph, 10/11) : d'abord sans espaces, puis
+    sans voyelles en partant de la fin (jamais la 1re lettre d'un mot ni une majuscule), puis sans « _ » / « - », puis
+    coupé. « Lead Vocal » -> « LeadVcl », « Overhead L » -> « OverhdL », « Out_CtrlRoom » -> « OtCtrlR »."""
+    if len(n) <= 7:
+        return n
+    chars = list("".join(n.split()))
+    keep = {i for i, c in enumerate(chars) if i == 0 or c.isupper() or chars[i - 1] in "_-"}
+    for i in range(len(chars) - 1, -1, -1):
+        if len("".join(chars)) <= 7:
+            break
+        if i not in keep and chars[i].lower() in "aeiouy":
+            chars[i] = ""
+    out = "".join(chars)
+    if len(out) > 7:
+        out = out.replace("_", "").replace("-", "")
+    return out[:7]
+
+
 def short_name(name, group, ch):
-    """« Channel 6 » -> « In 6 » (comme dans X/M32 Gain Recall), sinon le nom LV1 sur 7 caractères."""
+    """« Channel 6 » -> « In 6 » (comme dans X/M32 Gain Recall), sinon le nom LV1 raccourci à 7 caractères (fit7)."""
     n = ascii7(name)
     if not n:
         n = default_label(group, ch)
@@ -92,7 +113,7 @@ def short_name(name, group, ch):
         n = "In " + n[8:].strip()
     elif low.startswith("group "):
         n = "Grp " + n[6:].strip()
-    return n[:7]
+    return fit7(n)
 
 
 GROUP_TAG = {0: "In", 1: "Grp", 2: "Fx", 3: "LR", 4: "C", 5: "M", 6: "Mtx", 7: "Cue", 8: "TB", 12: "DCA", 25: "Mon"}
@@ -238,6 +259,19 @@ class BridgeState:
                 return k
             k += step
         return None
+
+    def goto_layer(self, page, k):
+        """F1..F8 : couche k (0..7) du jeu affiché, en accès direct comme les touches de couche du contrôleur LV1.
+        Locale comme ◄ BANK ► ; couche absente ou vide : None (rien ne change)."""
+        layers, _ = self.layer_set(page)
+        if not layers or not 0 <= k < len(layers) or not any(layers[k][1]):
+            return None
+        self.local[page] = k
+        return k
+
+    def shown_layer(self, page):
+        """Index de la couche affichée sur la X-Touch (banque locale, sinon celle de la LV1), ou None."""
+        return self.local.get(page, self.current.get(page))
 
     def layer_entries(self, mixer_page):
         """Les 16 tranches de la couche affichée, ou (None, None) si inconnue."""
@@ -863,6 +897,12 @@ def scene_relay(state, bridge, link, now, write=True):
 RECALL_HOLD = 0.5        # s : le rappel de pistes reste affiché après le relâchement du dernier fader
 RECALL_EVERY = 0.05      # s : rafraîchissement du rappel (vumètres) pendant qu'il est affiché
 RECALL_EVERY_IDLE = 0.1  # s : rafraîchissement quand il reste affiché sans geste (option « toujours visible »)
+DB_SHOW = 1.0            # s : la ligne du bas garde le niveau du fader après le relâchement (puis l'encodeur, 10/11)
+BANNER_SECS = 1.5        # s : message sur toute la largeur des écrans (couche, mode… ; Joseph, 10/11)
+VU_TEST_STEP = 4.0       # s par étape de --essai-vumetre
+CLIP_HOLD = 1.0          # s : LED rouge du vumètre tenue après une saturation (0 dBFS sur la LV1)
+PREAMP_CLIP_DB = -0.5    # dBFS : préampli X32 (vumètre d'entrée lu dans Gain Recall) considéré saturé (Joseph, 10/11 :
+                         # « ça a saturé quand j'ai augmenté le gain, pas le fader » ; le vumètre LV1 est post-fader)
 RECALL_BUTTON_HOLD = 1.5  # s : rappel affiché après un appui sur un bouton de tranche / un cran d'encodeur (31/10)
 
 
@@ -1441,6 +1481,8 @@ def parse_args():
     ap.add_argument("--port", type=int, help="port TCP de la LV1")
     ap.add_argument("--dry-run", action="store_true", help="n'ouvre pas de port MIDI, affiche les octets")
     ap.add_argument("--seconds", type=float, default=0, help="arrêt automatique après N s (test)")
+    ap.add_argument("--essai-vumetre", action="store_true",
+                    help="essai du témoin de saturation : 1re tranche de la X-Touch, valeurs Mackie 12 à 15 en boucle")
     ap.add_argument("--no-journal", action="store_true", help="ne pas écrire le journal des messages LV1")
     ap.add_argument("--lecture-seule", action="store_true", help="n'envoie rien à la LV1 (faders sans effet)")
     ap.add_argument("--x32", default="http://127.0.0.1:8032",
@@ -1523,6 +1565,11 @@ class App:
         self.diag_t, self.diag_warn = 0.0, None   # dernière vérification de la diagonale B, alerte affichée
         self.diag_bad = None             # canaux dont l'entrée B sort de la diagonale (None : inconnu)
         self.recall_until, self.recall_sent, self.recall_touched = 0.0, 0.0, None
+        self.banner = (None, 0.0)        # message sur toute la largeur des écrans (cases, jusqu'à quand)
+        self.banner_sig = None           # (mode encodeurs, choix aux, aux, USER) déjà annoncé
+        self.db_until = {}               # tranche -> jusqu'à quand la ligne du bas montre le niveau du fader
+        self.vu_test_t0 = None           # --essai-vumetre : début de l'essai
+        self.clip_until = {}             # tranche -> jusqu'à quand la LED rouge (saturation) reste allumée
         self.ab_seen = 0.0
         self.ch_at = 0.0
         self.refresh_at = None           # prochain renvoi complet à la X-Touch (None = jamais : test de référence)
@@ -1629,8 +1676,10 @@ class App:
         link.start()
         self.xt = Surface(midi, units)
         self.faders = faders = FaderControl(state, link, write=not a.lecture_seule)
+        # BANK / F1-F8 / CHANNEL bloqués pendant un toucher de fader de TRANCHE (pas le master : il ne dépend pas de la
+        # couche ; journal du 10/11 : F2 refusé 0,2 s après avoir effleuré le master)
         self.buttons = buttons = ButtonControl(state, link, write=not a.lecture_seule, page=state.view,
-                                               busy=lambda: bool(faders.held(time.time())))
+                                               busy=lambda: bool(faders.held(time.time()) - {MASTER}))
         if a.x32.lower() not in ("aucun", "none", "off"):
             import xgr_link
             self.xlink = xgr_link.GainRecallLink(a.x32)
@@ -1901,6 +1950,7 @@ class App:
                 apps.mixer = view + 1
         top, bot, cols, lvls, fads, layer_name, entries = build_frame(state, view, xt.strips, self.overrides)
         send_leds = sends.frame(entries, top, bot, cols, fads, self.overrides)
+        fader_bot = list(bot)            # niveau du fader (ou de l'envoi) : ligne du bas pendant qu'on touche le fader
         master_now = sends.aux_track() or self.master_target      # mode SEND : fader master = master de l'aux
         entries = list(entries) + [None] * (MASTER - len(entries)) + [master_now]
         self.entries, self.master_now = entries, master_now
@@ -1918,23 +1968,58 @@ class App:
                 if overlay and toast and (view, toast) != self.last_toast:   # banque X-Touch puis LV1 : une notif
                     self.last_toast = (view, toast)                          # (re-notifiée en changeant de Mixer)
                     overlay.set_layer(toast)
+                if toast:                                                    # et sur les écrans de la X-Touch
+                    with state.lock:
+                        k = state.shown_layer(view)
+                    self.show_banner(banner_cells("LAYER %d" % (k + 1) if k is not None else "LAYER", compact(toast)),
+                                     now)
             self.last_layer = layer_name
-        rings, recs = gain.frame(entries[:xt.strips], bot)
+        # Ligne du bas = l'encodeur (comme le contrôleur LV1, Joseph 10/11) ; pendant le choix de l'aux, elle garde
+        # les niveaux des masters d'aux
+        rings, recs = gain.frame(entries[:xt.strips], list(bot) if sends.picking else bot)
+        if sends.aux is not None and gain.pan_mode and not sends.picking:    # pan d'envoi : « M16 L12 »
+            short = sends.label() or ""
+            for i, e in enumerate(entries[:xt.strips]):
+                if e is not None:
+                    bot[i] = ("%s %s" % (short, bot[i].strip()))[:7]
+        for s in (self.faders.touch_display(now) if self.faders else ()):   # fader touché (ou ongle) : niveau en dB
+            self.db_until[s] = now + DB_SHOW
+        for s, until in list(self.db_until.items()):
+            if now >= until:
+                del self.db_until[s]
+            elif s < len(bot):
+                bot[s] = fader_bot[s]
+        xlink = self.xlink
+        for i, lv in enumerate(lvls):                    # saturation : LED rouge tenue CLIP_HOLD s
+            e = entries[i] if i < len(entries) else None
+            if xlink is not None and e is not None and lv != METER_CLIP:   # saturation à l'entrée (préampli X32)
+                pre = xlink.input_level(e, now) if hasattr(xlink, "input_level") else None
+                if pre is not None and pre >= PREAMP_CLIP_DB:
+                    lv = lvls[i] = METER_CLIP
+            if lv == METER_CLIP:
+                self.clip_until[i] = now + CLIP_HOLD
+            elif now < self.clip_until.get(i, 0.0):
+                lvls[i] = METER_CLIP
+        top, bot = self.banner_rows(now, top, bot)
+        if self.vu_test_t0 is not None or getattr(self.a, "essai_vumetre", False):
+            self.vu_test(now, top, bot, lvls)
         xt.push(top, bot, cols, lvls, fads, now, held, master_fv)
         xt.push_leds(*send_leds, recs=recs)
         xt.push_rings(rings)
         xt.set_main_led(NOTE_TRACK, gain.mode or (gain.trim_mode and int(now * 2) % 2 == 0))   # trim : clignote
         xt.set_main_led(NOTE_PAN, gain.pan_mode)
-        xt.set_main_led(NOTE_SEND, sends.aux is not None or (sends.picking and int(now * 3) % 2 == 0))
+        xt.set_main_led(NOTE_SEND, sends.mode_led(now))
         if apps is not None:
             xt.set_main_led(NOTE_DISPLAY, apps.front == "reaper")      # LED DISPLAY = Reaper devant
         if reaper:
             for note, on in self.transport.leds().items():
                 xt.set_main_led(note, on)
-        for k, on in enumerate(sends.fkey_leds()):
-            xt.set_main_led(NOTE_F1 + k, on)
         with state.lock:
             lmode, ltab, lspill = state.layer_mode.get(state.view), state.lv1_tab, state.spill_lit
+            shown = state.shown_layer(view)
+        for k, on in enumerate(layer_leds(shown)):                   # F1-F8 = couches 1-8 : la couche affichée
+            xt.set_main_led(NOTE_F1 + k, on)
+        xt.set_main_led(NOTE_USER, sends.user_mode)                   # USER : Select = User Keys
         for note, on in view_leds(lmode, ltab, lspill).items():       # touches View = mode de couche / onglet All
             xt.set_main_led(note, on)
         xt.set_main_led(NOTE_SMPTE, buttons.reaper_tc)   # SMPTE : timecode choisi ; LED SMPTE : affiché
@@ -1961,7 +2046,60 @@ class App:
         xt.set_main_led(NOTE_SOLO_ALL, any_solo)                                # SOLO : allumé si un solo
         with state.lock:
             on_b, self.ch_at = state.on_b, state.channels_at
-        xt.set_main_led(NOTE_FLIP, bool(on_b))                                  # FLIP : entrées sur B
+        # FLIP = sends on fader (comme SEND) ; SHIFT tenu : FLIP montre A/B (allumée = entrées sur B)
+        xt.set_main_led(NOTE_FLIP, bool(on_b) if sends.shift else sends.mode_led(now))
+
+    def show_banner(self, cells, now, secs=None):
+        """Message sur toute la largeur des écrans (ligne du bas) pendant BANNER_SECS."""
+        self.banner = (cells, now + (BANNER_SECS if secs is None else secs))
+
+    def banner_rows(self, now, top, bot):
+        """Messages : changement de mode (encodeurs, choix de l'aux, sends, USER) et SHIFT tenu (Joseph, 10/11)."""
+        gain, sends = self.gain, self.sends
+        sig = (gain.mode_name(), sends.picking, sends.aux, sends.user_mode)
+        old, self.banner_sig = self.banner_sig, sig
+        if old is not None and sig != old:
+            msg = None
+            if sig[0] != old[0]:
+                msg = mode_message(sig[0])
+            elif sig[1] and not old[1]:
+                msg = banner_cells("SELECT", "AN AUX")
+            elif sig[2] != old[2]:
+                if sig[2] is None:
+                    msg = banner_cells("SENDS", "OFF")
+                else:
+                    with self.state.lock:
+                        aux = self.state.aux_tracks
+                        name = aux[sig[2]][2] if sig[2] < len(aux) else (sends.label() or "")
+                    msg = banner_cells("SENDS", "TO", name)
+            elif sig[3] != old[3]:
+                msg = banner_cells("USER", "KEYS ON", "SELECT") if sig[3] else banner_cells("SELECT", "=", "CHANNEL")
+            if msg:
+                self.show_banner(msg, now)
+        if sends.shift:                                  # SHIFT tenu : rappel de SHIFT + FLIP et A/B
+            with self.state.lock:
+                on_b = self.state.on_b
+            return top, apply_banner(bot, shift_message(on_b))
+        cells, until = self.banner
+        if cells and now < until:
+            return top, apply_banner(bot, cells)
+        return top, bot
+
+    def vu_test(self, now, top, bot, lvls):
+        """--essai-vumetre : 1re tranche de la X-Touch, valeurs Mackie du vumètre 12 (plein), 13, 14 (= saturation
+        allumée selon la norme), 6 (la saturation reste-t-elle ?), 15 (= saturation éteinte), 0 ; 4 s chacune, en
+        boucle. Joseph note ce qu'il voit pour chaque étiquette."""
+        if self.vu_test_t0 is None:
+            self.vu_test_t0 = now
+            print("  Essai des vumètres : regarde la 1re tranche de la X-Touch (écran = étape en cours).")
+        steps = ((12, "LVL 12"), (13, "LVL 13"), (14, "CLIP ON"), (6, "LVL 6"), (15, "CLIPOFF"), (0, "LVL 0"))
+        k = int((now - self.vu_test_t0) // VU_TEST_STEP) % len(steps)
+        value, label = steps[k]
+        if k != getattr(self, "vu_test_k", None):
+            self.vu_test_k = k
+            JOURNAL.mark("essai vumètre : %s (valeur Mackie %d)" % (label, value))
+        s = 8 if len(lvls) > 8 else 0                    # 1re tranche de la X-Touch (l'Extender est à gauche)
+        top[s], bot[s], lvls[s] = "TEST VU", label, value
 
     def tick_integrations(self, now):
         """Ce qui ne part pas vers la X-Touch : scènes et pistes vers REAPER, overlay (rappel des pistes, info sends,

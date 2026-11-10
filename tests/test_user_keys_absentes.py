@@ -75,13 +75,15 @@ def server():
 threading.Thread(target=server, daemon=True).start()
 
 
-def flip():                                          # FLIP de la X-Touch, une fois la 2e connexion faite
+def flip():                                          # SHIFT + FLIP de la X-Touch, une fois la 2e connexion faite
     t_end = time.time() + 8
     while time.time() < t_end and not any(n == 2 for n, _, _ in RECU):
         time.sleep(0.05)
     time.sleep(0.5)                                  # le temps que les User Keys soient lues
+    D.EVENTS.put((1, 0x90, D.NOTE_SHIFT, 127, time.time()))
     D.EVENTS.put((1, 0x90, D.NOTE_FLIP, 127, time.time()))
     D.EVENTS.put((1, 0x90, D.NOTE_FLIP, 0, time.time()))
+    D.EVENTS.put((1, 0x90, D.NOTE_SHIFT, 0, time.time()))
 threading.Thread(target=flip, daemon=True).start()
 
 

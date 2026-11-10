@@ -73,7 +73,7 @@ def inject():
     def put(t, *ev):
         time.sleep(max(0, t - (time.time() - T0)))
         D.EVENTS.put(ev + (time.time(),))
-    put(1.0, 0, 0xB0, 0x10, 0x01)                       # encodeur 1 hors mode gain : rien
+    put(1.0, 0, 0xB0, 0x10, 0x01)                       # encodeur 1 en PAN (mode de départ), pan inconnu : rien
     put(1.2, 1, 0x90, 0x28, 127); put(1.25, 1, 0x90, 0x28, 0)   # TRACK -> mode gain
     for k in range(4): put(1.5 + 0.01 * k, 0, 0xB0, 0x10, 0x01)  # +4 crans In 1 -> 12.0
     put(1.8, 0, 0xB0, 0x11, 0x43)                       # -3 crans In 2 (stéréo) : L SEUL -> 33 = 18.5
@@ -82,7 +82,7 @@ def inject():
     put(1.95, 0, 0x90, 0x21, 127); put(1.96, 0, 0x90, 0x21, 0)  # -> L
     put(2.0, 0, 0xB0, 0x11, 0x41)                       # -1 cran : 33 -> 18.0
     put(2.05, 0, 0x90, 0x21, 127); put(2.06, 0, 0x90, 0x21, 0)  # -> R (pour le 48 V plus bas)
-    put(2.15, 0, 0xB0, 0x12, 0x01)                      # In 3 : pas de préampli X32
+    put(2.15, 0, 0xB0, 0x12, 0x01)                      # In 3 : pas de préampli X32 -> trim +0.5 (comme le contrôleur LV1)
     put(2.2, 0, 0x90, 0x00, 127); put(2.5, 0, 0x90, 0x00, 0)    # Rec bref : 48 V inchangé
     put(2.7, 0, 0x90, 0x01, 127); put(3.9, 0, 0x90, 0x01, 0)    # Rec tenu 1,2 s sur In 2 côté R : 48 V ON (34 SEUL)
 threading.Thread(target=inject, daemon=True).start()
@@ -98,14 +98,14 @@ print("Couronnes :", {k: hex(v) for k, v in sorted(RINGS.items()) if v})
 print("LED Rec :", {k: v for k, v in LEDS.items() if k[1] < 8 and v}, " LED TRACK :", LEDS.get((0, 0x28)))
 want_g = {32: 12.0, 33: 18.0, 34: 21.0}
 ok = all(XGR["gains"][i] == v for i, v in want_g.items())
-ok = ok and b"R+21.0" in LCD.get(1, b"")
+ok = ok and b"R+21.0" in LCD.get(1, b"") and b"T+0.5" in LCD.get(1, b"")
 print("Ligne du bas (Extender) :", LCD.get(1, b"")[-60:])
 ok = ok and XGR["phantom"][34] == 1 and XGR["phantom"][33] == 0 and XGR["phantom"][32] == 0
 ok = ok and not any(d.get("idx") == 32 and p == "/api/phantom" for p, d in posts)
 ok = ok and len([1 for p, d in posts if p == "/api/gain" and d["idx"] == 32]) <= 3     # crans regroupés
 # en simulation, les tranches 1-8 (Extender à gauche) sont sur le port 1, la X-Touch (TRACK) sur le port 0
 ok = ok and LEDS.get((0, 0x28)) == 127 and LEDS.get((1, 0x01)) == 127 and not LEDS.get((1, 0x00))
-ok = ok and RINGS.get((1, 0)) == 0x24 and RINGS.get((1, 1)) == 0x26 and not RINGS.get((1, 2))
+ok = ok and RINGS.get((1, 0)) == 0x24 and RINGS.get((1, 1)) == 0x26 and RINGS.get((1, 2)) == 0x16
 print("Gains finaux :", {i: XGR["gains"][i] for i in want_g})
 print("OK" if ok else "ÉCHEC")
 sys.exit(0 if ok else 1)

@@ -134,7 +134,7 @@ Envoie-moi le journal `xtouch_journal_*.txt` et tes relevés de courbe.
 ### Fader master (9e fader de la X-Touch)
 Il **suit** le **LR** de la LV1 par défaut, en **lecture seule** : le toucher ou le bouger n'envoie rien, le moteur
 reprend la position de la LV1 au relâchement (fader critique, il sert au monitoring).
-En **sends on fader** (SEND ou F1-F8), il passe sur le **master de l'aux** choisi, et là il le **règle**.
+En **sends on fader** (SEND, ou User Key Flip Sends en mode USER), il passe sur le **master de l'aux** choisi, et là il le **règle**.
 `py xtouch_lv1_display.py --master 5:0` pour une autre piste (groupe:canal ; 3 = LR, 4 = C, 5 = M, 1 = groupes…),
 `--master aucun` pour le désactiver.
 
@@ -199,16 +199,17 @@ Elle servira à l'étape 4 (gain X32, EQ…).
 
 **X/M32 Gain Recall doit tourner** et être connecté à la console : le pont lui passe les réglages
 (il connaît déjà quel préampli X32 alimente quel canal LV1).
-- **TRACK** : encodeurs en mode **gain** (LED TRACK allumée). Chaque encodeur règle le gain du préampli
-  de sa tranche, 0,5 dB par cran (canal stéréo : les deux préamplis ensemble). La ligne du bas affiche le
-  gain, la couronne le montre. 2e appui sur TRACK : mode **trim** de la LV1 (LED TRACK qui clignote, « T+3.5 »,
-  appui encodeur = **phase**, LED Rec = phase inversée). 3e appui : retour à l'affichage des faders.
+- **TRACK** : encodeurs en mode **GAIN** (LED TRACK allumée), comme le contrôleur LV1 : chaque encodeur règle le
+  gain du préampli X32 de sa tranche, 0,5 dB par cran ; une tranche **sans préampli X32** règle le **trim** de la LV1
+  (« T+3.5 »). La ligne du bas affiche la valeur, la couronne la montre. 2e appui sur TRACK : **TRIM** sur toutes les
+  tranches (LED TRACK qui clignote, appui encodeur = **phase**, LED Rec = phase inversée). 3e appui : retour au **PAN**
+  (le mode de départ).
 - **Canal stéréo** : on règle **un seul côté à la fois** (gain comme 48 V). L'encodeur règle **L** ; un appui
   sur l'encodeur passe à **R**, un autre revient à L. Écran : « L+12.0 » / « R+11.5 ». Rec (tenu 1 s) agit
   sur le côté affiché, et la LED Rec montre le 48 V de ce côté.
 - **Rec** : 48 V du préampli de la tranche. **Tenir 1 s** (un appui bref ne fait rien : protection des
   micros à ruban). LED Rec = 48 V réel, tout le temps.
-- Tranche sans préampli X32 (pas d'EXP, Fx, bus…) : « - », couronne éteinte.
+- Tranche sans préampli X32 (pas d'EXP, Fx, bus…) : trim de la LV1 en mode GAIN.
 - `--x32 aucun` désactive ; `--x32 http://…` autre adresse de Gain Recall.
 
 ### Test (hors concert, micros débranchés pour le 48 V)
@@ -219,9 +220,22 @@ Elle servira à l'étape 4 (gain X32, EQ…).
 
 ## PAN
 
-**PAN** : encodeurs sur le pan des tranches (LED PAN ; TRACK et PAN s'excluent). 1 cran = 1 pas de la LV1,
+**PAN** (mode de départ, comme le contrôleur LV1) : encodeurs sur le pan des tranches (LED PAN). 1 cran = 1 pas de la LV1,
 **appui sur l'encodeur = centre**. Écran : « L45 », « C », « R12 ». Le pan de départ des entrées est lu dans la
 base de la LV1 ; s'il est inconnu (« ? », ex. bus), l'encodeur ne fait rien tant que le pan n'a pas bougé une fois.
+
+## Écrans de la X-Touch
+
+- En haut : nom du canal, **raccourci** s'il dépasse 7 lettres (sans espaces, puis sans voyelles : « Lead Vocal » ->
+  « LeadVcl »).
+- En bas : **valeur de l'encodeur** (pan, gain, trim). En touchant un fader : son niveau en dB (ou d'envoi), 1 s encore
+  après le relâchement.
+- **Messages** sur toute la largeur pendant 1,5 s : couche (« LAYER 2 Ch17-32 »), mode des encodeurs, sends, USER ;
+  SHIFT tenu : « SHIFT + FLIP = FLIP A/B INPUTS ON A / B ».
+- **Vumètres** : LED rouge (clignote 1 s) quand le canal sature, à l'entrée (préampli X32 à -0,5 dBFS, lu dans X/M32
+  Gain Recall, dont XTouch-LV1 allume les vumètres s'ils sont éteints) ou après le fader (0 dBFS sur la LV1).
+- `--essai-vumetre` : essai du témoin de saturation sur la 1re tranche de la X-Touch (valeurs Mackie 12 à 15, 4 s
+  chacune, l'écran dit laquelle).
 
 ## Rappel de pistes à l'écran
 
@@ -264,12 +278,19 @@ aux + niveau** (« F1 -12 »), et à l'écran du PC un bandeau « SEND ON FADER 
 clignote doucement (les clics passent au travers), au style de X/M32 Gain Recall v3 (Qt/PySide6 ; sans PySide6,
 version simple). `--sans-cadre` retire bandeau et cadre.
 
-## Touches F1 à F8 = User Keys 1 à 8 de la LV1
+## Touches F1 à F8 = couches 1 à 8 (comme le contrôleur LV1)
 
-**F1..F8** appuient sur les User Keys 1..8 de la LV1 (assigne-les dans la LV1). Si une User Key est un
-**Flip Sends** (ex. « Flip Sends: MX1: Mon 1 »), la X-Touch passe aussi en sends on fader vers cet aux (bandeau,
-cadre, « M1 -12 ») et la LED de la touche F s'allume ; un 2e appui ramène la LV1 et la X-Touch en mode normal.
-Autre fonction : la LV1 la fait, la X-Touch ne change pas de mode.
+**F1..F8** affichent directement la couche 1..8 du jeu en cours (la LV1 suit avec `--clic-lv1`) ; la LED de la couche
+affichée est allumée. Une couche vide ou absente ne fait rien ; bloqué pendant qu'un fader est touché.
+**AUDIO TRACKS** = bouton **Custom** de la LV1 (avant : USER).
+
+## Touche USER = User Keys 1 à 16 de la LV1 sur les SELECT
+
+**USER** (LED allumée) : les 16 **SELECT** appuient sur les User Keys 1..16 de la LV1 (Extender = 1-8, X-Touch =
+9-16) ; le nom court de chaque User Key s'affiche en haut de l'écran de la tranche (« - » si non assignée). **USER** à
+nouveau (ou **SEND**) : retour à la sélection. Si une User Key est un **Flip Sends** (ex. « Flip Sends: MX1: Mon 1 »),
+la X-Touch passe aussi en sends on fader vers cet aux (bandeau, cadre, « M1 -12 ») et la LED du SELECT s'allume ; un
+2e appui ramène la LV1 et la X-Touch en mode normal. Autre fonction : la LV1 la fait, la X-Touch ne change pas de mode.
 
 ## La LV1 suit BANK et la sélection (`--clic-lv1`)
 
@@ -291,10 +312,12 @@ Sur la page **Channel**, touche un potard de plugin dans la LV1 : son réglage a
 Le **jog wheel** de la X-Touch le règle, un cran = un cran de molette. Rien ne se passe si la LV1 n'est pas sur
 Channel ou si aucun potard n'est sélectionné. Si la LV1 ne réagit pas : `--jog-methode souris`.
 
-## Bouton FLIP = Flip A/B
+## FLIP = sends on fader ; SHIFT + FLIP = Flip A/B
 
-Assigne une User Key de la LV1 à **« Flip AB Input channel »** (ex. User Key 16) : **FLIP** de la X-Touch appuie
-dessus. La LED FLIP est allumée quand des entrées sont sur **B** (virtual soundcheck).
+**FLIP** fait comme le Flip du contrôleur LV1 : sends on fader (même chose que **SEND** : la LED clignote, SELECT
+choisit l'aux, FLIP à nouveau = retour). Pour le **Flip A/B** : assigne une User Key de la LV1 à **« Flip AB Input
+channel »** (ex. User Key 16) ; **SHIFT + FLIP** appuie dessus (ou son SELECT en mode USER). SHIFT tenu : la LED FLIP
+est allumée quand des entrées sont sur **B** (virtual soundcheck).
 La LV1 demande une confirmation : clique-la à l'écran. Sur l'écran du PC, la touche FlipAB affiche en permanence
 **FLIP A** (bleu) ou **FLIP B** (rouge).
 

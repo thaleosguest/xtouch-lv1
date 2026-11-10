@@ -53,7 +53,7 @@ check("pas avant SOF_SETTLE", sends.aux is None)
 suivre()
 check("Fx 1 sur la LV1 -> X-Touch en sends aux 0", sends.aux == 0 and not sends.picking)
 check("bandeau à l'écran", sends.overlay_info()[0] == "FX 1")
-check("LED F5 (User Key Flip Sends Fx 1)", sends.fkey_leds()[4] and sum(sends.fkey_leds()) == 1)
+check("LED User 5 (User Key Flip Sends Fx 1)", sends.user_key_leds()[4] and sum(sends.user_key_leds()) == 1)
 
 # retour LR sur la LV1
 ia(2, 0, 0); ia(3, 0, 1); suivre()
@@ -61,7 +61,7 @@ check("LR sur la LV1 -> mode normal", sends.aux is None and sends.overlay_info()
 
 # menu Mon « Mon 3 »
 ia(3, 0, 0); ia(25, 2, 1); suivre()
-check("Mon 3 -> aux 10, pas de LED F", sends.aux == 10 and not any(sends.fkey_leds()))
+check("Mon 3 -> aux 10, pas de LED User", sends.aux == 10 and not any(sends.user_key_leds()))
 ia(25, 2, 0); ia(3, 0, 1); suivre()
 
 # états de passage (X-Touch F6 du journal) : LR off, Fx 1 on, Fx 2 on, Fx 1 off -> Fx 2

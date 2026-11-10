@@ -8,7 +8,7 @@ import xtouch_probe as X
 from surface.notes import (MASTER, NOTE_REC, NOTE_SOLO, NOTE_MUTE, NOTE_SELECT, NOTE_TRACK, NOTE_PAN,
                            NOTE_RUDE_SOLO, NOTE_SEND, NOTE_SOLO_ALL, NOTE_FLIP, NOTE_INPUTS, NOTE_BUSES, NOTE_USER,
                            NOTE_GROUP, NOTE_GLOBAL_VIEW, NOTE_SMPTE, NOTE_LED_SMPTE, NOTE_F1, CC_TIMECODE,
-                           CC_ASSIGN_L, CC_ASSIGN_R)
+                           CC_ASSIGN_L, CC_ASSIGN_R, NOTE_AUDIO_TRACKS)
 
 METER_REFRESH = 0.25    # renvoi d'un niveau inchangé (le vumètre retombe tout seul sinon)
 FADER_TOL = 48          # écart (sur 16383) en dessous duquel on ne bouge pas le moteur
@@ -169,7 +169,7 @@ class Surface:
                     self.midi.short(h, 0x90, NOTE_SOLO_ALL, 0)
                     self.midi.short(h, 0x90, NOTE_FLIP, 0)
                     for note in (NOTE_INPUTS, NOTE_BUSES, NOTE_USER, NOTE_GROUP, NOTE_GLOBAL_VIEW, NOTE_SMPTE,
-                                 NOTE_LED_SMPTE):
+                                 NOTE_LED_SMPTE, NOTE_AUDIO_TRACKS):
                         self.midi.short(h, 0x90, note, 0)
                     for k in range(8):
                         self.midi.short(h, 0x90, NOTE_F1 + k, 0)

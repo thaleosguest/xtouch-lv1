@@ -489,6 +489,21 @@ Messages vérifiés :
   de compatibilité multi-écrans / autres résolutions. Développement sur **80 canaux, Mixer 1, LV1 V17** ; 64/32/16 ch
   et Mixer 2 à vérifier plus tard (le suivi des couches est générique ; `--mixer 2` et l'onglet Mixer 2 sont prévus).
 - Avancer par petites étapes testées, hors concert ; journal + rapport à chaque test.
+- **Décision du 10/11/2026 : disposition « comme le contrôleur eMotion LV1 »** (`../Manuel/eMotion-lv1-control-userguide.pdf`),
+  transport / marqueurs / jog / zoom / scrub restent à REAPER. F1-F8 = couches 1-8 (LED = couche affichée) ; USER = les
+  16 Select deviennent les User Keys 1-16 (comme le bouton User du contrôleur ; remplace « F1-F8 = User Keys 1-8 » du
+  15/10) ; Custom passe de USER à AUDIO TRACKS (0x40) ; FLIP = sends on fader et SHIFT + FLIP = Flip A/B (étape 2) ;
+  encodeurs PAN au démarrage, TRACK = gain auto (étape 3). Plan complet et état : `../ETAT.md`.
+- **Écrans X-Touch en mode Mackie (bilan du 10/11)** : 2 lignes x 7 car. par tranche, 8 couleurs de fond, texte ASCII
+  seulement ; le NÉGATIF n'existe qu'en mode Xctl (écarté : réécriture de la surface). Choix de Joseph : ligne du bas =
+  encodeur, dB en touchant le fader, messages sur toute la largeur (ligne du bas, 1,5 s), noms raccourcis (`fit7`).
+  Notes vérifiées le 10/11 : F1-F8 0x36-0x3D, AUDIO TRACKS 0x40, USER 0x45, SHIFT 0x46, ALT 0x49 ; vues sans fonction :
+  0x3E, 0x41, 0x44. **Vumètres (essai de Joseph le 10/11, `--essai-vumetre`)** : valeur 14 (0x0E) = LED rouge seule,
+  non mémorisée (une valeur plus basse la remplace) ; 15 = rien ; 12 et 13 identiques (rouge éteinte). Le pont envoie
+  14 à partir de 0 dBFS et le tient 1 s (`CLIP_HOLD`). **Piège (Joseph, 10/11)** : le vumètre LV1 est POST-fader, une
+  saturation par le gain (fader bas) n'y apparaît pas -> on lit aussi le niveau du préampli X32 dans Gain Recall
+  (`GET /api/meters` : on, live, v[128] dB par préampli ; `POST {on: true}` les allume, XTouch-LV1 le fait seul) ;
+  saturé à partir de -0,5 dBFS (`PREAMP_CLIP_DB`).
 
 ## À reprendre (fin de session du 15/10/2026)
 
@@ -600,7 +615,8 @@ Messages vérifiés :
   cadre rouge clignotant doucement autour de la fenêtre LV1, fenêtres traversées par les clics. Piège : une fenêtre
   WS_EX_LAYERED sans attribut -alpha n'est PAS dessinée. Option `--sans-cadre`. Textes à l'écran du PC : en ANGLAIS (demande de Joseph).
 - Fader : sous -60 dB, descente continue jusqu'à -144 (plus de saut -144 -> -78) — vérifié le 15/10.
-- **F1..F8 -> User Keys 1..8 de la LV1 (vérifié le 15/10)** — demande de Joseph (accès rapide aux envois en live) :
+- **F1..F8 -> User Keys 1..8 de la LV1 (vérifié le 15/10 ; REMPLACÉ le 10/11 : F1-F8 = couches, les User Keys passent
+  sur les Select en mode USER, `SendControl.on_user_key`, même logique Flip Sends sur 16 touches)** — demande de Joseph (accès rapide aux envois en live) :
   `/Set/UserKey i:k T` puis `F` (comme MyFOH). Fonctions lues dans `/Notify/UserKeyInfo i s s i` (n°, nom court, fonction,
   assignée), envoyées à la connexion. Si la fonction est « Flip Sends: MX1: <aux> » : la X-Touch passe AUSSI en sends
   on fader vers cet aux (`flip_target`, `SendControl.on_fkey`), LED de la touche F allumée ; 2e appui (ou SEND) =

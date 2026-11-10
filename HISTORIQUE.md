@@ -173,3 +173,21 @@ Chaque ligne correspond à un ou plusieurs commits git (`git log` pour le détai
 - X-Touch et Extender pilotées par leur prise Ethernet, sans pilote ni PC relais (`rtpmidi.py`) : adresses dans
   `xtouch_rtpmidi.json` à côté de l'exe ; le pont les voit comme des X-Touch branchées (perte / retour gérés comme en USB,
   l'USB reste prioritaire). Vérifié : connexion aux deux appareils, latence 0,1 à 0,2 ms. Pas encore essayé avec la LV1.
+
+## 10/11/2026 : touches comme le contrôleur eMotion LV1 (étape 1, à essayer)
+
+Disposition choisie par Joseph : la X-Touch se rapproche du contrôleur LV1, le transport reste à REAPER.
+- **F1-F8 = couches 1 à 8** en accès direct (LED = couche affichée) ; BANK ◄ ► inchangé.
+- **USER** : les 16 Select deviennent les **User Keys 1 à 16** (nom en haut de l'écran), Flip Sends compris
+  (avant : F1-F8 = User Keys 1-8).
+- **AUDIO TRACKS** = Custom (avant : USER).
+- Essayé sur emo-lv1 le 10/11 (journal 173512) : tout marche, notes F1-F8 / AUDIO TRACKS / USER vérifiées.
+- Étape 2 (à essayer) : **FLIP = sends on fader** comme le contrôleur (comme SEND, LED qui clignote au choix de l'aux) ;
+  **SHIFT + FLIP = Flip A/B** (SHIFT tenu : LED FLIP = entrées sur B).
+- Étape 2 validée par Joseph le 10/11 (SHIFT = 0x46). La LED FLIP « A/B » sous SHIFT n'était pas parlante : remplacée
+  par un message sur les écrans.
+- Étape 3 (à essayer) : encodeurs en **PAN au démarrage** ; TRACK = **GAIN automatique** (préampli X32, sinon trim),
+  TRACK x2 = TRIM + phase, puis PAN. **Écrans** : ligne du bas = encodeur, niveau en dB en touchant le fader ;
+  **messages** sur toute la largeur (couche, mode, sends, USER, SHIFT) ; **noms raccourcis** (« LeadVcl ») ;
+  `--essai-vumetre` pour le témoin de saturation : LED rouge du vumètre = valeur Mackie 14 (essai de Joseph),
+  allumée quand le préampli X32 sature (vumètres d'entrée de Gain Recall) ou à 0 dBFS après le fader, tenue 1 s.

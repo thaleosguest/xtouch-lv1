@@ -43,7 +43,7 @@ désinstalleur).
 - INPUTS / BUSES / USER / GROUP = boutons Input (Factory) / Mix / Custom / Spill de la LV1, GLOBAL VIEW = onglet All,
   voyants selon l'état de la LV1.
 - Afficheur : position de REAPER ou heure (SMPTE pour basculer) ; nom de la couche en notification à l'écran.
-- Sends on fader, F1-F8 = User Keys de la LV1, FLIP = Flip A/B, transport et molette vers REAPER.
+- Sends on fader, F1-F8 = couches 1-8, USER = User Keys 1-16 sur les Select, FLIP = sends on fader, SHIFT + FLIP = Flip A/B, transport et molette vers REAPER.
 - Lance tout seul REAPER LV1 et X/M32 Gain Recall ; tourne sans fenêtre, icône près de l'horloge pour quitter.
 
 ## Prérequis

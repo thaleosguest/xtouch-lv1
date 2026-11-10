@@ -1,4 +1,5 @@
-"""Test : F1..F8 -> User Keys 1..8 de la LV1 ; une User Key « Flip Sends » met aussi la X-Touch en sends on fader.
+"""Test : USER puis Select 1..16 -> User Keys 1..16 de la LV1 (avant le 10/11 : F1..F8) ; une User Key « Flip Sends »
+met aussi la X-Touch en sends on fader.
 
     py tests/test_fkeys.py .
 """
@@ -78,7 +79,7 @@ threading.Thread(target=server, daemon=True).start()
 LEDS = []
 class Cap(X.DryOut):
     def short(self, h, st, d1, d2=0):
-        if st == 0x90 and 0x36 <= d1 <= 0x3D and h == 0: LEDS.append((round(time.time() - T0, 1), d1, d2))
+        if st == 0x90 and d1 == 0x18 and h == 1: LEDS.append((round(time.time() - T0, 1), d1, d2))   # Select 1 (Extender)
     def long(self, h, data): pass
 X.DryOut = Cap
 
@@ -88,14 +89,17 @@ def inject():
         D.EVENTS.put(ev + (time.time(),))
     def fader(t, v):
         put(t, 0, 0x90, 0x68, 127); put(t + 0.05, 0, 0xE0, v & 0x7F, v >> 7); put(t + 0.3, 0, 0x90, 0x68, 0)
-    put(1.0, 1, 0x90, 0x36, 127); put(1.05, 1, 0x90, 0x36, 0)    # F1 -> User Key 1 = Flip Sends Fx 2
+    put(0.9, 1, 0x90, 0x45, 127); put(0.95, 1, 0x90, 0x45, 0)    # USER -> Select = User Keys
+    put(1.0, 0, 0x90, 0x18, 127); put(1.05, 0, 0x90, 0x18, 0)    # Select 1 -> User Key 1 = Flip Sends Fx 2
     fader(1.3, 7000)                                             # -> envoi In 1 -> Fx 2 (aux 1)
-    put(1.9, 1, 0x90, 0x37, 127); put(1.95, 1, 0x90, 0x37, 0)    # F2 -> User Key 2 (Talkback) : mode inchangé
+    put(1.9, 0, 0x90, 0x19, 127); put(1.95, 0, 0x90, 0x19, 0)    # Select 2 -> User Key 2 (Talkback) : mode inchangé
     fader(2.2, 8000)                                             # -> toujours un envoi vers Fx 2
-    put(2.8, 1, 0x90, 0x36, 127); put(2.85, 1, 0x90, 0x36, 0)    # F1 -> fin du Flip Sends (User Key 1 à nouveau)
+    put(2.8, 0, 0x90, 0x18, 127); put(2.85, 0, 0x90, 0x18, 0)    # Select 1 -> fin du Flip Sends (User Key 1 à nouveau)
     fader(3.1, 9000)                                             # -> fader de piste
-    put(3.7, 1, 0x90, 0x38, 127); put(3.75, 1, 0x90, 0x38, 0)    # F3 -> User Key 3 non assignée : envoyée quand même
-    put(3.9, 1, 0x90, 0x32, 127); put(3.95, 1, 0x90, 0x32, 0)    # FLIP -> User Key 16 « Flip AB Input channel »
+    put(3.7, 0, 0x90, 0x1A, 127); put(3.75, 0, 0x90, 0x1A, 0)    # Select 3 -> User Key 3 non assignée : envoyée quand même
+    put(3.85, 1, 0x90, 0x46, 127)                                # SHIFT tenu
+    put(3.9, 1, 0x90, 0x32, 127); put(3.95, 1, 0x90, 0x32, 0)    # SHIFT + FLIP -> User Key 16 « Flip AB Input channel »
+    put(4.0, 1, 0x90, 0x46, 0)
 threading.Thread(target=inject, daemon=True).start()
 
 CALLS = []
@@ -109,26 +113,27 @@ class FakeOverlay:                  # la boucle principale doit appeler l'affich
 D.OVERLAY_FACTORY = lambda mixer: FakeOverlay()
 
 sys.argv = ["x", "--dry-run", "--no-journal", "--host", "127.0.0.1", "--port", str(srv.getsockname()[1]),
-            "--x32", "aucun", "--seconds", "4.3"]
+            "--x32", "aucun", "--seconds", "5.6"]
 with contextlib.redirect_stdout(io.StringIO()):
     D.main()
 seq = [(a.split("/Set/")[1], v[:3]) for a, v in SETS]
 print("/Set envoyés :", seq)
 keys = [v for a, v in SETS if a == "/Set/UserKey"]
-print("LED F1 :", [(t, v) for t, d, v in LEDS if d == 0x36])
+print("LED Select 1 :", [(t, v) for t, d, v in LEDS])
 gains = [(a, v[:3]) for a, v in SETS if "Gain" in a]
 ok = [k[:2] for k in keys] == [[0, True], [0, False], [1, True], [1, False], [0, True], [0, False], [2, True], [2, False],
                                [15, True], [15, False]]
 ok = ok and gains[0] == ("/Set/Aux/Send/Gain", [0, 0, 1]) and gains[-1][0] == "/Set/Track/Out/Gain"
 ok = ok and any(a == "/Set/Aux/Send/Gain" for a, v in gains[1:-1]) and not any(a == "/Set/Track/Out/Gain" for a, v in gains[:-1])
-on = [v for t, d, v in LEDS if d == 0x36]
+on = [v for t, d, v in LEDS]
 ok = ok and 127 in on and on[-1] == 0
 ok = ok and ("stop",) in CALLS and any(c[0] == "info" and c[1] for c in CALLS) and any(c[0] == "ab" for c in CALLS)
 recalls = [d for c, d in [x for x in CALLS if x[0] == "recall"]]
 shown = [d for d in recalls if d]
 print("Rappel de pistes :", len(shown), "envois ; ex. case 1 :", shown[0]["cells"][0] if shown else None,
       "; touchés :", shown[0]["touched"] if shown else None, "; send :", sorted({d["send"] for d in shown}, key=str))
-ok = ok and shown and recalls[-1] is None and len(shown[0]["cells"]) == 17 and 0 in shown[0]["touched"]
+# (le bandeau apparaît dès l'appui sur Select en mode USER : le fader touché vient dans un envoi suivant)
+ok = ok and shown and recalls[-1] is None and len(shown[0]["cells"]) == 17 and any(0 in d["touched"] for d in shown)
 ok = ok and "FX 2" in {d["send"] for d in shown}
 layers = [c for c in CALLS if c[0] == "layer"]
 print("Notifications de couche :", layers[:3])

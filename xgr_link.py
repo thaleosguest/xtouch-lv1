@@ -8,6 +8,8 @@ API utilisée (http://127.0.0.1:8032, pas de code d'accès depuis le PC lui-mêm
 - GET  /api/state   : gains[idx] (dB), phantom[idx] (0|1), exp_map {idx: EXP}, lv1_sources {canal LV1: [EXP...]}
 - POST /api/gain    {"idx": i, "db": x}  -> {"ok", "db" (valeur arrondie au pas de 0,5 dB)}
 - POST /api/phantom {"idx": i, "on": bool}
+- GET  /api/meters  : {"on", "live", "v": [dB par préampli]} (vumètres d'entrée de la X32) ; POST {"on": true} les
+  allume : XTouch-LV1 le fait seul s'ils sont éteints (choix de Joseph, 10/11/2026 : LED rouge de saturation à l'entrée)
 idx = préampli global (console k : k*128 + i). Canal LV1 = numéro 1-based des entrées (groupe 0).
 
     py xgr_link.py            # affiche l'état lu (test, n'envoie rien)
@@ -34,6 +36,9 @@ class GainRecallLink(threading.Thread):
     """Lit l'état de x32-gain-recall (2 fois / s) et lui envoie gains et 48 V (file à part, regroupée)."""
     POLL = 0.5
     HOLD = 1.0          # s après un envoi pendant lesquelles l'état lu ne remplace pas la valeur locale
+    METER_POLL = 0.1    # s entre deux lectures des vumètres d'entrée (saturation des préamplis)
+    METER_STALE = 1.0   # s : niveau trop vieux = inconnu
+    METERS_ON_EVERY = 30.0   # s : au plus un allumage des vumètres de Gain Recall par 30 s
 
     def __init__(self, url=DEFAULT_URL, opener=None):
         super().__init__(daemon=True)
@@ -46,6 +51,8 @@ class GainRecallLink(threading.Thread):
         self.idx_of_exp = {}        # EXP -> préampli
         self.sources = {}           # canal LV1 (1-based) -> [EXP]
         self.touched = {}           # préampli -> instant du dernier envoi
+        self.levels, self.levels_t = {}, 0.0   # préampli -> dB (vumètre d'entrée X32), instant de lecture
+        self.meters_on_t = None     # dernier allumage des vumètres de Gain Recall (None : jamais)
         self.out = queue.Queue()
         self.stop_flag = False
         threading.Thread(target=self._sender, daemon=True).start()
@@ -73,7 +80,34 @@ class GainRecallLink(threading.Thread):
             self.idx_of_exp = {int(e): int(i) for i, e in (st.get("exp_map") or {}).items() if e is not None}
             self.sources = {int(c): [int(e) for e in es] for c, es in (st.get("lv1_sources") or {}).items()}
 
+    def apply_meters(self, m, now=None):
+        """Réponse de GET /api/meters ; renvoie True s'il faut allumer les vumètres de Gain Recall (« on » à False)."""
+        now = time.time() if now is None else now
+        with self.lock:
+            if m.get("live") and isinstance(m.get("v"), list):
+                self.levels = {i: float(v) for i, v in enumerate(m["v"]) if v is not None}
+                self.levels_t = now
+            if m.get("on") is False and self.ok and (self.meters_on_t is None
+                                                      or now - self.meters_on_t >= self.METERS_ON_EVERY):
+                first = self.meters_on_t is None
+                self.meters_on_t = now
+                return "first" if first else True
+        return False
+
+    def _meter_loop(self):
+        while not self.stop_flag:
+            try:
+                ask = self.apply_meters(self.opener("GET", "/api/meters"))
+                if ask:
+                    self.opener("POST", "/api/meters", {"on": True})
+                    if ask == "first":
+                        print("  Vumètres de X/M32 Gain Recall allumés (saturation des préamplis sur la X-Touch).")
+            except Exception:
+                pass                        # Gain Recall fermé : la saturation après fader (LV1) reste
+            time.sleep(self.METER_POLL)
+
     def run(self):
+        threading.Thread(target=self._meter_loop, daemon=True).start()
         while not self.stop_flag:
             try:
                 self.apply_state(self.opener("GET", "/api/state"))
@@ -103,6 +137,16 @@ class GainRecallLink(threading.Thread):
         p = self.preamps(track)
         with self.lock:
             return [self.gains.get(i) for i in p]
+
+    def input_level(self, track, now=None):
+        """Niveau d'entrée (dB, vumètre X32) le plus fort des préamplis de la piste ; None si inconnu ou trop vieux."""
+        now = time.time() if now is None else now
+        p = self.preamps(track)
+        with self.lock:
+            if not p or now - self.levels_t > self.METER_STALE:
+                return None
+            vals = [self.levels[i] for i in p if i in self.levels]
+        return max(vals) if vals else None
 
     def phantom_on(self, track, side=None):
         """48 V du préampli de la piste (side 0/1 = gauche/droite d'un stéréo ; None = le 1er)."""
