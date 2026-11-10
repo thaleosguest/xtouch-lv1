@@ -37,6 +37,7 @@ check("choix relu", F.LV1Finder(path).choice == "emo-lv1")
 for e in (ici, autre):
     f.add({k: v for k, v in e.items() if k not in ("source", "local")}, e["source"])
 f.seen["pc-portable-js"]["local"] = True                     # (l'adresse de test n'est pas forcément celle de ce PC)
+f.seen["emo-lv1"]["local"] = False       # (lancé SUR emo-lv1, le 10/11 : son nom et son adresse étaient vus « ce PC »)
 
 
 class Link:
