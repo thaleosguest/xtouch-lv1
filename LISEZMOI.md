@@ -430,6 +430,24 @@ vérifie que sa grille correspond à la base, puis refait la diagonale (clics à
 La pastille FLIP n'apparaît **que quand la LV1 est au premier plan**. Le rappel de pistes et le bandeau / cadre
 SEND restent affichés même quand une autre fenêtre est devant.
 
+## Réseau : choix de la LV1, relais, X-Touch en Ethernet (0.9)
+
+- **Plusieurs LV1 sur le réseau** : XTouch-LV1 se connecte d'abord à la LV1 de **ce PC**. Menu de l'icône (près de
+  l'horloge) : liste des LV1 vues ; le choix est gardé (`xtouch_lv1_choix.json`), « automatique » = ce PC d'abord.
+- **LV1 sur un autre PC (ex. VM sans écran) avec la X-Touch en USB ici** : choisir cette LV1 dans le menu. Si
+  XTouch-LV1 tourne aussi là-bas, il redémarre ici en **relais** et fait suivre le MIDI (TCP 9310, réseau local
+  seulement) ; sinon connexion directe à la LV1.
+- **X-Touch par sa prise Ethernet (RTP-MIDI), sans câble USB** : sur la X-Touch et l'Extender, mode **MC**, réseau en
+  **esclave** (le PC invite). Fichier `xtouch_rtpmidi.json` à côté de l'exe (gardé à la mise à jour) :
+
+  ```json
+  {"devices": [{"name": "X-TOUCH", "ip": "192.168.1.38", "port": 5008},
+               {"name": "X-TOUCH-EXT", "ip": "192.168.1.39", "port": 5006}]}
+  ```
+
+  (adresse et port de contrôle de chaque appareil, dans son menu réseau). Ou `--rtpmidi ip:port[:nom],...` ;
+  `--sans-usb` n'ouvre pas les ports USB. Vérifié le 10/11/2026 : pas de retard ressenti par rapport à l'USB.
+
 ## Capture du trafic MyFOH (recherche des commandes couche / sélection)
 
 `lv1_capture.py` décode une capture réseau tablette <-> LV1 en messages lisibles. La capture se fait avec

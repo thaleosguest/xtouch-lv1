@@ -71,7 +71,7 @@ essayées sur la X-Touch.</p>
   <a href="#master">Master</a><a href="#nav">Couches et sélection</a><a href="#encodeurs">Encodeurs</a>
   <a href="#sends">Sends on fader</a><a href="#fkeys">F1–F8</a><a href="#flip">FLIP A/B</a>
   <a href="#afficheur">Afficheur</a><a href="#transport">Transport Reaper</a><a href="#apps">DISPLAY / SAVE / ENTER</a>
-  <a href="#jog">Jog</a><a href="#ecran">À l'écran</a><a href="#reaper">Reaper</a><a href="#depannage">Dépannage</a>
+  <a href="#jog">Jog</a><a href="#ecran">À l'écran</a><a href="#reaper">Reaper</a><a href="#reseau">Réseau</a><a href="#depannage">Dépannage</a>
 </nav>
 
 <h2 id="demarrer">1. Démarrer</h2>
@@ -282,7 +282,20 @@ potard. Sinon : la molette déplace la lecture de Reaper (<span class="k">SCRUB<
 canaux enregistrés, NON = tous). Ensuite noms et couleurs suivent en direct ; les nouvelles pistes arrivent à l'arrêt.
 Nouvelles pistes : désarmées, monitoring OFF.</p>
 
-<h2 id="depannage">16. Dépannage</h2>
+<h2 id="reseau">16. Réseau : choix de la LV1, relais, X-Touch en Ethernet</h2>
+<ul>
+  <li><b>Plusieurs LV1 sur le réseau</b> : la LV1 de <b>ce PC</b> d'abord. Menu de l'icône près de l'horloge : liste des
+      LV1 vues, choix gardé ; « automatique » = ce PC d'abord.</li>
+  <li><b>LV1 sur un autre PC</b> (ex. VM sans écran) et X-Touch en USB ici : choisir cette LV1 dans le menu. Si XTouch-LV1
+      tourne aussi là-bas, il passe ici en <b>relais</b> (le MIDI suit par le réseau local, TCP 9310).</li>
+  <li><b>X-Touch par sa prise Ethernet</b> (sans USB) : X-Touch et Extender en mode <b>MC</b>, réseau en <b>esclave</b>.
+      Fichier <code>xtouch_rtpmidi.json</code> à côté de l'exe (gardé à la mise à jour) :<br>
+      <code>{"devices": [{"name": "X-TOUCH", "ip": "192.168.1.38", "port": 5008}, {"name": "X-TOUCH-EXT", "ip":
+      "192.168.1.39", "port": 5006}]}</code><br>
+      (adresse et port de contrôle de chaque appareil, dans son menu réseau). Pas de retard ressenti par rapport à l'USB.</li>
+</ul>
+
+<h2 id="depannage">17. Dépannage</h2>
 <table>
   <tr><td>La X-Touch ne répond plus (écrans à jour, mais boutons et faders sans effet)</td><td>Éteindre et rallumer la X-Touch
       et l'Extender (ou débrancher / rebrancher l'USB) : XTouch-LV1 se reconnecte tout seul, inutile de le relancer. Si ça

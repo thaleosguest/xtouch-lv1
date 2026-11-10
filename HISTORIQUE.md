@@ -186,8 +186,15 @@ Disposition choisie par Joseph : la X-Touch se rapproche du contrôleur LV1, le 
   **SHIFT + FLIP = Flip A/B** (SHIFT tenu : LED FLIP = entrées sur B).
 - Étape 2 validée par Joseph le 10/11 (SHIFT = 0x46). La LED FLIP « A/B » sous SHIFT n'était pas parlante : remplacée
   par un message sur les écrans.
-- Étape 3 (à essayer) : encodeurs en **PAN au démarrage** ; TRACK = **GAIN automatique** (préampli X32, sinon trim),
+- Étape 3 : encodeurs en **PAN au démarrage** ; TRACK = **GAIN automatique** (préampli X32, sinon trim),
   TRACK x2 = TRIM + phase, puis PAN. **Écrans** : ligne du bas = encodeur, niveau en dB en touchant le fader ;
   **messages** sur toute la largeur (couche, mode, sends, USER, SHIFT) ; **noms raccourcis** (« LeadVcl ») ;
   `--essai-vumetre` pour le témoin de saturation : LED rouge du vumètre = valeur Mackie 14 (essai de Joseph),
   allumée quand le préampli X32 sature (vumètres d'entrée de Gain Recall) ou à 0 dBFS après le fader, tenue 1 s.
+
+## V0.9 (Total Control for LV1 0.9) : en préparation
+
+- Tout ce qui précède depuis la 0.8 : choix de la LV1 et relais (0.8.1), X-Touch en Ethernet (RTP-MIDI), disposition
+  « comme le contrôleur LV1 » (couches F1-F8, USER, FLIP, PAN / GAIN / TRIM, écrans, saturation).
+- Installeur : X/M32 Gain Recall **3.2.0** (tablette TouchOSC) ; règle de pare-feu UDP 9300 (réseaux privés, une
+  demande Windows) ; raccourci « TouchOSC template » dans le menu Démarrer ; `xtouch_rtpmidi.json` gardé à la mise à jour.

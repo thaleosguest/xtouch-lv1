@@ -412,6 +412,15 @@ Messages vérifiés :
   sélectionner un canal envoie seulement `/GetEQ ii` + `/GetGEQ ii` (groupe, canal), la LV1 répond par
   `/Notify/EQ/Band/{Shape,ShapeRange,Q,Freq,Gain,On} ii i …`, `/Notify/EQ/Graphs`, `/Notify/GEQ/*`.
   => couches et sélection sont **locales au client** : pas de commande LV1 attendue, faire pareil dans le pont.
+- **EQ du canal par le réseau (relu dans les captures MyFOH le 10/11/2026, pour un mode PLUG-IN ; NON codé : Joseph
+  préfère l'écran tactile pour l'instant)** : EQ 4 bandes (bande 1..4) ; `/GetEQ i:g i:ch` -> `/Notify/EQ/Band/{Freq,
+  Gain,Q,Shape,On} g ch bande valeur T`, `/Notify/EQ/Band/ShapeRange g ch bande n formes…` (bandes 1 et 4 : Bell,
+  Low/Hi-Shelf, Hi/Low-Pass, Low/Hi-RShelv ; bandes 2 et 3 : Bell, Low/Hi-Shelf). Écriture `/Set/EQ/Band/Freq` (Hz,
+  renvoyé arrondi), `/Gain` (dB), `/Q`, `/Shape s:`, `/SetEQState g ch 0|1` -> `/Notify/EQState g ch état 1`.
+  **Piège Q** : envoyé en Q réel (~0,9..1,6), RENVOYÉ sur une autre échelle (569,6..702,8) : ajusté sur la capture,
+  renvoi ≈ 205,6 x ln(20 x Q) (à vérifier). `/Notify/FilterState` et `/Notify/DynamicsState` (g ch ? état) vus, aucune
+  commande de réglage. Plugins Waves des racks : aucune commande réseau (seule voie : jog = molette souris sur le
+  réglage touché, page Channel).
   pktmon sur Wi-Fi écrit des trames 802.11 annoncées Ethernet (géré dans `lv1_capture.py`).
 - Groupes : 0 In, 1 Grp, 2 Fx/Aux, 3 LR, 4 C, 5 M, 6 Mtx, 7 Cue, 8 TB, 12 DCA, 25 Mon.
 - Aucune commande de **sélection** de canal trouvée. 48 V LV1 : `/SetTrackPhantomState i:0 i:ch i:0 i:on`

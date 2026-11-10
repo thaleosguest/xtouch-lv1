@@ -31,7 +31,8 @@ DIST = os.path.join(HERE, "dist")
 WORK = os.path.join(HERE, "build")
 SHARED = ["LISEZMOI.md", "MODE_EMPLOI.html", "xtouch_couleurs.exemple.json"]
 INSTALLER = "Total_Control_LV1_Install"
-GR_REPO, GR_TAG, GR_EXE = "thaleosguest/x32-gain-recall", "v3.1.0", "XM32_Gain_Recall_LV1.exe"
+GR_REPO, GR_TAG, GR_EXE = "thaleosguest/x32-gain-recall", "v3.2.0", "XM32_Gain_Recall_LV1.exe"
+GR_TOSC = "XM32_Gain_Recall_LV1.tosc"     # template TouchOSC joint à la release depuis la 3.2.0 (CI de Gain Recall)
 # Dépôt de Gain Recall voisin : LV1-workspace/x32-gain-recall (depuis le 10/11/2026), sinon l'ancien dossier
 GR_WORKSPACE = next((p for p in (os.path.join(os.path.dirname(HERE), n) for n in ("x32-gain-recall", "x32-gain-recall-workspace"))
                      if os.path.isdir(p)), os.path.join(os.path.dirname(HERE), "x32-gain-recall"))
@@ -57,24 +58,29 @@ def sha256(path):
     return h.hexdigest()
 
 
-def gain_recall_release():
-    """Exe de la release GR_TAG : en cache dans build/gainrecall/<tag>, sinon téléchargé ; empreinte SHA-256 comparée
-    à celle que GitHub publie pour le fichier (champ digest de l'API)."""
+def gain_recall_release(name=GR_EXE, required=True):
+    """Fichier de la release GR_TAG (exe, ou template TouchOSC) : en cache dans build/gainrecall/<tag>, sinon téléchargé ;
+    empreinte SHA-256 comparée à celle que GitHub publie pour le fichier (champ digest de l'API). Absent de la release
+    et pas required : None."""
     api = "https://api.github.com/repos/%s/releases/tags/%s" % (GR_REPO, GR_TAG)
     with urllib.request.urlopen(urllib.request.Request(api, headers={"User-Agent": "total-control-lv1-build"}), timeout=20) as r:
         rel = json.loads(r.read())
-    asset = next(a for a in rel["assets"] if a["name"] == GR_EXE)
+    asset = next((a for a in rel["assets"] if a["name"] == name), None)
+    if asset is None:
+        if required:
+            raise SystemExit("%s absent de la release %s de Gain Recall." % (name, GR_TAG))
+        return None
     want = (asset.get("digest") or "").split(":")[-1]
-    path = os.path.join(WORK, "gainrecall", GR_TAG, GR_EXE)
+    path = os.path.join(WORK, "gainrecall", GR_TAG, name)
     if not (os.path.exists(path) and sha256(path) == want):
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        print("Téléchargement de %s %s (%.1f Mo)..." % (GR_EXE, GR_TAG, asset["size"] / 1e6))
+        print("Téléchargement de %s %s (%.1f Mo)..." % (name, GR_TAG, asset["size"] / 1e6))
         urllib.request.urlretrieve(asset["browser_download_url"], path + ".part")
         os.replace(path + ".part", path)
     got = sha256(path)
     if not want or got != want:
         os.remove(path)
-        raise SystemExit("Empreinte de %s incorrecte (%s au lieu de %s) : fichier rejeté." % (GR_EXE, got, want))
+        raise SystemExit("Empreinte de %s incorrecte (%s au lieu de %s) : fichier rejeté." % (name, got, want))
     return path
 
 
@@ -160,9 +166,12 @@ def md_to_html(md, title):
             '</main></body></html>\n' % (html.escape(title), css, "\n".join(out)))
 
 
-def stage_gain_recall(stage, exe, tag):
+def stage_gain_recall(stage, exe, tag, tosc=None):
     os.makedirs(stage)
     shutil.copy2(exe, os.path.join(stage, GR_EXE))
+    if tosc:                                               # 0.9 : template de la tablette (raccourci du menu Démarrer)
+        os.makedirs(os.path.join(stage, "TouchOSC"))
+        shutil.copy2(tosc, os.path.join(stage, "TouchOSC", GR_TOSC))
     with open(os.path.join(stage, "version.txt"), "w", encoding="utf-8") as f:
         f.write(tag.lstrip("vV"))
     md = None
@@ -186,6 +195,7 @@ def main():
     ap = argparse.ArgumentParser(description="Compilation de l'installeur Total Control for LV1")
     ap.add_argument("--gain-recall", help="exe local de X32 Gain Recall (sinon la release %s)" % GR_TAG)
     ap.add_argument("--gain-recall-tag", default=GR_TAG, help="tag du mode d'emploi avec --gain-recall")
+    ap.add_argument("--gain-recall-tosc", help="template TouchOSC local, avec --gain-recall (sinon : celui de la release)")
     ap.add_argument("--sans-gain-recall", action="store_true")
     a = ap.parse_args()
     ver = version()
@@ -193,10 +203,12 @@ def main():
         if 'VERSION = "%s"' % ver not in f.read():
             print("installer.py : VERSION différente de xtouch_lv1_display.py (%s)" % ver)
             return 1
-    gr = None
+    gr = tosc = None
     if not a.sans_gain_recall:
         gr = a.gain_recall or gain_recall_release()
+        tosc = a.gain_recall_tosc if a.gain_recall else gain_recall_release(GR_TOSC, required=False)
         print("X32 Gain Recall : %s (%s)" % (gr, a.gain_recall_tag if a.gain_recall else GR_TAG))
+        print("Template TouchOSC : %s" % (tosc or "aucun (pas de raccourci TouchOSC template)"))
     print("Compilation de %s v%s..." % (NAME, ver))
     out = os.path.join(WORK, "out")
     icon = os.path.join(HERE, "assets", "icon.ico")      # logo bleu (tools/make_icon.py)
@@ -215,7 +227,7 @@ def main():
     for f in SHARED:
         shutil.copy2(os.path.join(HERE, f), os.path.join(stage, f))
     if gr:
-        stage_gain_recall(os.path.join(stage_root, "gainrecall"), gr, a.gain_recall_tag if a.gain_recall else GR_TAG)
+        stage_gain_recall(os.path.join(stage_root, "gainrecall"), gr, a.gain_recall_tag if a.gain_recall else GR_TAG, tosc)
 
     pyinstaller(["--onefile", "--windowed", "--icon", icon, "--name", INSTALLER, "--distpath", DIST,
                  "--add-data", "%s%s." % (stage_root, os.pathsep),

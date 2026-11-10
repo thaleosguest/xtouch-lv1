@@ -5,7 +5,9 @@ REAPER portable est simulée : pas de téléchargement).
   avec lv1_firstrun, OSC, docker du haut, projet type, chemins de plugins vides, vumètres ancrés, carte son reprise du
   REAPER habituel), suite.json du pont (REAPER LV1 + Gain Recall) ; REAPER habituel : anciennes lignes lv1_* retirées, le reste gardé ;
   réglages XTouch-LV1 jamais écrasés ;
-- désinstallation de XTouch-LV1 (réglages gardés) : REAPER LV1 retiré aussi ; Gain Recall reste ; puis Gain Recall."""
+- désinstallation de XTouch-LV1 (réglages gardés) : REAPER LV1 retiré aussi ; Gain Recall reste ; puis Gain Recall ;
+- 0.9 : template TouchOSC copié avec Gain Recall ; règle de pare-feu UDP 9300 (netsh et UAC simulés) : ajoutée si
+  absente, rien si déjà là, retirée à la désinstallation, commande donnée si l'UAC est refusée ; xtouch_rtpmidi.json gardé."""
 import os, sys, tempfile
 sys.path.insert(0, sys.argv[1])
 import installer as I
@@ -26,6 +28,7 @@ put(os.path.join(xt_src, "xtouch_ecran.json"), "NEW")
 put(os.path.join(gr_src, "XM32_Gain_Recall_LV1.exe"), "gr")
 put(os.path.join(gr_src, "version.txt"), "3.0.0")
 os.makedirs(os.path.join(gr_src, "assets")); put(os.path.join(gr_src, "assets", "logo.svg"), "<svg/>")
+os.makedirs(os.path.join(gr_src, I.TOSC_DIR)); put(os.path.join(gr_src, I.TOSC_DIR, "XM32_Gain_Recall_LV1.tosc"), "tosc")
 xt_dir, rdir = os.path.join(progs, "XTouch-LV1"), os.path.join(progs, "REAPER LV1")
 os.makedirs(xt_dir); put(os.path.join(xt_dir, "xtouch_ecran.json"), "MINE")         # réglage déjà là
 # REAPER habituel : ancienne version (lignes lv1_* déclarées, bloc de démarrage) + carte son ASIO
@@ -60,8 +63,10 @@ check("XT seul", I.installed(progs) == {I.XT: I.VERSION} and not os.path.exists(
 old = os.path.join(progs, I.OLD_SUITES[0])                # installation faite sous l'ancien nom « LV1 Suite »
 os.rename(I.suite_dir(progs), old)
 check("ancien nom relu", I.installed(progs) == {I.XT: I.VERSION})
-for _ in range(2):
-    I.install(src, progs, [I.XT, I.RP, I.GR], rp, out.append, do_shortcuts=False)
+for _ in range(2):           # (pare-feu : jamais le vrai dans ce test, voir plus bas)
+    I.install(src, progs, [I.XT, I.RP, I.GR], rp, out.append, do_shortcuts=False, do_firewall=False)
+check("template TouchOSC", get(os.path.join(progs, "X32 Gain Recall", I.TOSC_DIR, "XM32_Gain_Recall_LV1.tosc")) == "tosc")
+check("réglages RTP-MIDI gardés", "xtouch_rtpmidi.json" in I.PERSONAL)
 check("ancien dossier retiré", not os.path.exists(old) and os.path.isfile(os.path.join(I.suite_dir(progs), "installed.json")))
 check("REAPER installé une fois", len(runs) == 1)
 kb = get(os.path.join(rdir, "reaper-kb.ini"))
@@ -87,13 +92,38 @@ sj = json.loads(get(os.path.join(xt_dir, "suite.json")))
 check("suite.json Gain Recall", sj.get("gainrecall") == os.path.join(progs, "X32 Gain Recall", "XM32_Gain_Recall_LV1.exe")
       and sj.get("reaper") == os.path.join(rdir, "reaper.exe"))
 
-I.uninstall(progs, [I.XT], rp, out.append, keep_settings=True, do_shortcuts=False)
+I.uninstall(progs, [I.XT], rp, out.append, keep_settings=True, do_shortcuts=False, do_firewall=False)
 check("désinst. XT -> RP retiré", not os.path.exists(rdir) and not os.path.exists(os.path.join(xt_dir, "suite.json")))
 check("réglages gardés", sorted(os.listdir(xt_dir)) == ["xtouch_ecran.json"])
 check("GR reste", I.installed(progs) == {I.GR: "3.0.0"} and os.path.isdir(I.suite_dir(progs)))
-I.uninstall(progs, [I.GR], rp, out.append, keep_settings=True, do_shortcuts=False)
+I.uninstall(progs, [I.GR], rp, out.append, keep_settings=True, do_shortcuts=False, do_firewall=False)
 check("tout retiré", I.installed(progs) == {} and not os.path.exists(os.path.join(progs, "X32 Gain Recall"))
       and not os.path.isdir(I.suite_dir(progs)))
-print("\n".join(out))
+# ── pare-feu de la tablette TouchOSC (netsh / UAC simulés, comme sous Windows)
+import types
+real_sys, real_exists, real_admin = I.sys, I.fw_rule_exists, I.admin_run
+rule, calls, uac = [False], [], [0]
+I.sys = types.SimpleNamespace(platform="win32")
+I.fw_rule_exists = lambda: rule[0]
+def fake_admin(exe, *args):
+    calls.append((exe,) + args)
+    if uac[0] == 0:
+        rule[0] = "add" in args
+    return uac[0]
+I.admin_run = fake_admin
+fw = []
+I.touchosc_firewall(fw.append)
+check("pare-feu : règle ajoutée", rule[0] and calls[-1][:5] == ("netsh.exe", "advfirewall", "firewall", "add", "rule")
+      and "localport=9300" in calls[-1] and "profile=private" in calls[-1] and "dir=in" in calls[-1])
+n = len(calls)
+I.touchosc_firewall(fw.append)
+check("pare-feu : déjà là, pas d'UAC", len(calls) == n)
+I.touchosc_firewall(fw.append, remove=True)
+check("pare-feu : retirée", not rule[0] and "delete" in calls[-1])
+uac[0] = None                                         # UAC refusée : la commande est donnée
+I.touchosc_firewall(fw.append)
+check("pare-feu : UAC refusée -> commande", not rule[0] and "netsh advfirewall firewall add rule" in fw[-1])
+I.sys, I.fw_rule_exists, I.admin_run = real_sys, real_exists, real_admin
+print("\n".join(out + fw))
 print("OK" if ok else "ÉCHEC : " + ", ".join(why))
 sys.exit(0 if ok else 1)
