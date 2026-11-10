@@ -13,6 +13,10 @@ NAIL_SHOW = 0.15        # s : point de toucher d'un fader bougé sans toucher d�
 UNTOUCHED_MIN = 80      # écart (sur 16383) qu'un fader non touché doit faire pour démarrer un geste (ongle)
 STALE_FOR = 2.0         # s après le relâchement pendant lesquelles un retour « périmé » est ignoré
 SEND_EVERY = 0.02       # envoi max d'une valeur par fader toutes les 20 ms
+# Fader poussé à l'ongle (toucher non détecté : la X-Touch garde son moteur actif) : pas d'écho de position pendant le
+# geste, chaque écho relançait le moteur vers une position en retard sur l'ongle (résistance, geste imprécis, remarque
+# de Joseph du 02/11) ; la position finale est renvoyée une fois, au lâcher. False = écho à chaque mouvement (avant).
+NAIL_QUIET = True
 
 
 def label_of(strip):
@@ -31,6 +35,8 @@ class FaderControl:
         self.seen_touch = False
         self.gesture = {}      # clé -> valeurs du geste en cours (ancienne valeur + valeurs envoyées)
         self.untouched_move = {}   # tranche -> instant du dernier mouvement SANS toucher détecté (ongle)
+        self.nail_end = {}         # tranche -> dernière position d'un geste à l'ongle, renvoyée à la X-Touch au lâcher
+        self.surface = None
         # tranche, piste (ou None) -> clé réglée : (g, ch) = fader de piste, (g, ch, aux) = envoi, None = rien
         self.key_of = lambda strip, e: e
         # tranche -> True si le fader est en lecture seule (master sur LR, demande de Joseph : fader critique, sert au
@@ -81,7 +87,12 @@ class FaderControl:
             self.hold_until[strip] = t + HOLD_AFTER
             if not self.touched.get(strip):
                 self.untouched_move[strip] = t           # geste sans toucher détecté : point de toucher pendant qu'il bouge
-            surface.note_position(strip, value)
+            if NAIL_QUIET and self.seen_touch and not self.touched.get(strip):
+                self.nail_end[strip] = value             # moteur laissé tranquille pendant le geste à l'ongle
+                surface.sent_fader[surface.addr(strip)] = value
+                self.surface = surface
+            else:
+                surface.note_position(strip, value)
             e = entries[strip] if strip < len(entries) else None
             key = self.key_of(strip, e)
             if key is not None:
@@ -112,6 +123,12 @@ class FaderControl:
     def flush(self, now):
         """Envoie à la LV1 les positions en attente (limité à une toutes les 20 ms par fader)."""
         held_now = self.held(now)
+        for strip, value in list(self.nail_end.items()):
+            if strip not in held_now:                    # geste à l'ongle fini : le moteur tient la position finale
+                del self.nail_end[strip]
+                if not self.touched.get(strip) and self.surface is not None:
+                    self.surface.note_position(strip, value)
+                    JOURNAL.mark("XT fader %s : fin du geste à l'ongle, position %d renvoyée" % (label_of(strip), value))
         for strip, (key, db, value) in list(self.pending.items()):
             if now - self.last_sent.get(strip, 0) < SEND_EVERY:
                 continue

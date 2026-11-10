@@ -157,3 +157,13 @@ Chaque ligne correspond à un ou plusieurs commits git (`git log` pour le détai
 - Le bandeau apparaît aussi quand on appuie sur un bouton de tranche (Rec, Solo, Mute, Select, encodeur) ou qu'on tourne
   un encodeur, pas seulement en touchant un fader.
 - Petit bandeau : pan (filet sous le nom), potard du gain X32, voyants M / S / 48V.
+
+## 02/11/2026 : V0.8.1 (plusieurs LV1 sur le réseau, X-Touch par le réseau)
+
+- Deux LV1 sur le réseau de Joseph (pc-portable-js et emo-lv1) : XTouch-LV1 prenait la 1re annonce entendue et suivait
+  parfois la LV1 de l'autre PC (couches et couleurs qui ne correspondaient pas). Maintenant : la LV1 de ce PC d'abord
+  (`lv1_finder.py`). Menu de l'icône : liste des LV1 vues, choix retenu (`xtouch_lv1_choix.json`), comme MyFOH.
+- X-Touch par le réseau (`netmidi.py`) : LV1 dans une VM sans écran, vue en RDP. XTouch-LV1 tourne sur le PC de la LV1
+  (clics, overlay, base de la LV1 : tout y est) ; sur le PC où la X-Touch est branchée en USB, choisir cette LV1 dans le
+  menu de l'icône : XTouch-LV1 redémarre en relais et fait suivre le MIDI (TCP 9310, réseaux locaux seulement). Pas de
+  RTP MIDI. Si XTouch-LV1 ne tourne pas là-bas : connexion directe à la LV1, comme avant.

@@ -33,7 +33,7 @@ import time
 
 SUITE = "Total Control for LV1"                    # nom du pack (choisi par Joseph le 16/10/2026)
 OLD_SUITES = ["LV1 Suite"]                         # anciens noms : dossier et menu Démarrer remplacés à l'installation
-VERSION = "0.8"                                   # version de XTouch-LV1 (= xtouch_lv1_display.VERSION, build.py vérifie)
+VERSION = "0.8.1"                                   # version de XTouch-LV1 (= xtouch_lv1_display.VERSION, build.py vérifie)
 XT, RP, GR = "xtouch", "reaper", "gainrecall"
 # RP (« REAPER LV1 », demande de Joseph) = intégration REAPER, sans dossier à elle : scripts dans <XTouch-LV1>\reaper,
 # déclarés dans REAPER ; il lui faut XTouch-LV1 (le pont échange les scènes et les pistes avec les scripts).
@@ -48,7 +48,7 @@ APPS = {
     GR: {"name": "X32 Gain Recall", "exe": "XM32_Gain_Recall_LV1.exe", "manual": "MODE_EMPLOI.html",
          "about": ("X32 / M32 preamp gain recall for eMotion LV1", "Rappel des gains des préamplis X32 / M32 pour eMotion LV1")},
 }
-PERSONAL = ["xtouch_courbe_fader.json", "xtouch_ecran.json", "xtouch_couleurs.json"]
+PERSONAL = ["xtouch_courbe_fader.json", "xtouch_ecran.json", "xtouch_couleurs.json", "xtouch_lv1_choix.json"]
 # REAPER portable (demande de Joseph : « un vrai pack ») : TÉLÉCHARGÉ sur le site de Cockos au moment de l'installation
 # (la licence de REAPER ne permet de le redistribuer qu'avec un accord de distribution), installé en portable
 # (/S /PORTABLE /D=), empreinte SHA-256 relevée le 16/10/2026 + signature Authenticode de Cockos vérifiées.

@@ -69,7 +69,7 @@ from bridge.lv1_watch import FollowsView, LV1Clicker, LayerModeWatcher, ViewFoll
 from bridge.buttons import view_leds, ButtonControl
 from bridge.reaper import TransportControl, ACT_REAPER_SAVE_AS, AppControl
 
-VERSION = "0.8"
+VERSION = "0.8.1"
 # Dossier des fichiers de Joseph (réglages, courbe, journaux, reaper/) : à côté de l'exe une fois compilé (build.py)
 HERE = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.abspath(__file__))
 COLOR_FILE = os.path.join(HERE, "xtouch_couleurs.json")
@@ -504,6 +504,19 @@ class LV1Link(threading.Thread):
         self.send_lock = threading.Lock()
         self.on_connect = None    # appelée (sur un fil à part) à chaque connexion : pans de départ…
         self.keys_missing = 0     # reconnexions faites pour les seules User Keys (remis à 0 quand elles arrivent)
+        self.finder = None        # lv1_finder.LV1Finder (0.8.1) : LV1 choisie, sinon celle de ce PC
+        self.current = None       # annonce de la LV1 jointe (nom du PC dans "host", "local")
+        self.restart = False      # changement de LV1 demandé (menu de l'icône) : fin de la session en cours
+        self.relay_check = None   # (nom) -> True si la X-Touch part en relais vers ce PC (netmidi, 0.8.1)
+
+    def switch(self, name):
+        """Menu de l'icône : retenir la LV1 ``name`` (None = automatique, ce PC d'abord) et s'y reconnecter."""
+        if self.finder:
+            self.finder.set_choice(name)
+        JOURNAL.mark("LV1 choisie : %s" % (name or "automatique (ce PC d'abord)"))
+        if self.relay_check and self.relay_check(name):      # XTouch-LV1 tourne sur ce PC-là : relais (redémarrage)
+            return
+        self.restart = True
 
     def send(self, address, args):
         """Envoie un message à la LV1 (ignoré si pas connectée)."""
@@ -524,18 +537,35 @@ class LV1Link(threading.Thread):
                 print("  LV1 : %s" % e)
             with self.state.lock:
                 self.state.connected = False
-            if not self.stop_flag:
+            self.current = None
+            if self.restart:
+                self.restart = False
+            elif not self.stop_flag:
                 time.sleep(3)
 
     def locate(self):
         if self.host and self.port:
             return [self.host], self.port
-        found = L.discover(timeout=6)
-        if self.host:
-            found = [e for e in found if self.host in e["ipv4"]] or found
-        if not found:
-            raise OSError("LV1 introuvable (nouvel essai dans 3 s)")
-        e = found[0]
+        if self.finder:
+            import lv1_finder
+            found = self.finder.wait_entries(6)
+            if self.host:
+                found = [e for e in found if self.host in e["ipv4"]] or found
+            e = lv1_finder.pick(found, self.finder.choice)
+            if e is None:
+                raise OSError("LV1 introuvable (nouvel essai dans 3 s)")
+            if self.finder.choice and lv1_finder.lv1_key(e) != self.finder.choice.lower():
+                JOURNAL.mark("LV1 choisie (%s) absente : %s" % (self.finder.choice, e["host"]))
+            if not e["local"]:
+                print("  LV1 d'un autre PC : %s (%s)" % (e["host"], ", ".join(e["ipv4"]) or e["source"]))
+            self.current = e
+        else:
+            found = L.discover(timeout=6)
+            if self.host:
+                found = [e for e in found if self.host in e["ipv4"]] or found
+            if not found:
+                raise OSError("LV1 introuvable (nouvel essai dans 3 s)")
+            e = found[0]
         addrs = ([self.host] if self.host else [])
         if any(ip in L.local_ipv4s() for ip in e["ipv4"]):
             addrs.append("127.0.0.1")
@@ -543,6 +573,7 @@ class LV1Link(threading.Thread):
         return list(dict.fromkeys(addrs)), self.port or e["port"]
 
     def session(self):
+        self.restart = False
         addrs, port = self.locate()
         sock, ip = L.connect_any(addrs, port)
         ack = threading.Event()
@@ -554,6 +585,8 @@ class LV1Link(threading.Thread):
             t_ack = time.time() + 3
             got_state, t_conn, reasked, seen = False, None, False, set()
             while not self.stop_flag:
+                if self.restart:
+                    raise OSError("changement de LV1")
                 try:
                     chunk = sock.recv(65536)
                 except socket.timeout:
@@ -586,7 +619,7 @@ class LV1Link(threading.Thread):
                         self.sock = sock
                     with self.state.lock:
                         self.state.connected = True
-                    print("  LV1 connectée (%s:%d)" % (ip, port))
+                    print("  LV1 connectée (%s:%d%s)" % (ip, port, ", %s" % self.current["host"] if self.current else ""))
                     if self.on_connect:
                         threading.Thread(target=self.on_connect, daemon=True).start()
                     sock.sendall(osc.frame("/Get/Aux/Tracks") + osc.frame("/Get/Layers", [("i", 0), ("i", 0)]))
@@ -1091,8 +1124,73 @@ def already_running():
     import ctypes
     k32 = ctypes.windll.kernel32
     k32.CreateMutexW.restype = ctypes.c_void_p
-    already_running.handle = k32.CreateMutexW(None, False, "Local\\XTouchLV1_Bridge")
-    return k32.GetLastError() == 183                       # ERROR_ALREADY_EXISTS
+    k32.CloseHandle.argtypes = [ctypes.c_void_p]
+    end = time.time() + (15 if os.environ.pop("XTOUCH_RELANCE", None) else 0)   # redémarrage : l'ancien se ferme
+    while True:
+        already_running.handle = k32.CreateMutexW(None, False, "Local\\XTouchLV1_Bridge")
+        if k32.GetLastError() != 183:                      # ERROR_ALREADY_EXISTS
+            return False
+        if time.time() > end:
+            return True
+        k32.CloseHandle(already_running.handle)
+        time.sleep(0.3)
+
+
+def restart_self():
+    """Relance XTouch-LV1 (passage normal <-> relais, 0.8.1) : le nouveau attend que celui-ci soit fermé."""
+    import subprocess
+    cmd = [sys.executable] + (sys.argv[1:] if getattr(sys, "frozen", False) else sys.argv)
+    env = dict(os.environ, XTOUCH_RELANCE="1")
+    JOURNAL.mark("redémarrage : %s" % cmd)
+    subprocess.Popen(cmd, env=env, cwd=HERE, creationflags=0x08000000 if sys.platform == "win32" else 0)
+    STOP.set()
+
+
+def relay_hosts(finder, name):
+    """Adresses du PC de la LV1 ``name`` si XTouch-LV1 y tourne (X-Touch envoyée par le réseau), sinon None. Jamais
+    pour la LV1 de ce PC."""
+    import lv1_finder
+    import netmidi
+    if not finder or not name:
+        return None
+    for e in finder.entries():
+        if lv1_finder.lv1_key(e) == name.lower() and not e["local"]:
+            ips = list(dict.fromkeys(e["ipv4"] + [e["source"]]))
+            ip = netmidi.relay_reachable(ips)
+            return [ip] + [x for x in ips if x != ip] if ip else None
+    return None
+
+
+class RelayLink:
+    """Pour le menu de l'icône en mode relais : LV1 « connectée » = celle du PC hôte ; tout autre choix redémarre."""
+
+    def __init__(self, finder, entry):
+        self.finder, self.current = finder, entry
+
+    def switch(self, name):
+        self.finder.set_choice(name)
+        JOURNAL.mark("LV1 choisie : %s (fin du relais)" % (name or "automatique"))
+        restart_self()
+
+
+def run_relay(a, hosts, finder, entry):
+    """Mode relais (0.8.1) : la X-Touch branchée ici est pilotée par XTouch-LV1 du PC de la LV1 (VM sans écran de
+    Joseph, vue en RDP) ; ce PC ne fait que transmettre le MIDI. Rien d'autre n'est lancé (Gain Recall, REAPER LV1)."""
+    import netmidi
+    print("  Mode relais : X-Touch -> XTouch-LV1 de %s (%s)" % (entry.get("host"), hosts[0]))
+    JOURNAL.mark("mode relais vers %s %s" % (entry.get("host"), hosts))
+    link = RelayLink(finder, entry)
+    tray_icon = start_tray(None, None, finder, lambda: link) if getattr(sys, "frozen", False) else None
+    events = queue.Queue()
+    relay = netmidi.Relay(hosts, socket.gethostname(), VERSION, X.WinMidiOut(), lambda: WinMidiIn(events),
+                          X.pick_ports, STOP, log=print)
+    try:
+        relay.run(events)
+    except KeyboardInterrupt:
+        pass
+    if tray_icon:
+        tray_icon.stop()
+    return 0
 
 
 RELEASES_API = "https://api.github.com/repos/thaleosguest/xtouch-lv1/releases/latest"
@@ -1210,7 +1308,29 @@ def quit_all_label(gr_url, reaper_exe):
     return "Tout quitter (XTouch-LV1 + %s)" % " + ".join(extra) if extra else None
 
 
-def start_tray(gr_url=None, reaper_exe=None):
+LV1_SLOTS = 4      # LV1 listées au plus dans le menu de l'icône (0.8.1)
+
+
+def lv1_menu(finder, link):
+    """Entrées « LV1 » du menu de l'icône : [(nom ou None = automatique, libellé)] ; la LV1 choisie reste listée
+    (« absente ») quand on ne l'entend plus, pour pouvoir revenir en automatique."""
+    import lv1_finder
+    cur = lv1_finder.lv1_key(link.current) if link and link.current else None
+    rows = []
+    for e in finder.entries():
+        k = lv1_finder.lv1_key(e)
+        where = "ce PC" if e["local"] else (", ".join(e["ipv4"][:1]) or e["source"])
+        rows.append((e.get("host") or k, "LV1 de %s (%s)%s" % (e.get("host") or k, where,
+                                                            " - connectée" if k == cur else "")))
+    if finder.choice and all(k.lower() != finder.choice.lower() for k, _ in rows):
+        rows.append((finder.choice, "LV1 de %s (absente)" % finder.choice))
+    auto = "LV1 automatique (ce PC d'abord)"
+    if not finder.choice and cur:
+        auto += " - %s" % (link.current.get("host") or cur)
+    return [(None, auto)] + rows[:LV1_SLOTS]
+
+
+def start_tray(gr_url=None, reaper_exe=None, finder=None, get_link=None):
     """Icône près de l'horloge (comme X/M32 Gain Recall) : mise à jour (si disponible), mode d'emploi, dossier des
     journaux, Quitter ; « Tout quitter » avec X/M32 Gain Recall (gr_url) et / ou REAPER LV1 (reaper_exe)."""
     try:
@@ -1225,17 +1345,39 @@ def start_tray(gr_url=None, reaper_exe=None):
             subprocess.Popen(["explorer.exe", path], creationflags=0x08000000)
         except OSError:
             pass
+    lv1_items, checked, shown = [], {}, {}
+    if finder:
+        def label(n):
+            def f():
+                rows = lv1_menu(finder, get_link() if get_link else None)
+                shown[n] = rows[n] if n < len(rows) else None
+                return shown[n][1] if shown[n] else None
+            return f
+
+        def choose(n):
+            row, link = shown.get(n), get_link() if get_link else None
+            if row and link:
+                link.switch(row[0])
+
+        def is_checked(n):
+            row = shown.get(n)
+            return bool(row) and ((row[0] or "").lower() == (finder.choice or "").lower())
+        for n in range(LV1_SLOTS + 1):
+            lab = label(n)
+            lv1_items.append((lab, lambda n=n: choose(n)))
+            checked[lab] = lambda n=n: is_checked(n)
+        lv1_items.append(None)
     return tray.TrayIcon(
         "XTouch-LV1 v%s" % VERSION,
         [(lambda: ("Mise à jour %s disponible..." % UPDATE["version"]) if UPDATE["version"] else None,
           lambda: open_path(UPDATE["url"] or RELEASES_PAGE)),
          ("Mode d'emploi", lambda: open_path(os.path.join(HERE, "MODE_EMPLOI.html"))),
          ("Dossier des journaux", lambda: open_path(HERE)),
-         None,
+         None] + lv1_items + [
          ("Quitter XTouch-LV1", STOP.set),
          (lambda: quit_all_label(gr_url, reaper_exe),
           lambda: threading.Thread(target=quit_all, args=(gr_url, reaper_exe), daemon=True).start())],
-        icon_path=os.path.join(HERE, "assets", "icon.ico"),
+        checked=checked, icon_path=os.path.join(HERE, "assets", "icon.ico"),
     ).start()
 
 
@@ -1298,6 +1440,7 @@ class App:
         self.tray_icon = None
         self.midi = None
         self.midi_in = None
+        self.hub = None                  # netmidi.RelayHub : X-Touch d'un autre PC (relais)
         self.units = []
         self.wanted = []                 # unités du démarrage : on les veut toutes après une coupure
         self.inputs_open = 0
@@ -1336,7 +1479,20 @@ class App:
         redirect_output_to_log()
         gr_url = None if a.x32.lower() in ("aucun", "none", "off") else a.x32
         reaper_exe = None if a.sans_reaper_lv1 else reaper_lv1_exe()
-        self.tray_icon = start_tray(gr_url, reaper_exe) if (getattr(sys, "frozen", False) and not a.dry_run) else None
+        self.link = None
+        self.finder = None
+        if not (a.host and a.port):                  # LV1 choisie / celle de ce PC (0.8.1)
+            import lv1_finder
+            self.finder = lv1_finder.LV1Finder(os.path.join(HERE, "xtouch_lv1_choix.json"))
+            self.finder.start()
+            if self.finder.choice and not a.dry_run:     # LV1 d'un autre PC où tourne XTouch-LV1 : relais
+                self.finder.wait_entries(5)
+                hosts = relay_hosts(self.finder, self.finder.choice)
+                if hosts:
+                    entry = lv1_finder.pick(self.finder.entries(), self.finder.choice)
+                    return run_relay(a, hosts, self.finder, entry)
+        self.tray_icon = (start_tray(gr_url, reaper_exe, self.finder, lambda: self.link)
+                          if (getattr(sys, "frozen", False) and not a.dry_run) else None)
         if self.tray_icon:
             threading.Thread(target=update_loop, args=(self.tray_icon,), daemon=True).start()
         print("  XTouch-LV1 v%s" % VERSION)
@@ -1356,7 +1512,10 @@ class App:
             print("Windows uniquement (ou --dry-run).")
             return 2
         else:
-            midi = X.WinMidiOut()
+            import netmidi                           # X-Touch d'un autre PC par le réseau (relais, 0.8.1)
+            self.hub = netmidi.RelayHub(log=print)
+            self.hub.start()
+            midi = netmidi.CombinedOut(X.WinMidiOut(), self.hub)
         self.midi = midi = SafeMidi(midi)
 
         units = open_units(midi, a, wait=a.attendre)
@@ -1371,7 +1530,8 @@ class App:
 
         self.wanted = [label for label, _, _ in units]
         if not a.dry_run:
-            self.midi_in = WinMidiIn(self.events)
+            import netmidi
+            self.midi_in = netmidi.CombinedIn(WinMidiIn(self.events), self.hub, self.events)
             self.inputs_open = open_inputs(self.midi_in, units)
         self.ports_check = time.time()
         load_fader_curve()
@@ -1384,6 +1544,8 @@ class App:
         self.fixed_view = fixed_view = None if a.mixer == "auto" else int(a.mixer) - 1
         state.view = fixed_view or 0
         self.link = link = LV1Link(state, a.host, a.port)
+        link.finder = self.finder
+        link.relay_check = self.relay_choice
         link.start()
         self.xt = Surface(midi, units)
         self.faders = faders = FaderControl(state, link, write=not a.lecture_seule)
@@ -1463,6 +1625,13 @@ class App:
         self.refresh_at = time.time() + REFRESH_EVERY
         self.t_end = time.time() + a.seconds if a.seconds else None
         return None
+
+    def relay_choice(self, name):
+        """Menu de l'icône : LV1 d'un autre PC où tourne XTouch-LV1 -> redémarrage en relais (True)."""
+        if relay_hosts(self.finder, name):
+            restart_self()
+            return True
+        return False
 
     def on_overlay_action(self, action):
         """Clic à l'écran (overlay) : « fix_patch » = bouton REALIGN, comme ENTER de la X-Touch."""

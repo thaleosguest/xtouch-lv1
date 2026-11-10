@@ -58,7 +58,7 @@ menus = []
 
 
 class FauxTray:
-    def __init__(self, tip, items, icon_path=None):
+    def __init__(self, tip, items, checked=None, icon_path=None):
         menus.append(items)
 
     def start(self):

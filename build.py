@@ -10,7 +10,7 @@
    administrateur demandés au lancement) ;
 2. build/stage/xtouch = ce dossier + reaper/*.lua + LISEZMOI.md + MODE_EMPLOI.html + exemple de couleurs ;
    build/stage/gainrecall = XM32_Gain_Recall_LV1.exe + MODE_EMPLOI.html (converti du MODE_EMPLOI.md de la release,
-   pris dans le dépôt x32-gain-recall-workspace au tag GR_TAG) + version.txt ;
+   pris dans le dépôt voisin x32-gain-recall au tag GR_TAG) + version.txt ;
 3. PyInstaller compile installer.py en UN fichier qui embarque build/stage.
 Rien de personnel (calibration, réglage d'écran, journaux) n'est embarqué. Il faut PyInstaller et PySide6.
 """
@@ -32,7 +32,9 @@ WORK = os.path.join(HERE, "build")
 SHARED = ["LISEZMOI.md", "MODE_EMPLOI.html", "xtouch_couleurs.exemple.json"]
 INSTALLER = "Total_Control_LV1_Install"
 GR_REPO, GR_TAG, GR_EXE = "thaleosguest/x32-gain-recall", "v3.1.0", "XM32_Gain_Recall_LV1.exe"
-GR_WORKSPACE = os.path.join(os.path.dirname(HERE), "x32-gain-recall-workspace")
+# Dépôt de Gain Recall voisin : LV1-workspace/x32-gain-recall (depuis le 10/11/2026), sinon l'ancien dossier
+GR_WORKSPACE = next((p for p in (os.path.join(os.path.dirname(HERE), n) for n in ("x32-gain-recall", "x32-gain-recall-workspace"))
+                     if os.path.isdir(p)), os.path.join(os.path.dirname(HERE), "x32-gain-recall"))
 
 
 def version():
@@ -199,7 +201,8 @@ def main():
     out = os.path.join(WORK, "out")
     icon = os.path.join(HERE, "assets", "icon.ico")      # logo bleu (tools/make_icon.py)
     pyinstaller(["--noconsole", "--uac-admin", "--icon", icon, "--name", NAME, "--distpath", out,
-                 "--hidden-import", "xtouch_overlay_qt", os.path.join(HERE, "xtouch_lv1_display.py")])
+                 "--hidden-import", "xtouch_overlay_qt", "--hidden-import", "lv1_finder", "--hidden-import", "netmidi",
+                 os.path.join(HERE, "xtouch_lv1_display.py")])
 
     stage_root = os.path.join(WORK, "stage")
     shutil.rmtree(stage_root, ignore_errors=True)
