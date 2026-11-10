@@ -201,7 +201,7 @@ def main():
     out = os.path.join(WORK, "out")
     icon = os.path.join(HERE, "assets", "icon.ico")      # logo bleu (tools/make_icon.py)
     pyinstaller(["--noconsole", "--uac-admin", "--icon", icon, "--name", NAME, "--distpath", out,
-                 "--hidden-import", "xtouch_overlay_qt", "--hidden-import", "lv1_finder", "--hidden-import", "netmidi",
+                 "--hidden-import", "xtouch_overlay_qt", "--hidden-import", "lv1_finder", "--hidden-import", "netmidi", "--hidden-import", "rtpmidi",
                  os.path.join(HERE, "xtouch_lv1_display.py")])
 
     stage_root = os.path.join(WORK, "stage")

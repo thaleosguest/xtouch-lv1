@@ -167,3 +167,9 @@ Chaque ligne correspond à un ou plusieurs commits git (`git log` pour le détai
   (clics, overlay, base de la LV1 : tout y est) ; sur le PC où la X-Touch est branchée en USB, choisir cette LV1 dans le
   menu de l'icône : XTouch-LV1 redémarre en relais et fait suivre le MIDI (TCP 9310, réseaux locaux seulement). Pas de
   RTP MIDI. Si XTouch-LV1 ne tourne pas là-bas : connexion directe à la LV1, comme avant.
+
+## 10/11/2026 : X-Touch par Ethernet (RTP-MIDI direct), en essai
+
+- X-Touch et Extender pilotées par leur prise Ethernet, sans pilote ni PC relais (`rtpmidi.py`) : adresses dans
+  `xtouch_rtpmidi.json` à côté de l'exe ; le pont les voit comme des X-Touch branchées (perte / retour gérés comme en USB,
+  l'USB reste prioritaire). Vérifié : connexion aux deux appareils, latence 0,1 à 0,2 ms. Pas encore essayé avec la LV1.

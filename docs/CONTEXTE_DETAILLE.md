@@ -369,6 +369,16 @@ Waves, rétro-ingénierie). **Non documentée par Waves : à revérifier après 
 - Poignée de main MyFOH : `/handshake i:1 i:-1 i:1` + `/device_name s s` **dans un seul envoi TCP**, réponse `/handshake i:1`.
 - Maintien : la LV1 envoie `/ping h i` ~1/s, répondre `/pong` avec les mêmes arguments.
 - À la connexion : `/Get/Aux/Tracks`, `/Get/Layers ii 0 0`.
+- **LV1 de emo-lv1 (VM), 10/11/2026, contourné mais cause inconnue** : à presque chaque connexion, `/Channels i:150` + une
+  partie des couleurs (0 à 149), puis plus rien (ni `/Notify/Layers` ni User Keys ; `NewSession` à ~0,1 s, présent aussi
+  quand l'état est complet). L'état complet (150 couleurs, couches, 16 User Keys) arrive en moins de 0,1 s quand il arrive.
+  Dépend du moment de la connexion : toutes les 10 à 13 s = jamais ; toutes les 1 à 5 s = ~1 fois sur 3 ; la coupure glisse
+  régulièrement d'un essai à l'autre (phénomène périodique dans la LV1). Un état tronqué = couleurs manquantes : l'ordre de
+  l'envoi est canaux, couleurs, couches, User Keys -> **User Keys reçues = état entier**. Contournement dans `LV1Link` :
+  `STATE_ASK` 1,5 s, `STATE_GIVEUP` 3 s, reconnexion au hasard 0,2 à 1,5 s (`RETRY_STATE`), `KEYS_TRIES` 20 (avant : 5 / 10 s /
+  3 s / 2, qui finissait par accepter un état tronqué : 49 couleurs sur 150). Mesuré : complet en 0,1 à 40 s. Ping 5/s (1/s
+  sur le portable). `MixTwinServer.exe` = enfant de la LV1 (service MyMon), rôle non prouvé. **Piège** : le 1er diagnostic
+  (« Total Control du portable connecté à la même LV1 ») était faux, un hasard de l'alternance.
 - **Piège (15/10)** : juste après un redémarrage de la LV1 (port TCP changé, nouveau `CurrentSessionID`), elle peut
   accepter la connexion SANS envoyer son état (/Channels, /Notify/Layers, TrackColor) -> plus de couleurs ni de
   banques. `LV1Link` redemande à 5 s puis se reconnecte à 10 s (test `tests/test_reconnexion.py`).
@@ -422,7 +432,24 @@ Messages vérifiés :
 - Boutons : Rec 0x00-07, Solo 0x08-0F, Mute 0x10-17, Select 0x18-1F ; LED = note on 127/0 (Mute/Solo vérifiés).
   ◄ BANK ► 0x2E/0x2F, ◄ CHANNEL ► 0x30/0x31, FLIP 0x32 (vérifié, unité X-Touch). Erreur winmm « not enough memory »
   à l'ouverture = port déjà pris (souvent une autre instance du script encore lancée).
-- Prise Ethernet des X-Touch = RTP-MIDI (fiches produit). Non testé ; USB pour l'instant.
+- Prise Ethernet des X-Touch = **RTP-MIDI, vérifié le 10/11/2026** : X-Touch 192.168.1.38 contrôle UDP 5008 (données 5009),
+  Extender 192.168.1.39 contrôle 5006 (données 5007), réglage appareil = MC, esclave (le PC invite). Menu de config : SELECT
+  canal 1 maintenu au démarrage ; encodeur 1 = mode, 2 = USB / MIDI / Network, 3 à 7 = réseau. Session AppleMIDI : `IN`
+  contrôle puis données, `CK` 0/1/2, RTP type 97, `RS`, `BY`. **Piège** : port de données du PC = port de contrôle du PC + 1,
+  sinon pas de réponse à l'invitation sur le port de données. Noms annoncés : « X-TOUCH » et « X-TOUCH- ».
+- `rtpmidi.py` (10/11/2026, bibliothèque standard) : `RtpHub` (un fil, une session par appareil de `xtouch_rtpmidi.json`,
+  `CK` toutes les 3 s, perdue après 9 s de silence, réinvitée toutes les 3 s), `RtpOut` / `RtpIn` à empiler sur les ports
+  existants (numéros >= 2000). Essai réel depuis Unraid : deux appareils connectés, latence aller 0,1 à 0,2 ms.
+  Choix : pas de journal de retransmission (perte comptée dans `status()`, paquet en retard jeté) ; un `BY` n'est accepté
+  que de l'émetteur (SSRC) annoncé dans le `OK` ; SysEx reçus ignorés (comme winmm `MIM_DATA`). **Piège Windows à surveiller** :
+  `recvfrom` UDP lève « connexion réinitialisée » après un ICMP (appareil éteint) : attrapé, pas encore vu en vrai.
+  Test : `tests/test_rtpmidi.py`.
+- Branché dans le pont le 10/11/2026 (`setup` : `RtpOut(CombinedOut(...))`, `RtpIn(CombinedIn(...))`) : `xtouch_rtpmidi.json`
+  ou `--rtpmidi`, `--sans-usb`, attente de 3 s au plus des sessions avant `open_units`. **Piège payé** : une session tombée
+  n'était vue qu'au prochain envoi raté (rien n'est envoyé sans vumètre ni geste) et ses entrées restaient muettes ->
+  `check_ports` interroge `RtpHub.stale(poignée)` à chaque tour. **Piège de test** : un faux appareil qui lit un paquet
+  toutes les 20 ms fait croire à une perte de session (les `CK` attendent derrière la rafale d'écrans du démarrage).
+  Pas encore essayé sous Windows ni avec la vraie LV1. Test : `tests/test_rtpmidi_pont.py`.
 
 ## Garde-fous des faders (ne pas retirer sans raison)
 

@@ -484,9 +484,16 @@ class LV1Link(threading.Thread):
     # effet, « aucune User Key Flip AB »). La LV1 envoie les 16 User Keys même non assignées (« None », 17/10), mais
     # aucune demande connue ne les fait renvoyer : seule une reconnexion. Si elles manquent encore après KEYS_TRIES
     # reconnexions, l'état est accepté sans elles (pas de boucle de reconnexion sur une LV1 qui ne les enverrait pas).
+    # 10/11/2026, LV1 de emo-lv1 (VM) : à presque chaque connexion l'envoi de l'état est COUPÉ en route (canaux + une
+    # partie des couleurs, puis rien ; « NewSession » à ~0,1 s) ; un état complet arrive en moins de 0,1 s quand il
+    # arrive (63 journaux du portable : 0,03 à 0,09 s). Sondes : reconnexion toutes les 10 à 13 s = jamais complet,
+    # toutes les 1 à 5 s = complet 1 fois sur 3 environ. Donc : attendre peu (STATE_ASK / STATE_GIVEUP), réessayer vite
+    # avec un délai au hasard (RETRY_STATE), et n'accepter un état sans User Keys (= tronqué : il y manque aussi des
+    # couleurs, journal 164702 : 49 couleurs sur 150 affichées) qu'après KEYS_TRIES essais.
     STATE_MSGS = ("/Channels", "/Notify/Layers", "/Notify/UserKeyInfo")
-    STATE_ASK, STATE_GIVEUP = 5.0, 10.0
-    KEYS_TRIES = 2
+    STATE_ASK, STATE_GIVEUP = 1.5, 3.0
+    KEYS_TRIES = 20
+    RETRY, RETRY_STATE = 3.0, (0.2, 1.5)     # pause avant de se reconnecter ; (mini, maxi) après un état incomplet
 
     def state_complete(self, seen):
         """Canaux + couches reçus, et User Keys reçues (ou déjà KEYS_TRIES reconnexions pour elles seules)."""
@@ -504,6 +511,7 @@ class LV1Link(threading.Thread):
         self.send_lock = threading.Lock()
         self.on_connect = None    # appelée (sur un fil à part) à chaque connexion : pans de départ…
         self.keys_missing = 0     # reconnexions faites pour les seules User Keys (remis à 0 quand elles arrivent)
+        self.state_cut = False    # dernière session finie sur un état incomplet : reconnexion rapide
         self.finder = None        # lv1_finder.LV1Finder (0.8.1) : LV1 choisie, sinon celle de ce PC
         self.current = None       # annonce de la LV1 jointe (nom du PC dans "host", "local")
         self.restart = False      # changement de LV1 demandé (menu de l'icône) : fin de la session en cours
@@ -541,7 +549,12 @@ class LV1Link(threading.Thread):
             if self.restart:
                 self.restart = False
             elif not self.stop_flag:
-                time.sleep(3)
+                if self.state_cut:
+                    import random
+                    self.state_cut = False
+                    time.sleep(random.uniform(*self.RETRY_STATE))
+                else:
+                    time.sleep(self.RETRY)
 
     def locate(self):
         if self.host and self.port:
@@ -632,6 +645,7 @@ class LV1Link(threading.Thread):
                             JOURNAL.mark("User Keys LV1 non reçues : reconnexion %d / %d" % (self.keys_missing,
                                                                                             self.KEYS_TRIES))
                         JOURNAL.mark("état initial LV1 non reçu en %.0f s : reconnexion" % waited)
+                        self.state_cut = True
                         raise OSError("la LV1 n'envoie pas son état (en cours de chargement ?) : reconnexion")
                     if waited > self.STATE_ASK and not reasked:
                         reasked = True
@@ -1330,7 +1344,39 @@ def lv1_menu(finder, link):
     return [(None, auto)] + rows[:LV1_SLOTS]
 
 
-def start_tray(gr_url=None, reaper_exe=None, finder=None, get_link=None):
+def rtp_devices(a):
+    """Appareils RTP-MIDI (X-Touch par Ethernet) : ``--rtpmidi`` sinon ``xtouch_rtpmidi.json`` ; [] = aucun."""
+    import rtpmidi
+    spec = getattr(a, "rtpmidi", None)
+    if spec is None:
+        return rtpmidi.load_config(os.path.join(HERE, rtpmidi.CONFIG))
+    if spec.strip().lower() in ("", "aucun", "none", "off"):
+        return []
+    out = []
+    for i, part in enumerate(x for x in spec.split(",") if x.strip()):
+        f = part.strip().split(":")
+        try:
+            ip, port = f[0], int(f[1])
+        except (IndexError, ValueError):
+            print("  --rtpmidi : « %s » ignoré (attendu ip:port[:nom])" % part)
+            continue
+        if not rtpmidi.is_private(ip):
+            print("  --rtpmidi : %s ignoré (pas un réseau local)" % ip)
+            continue
+        out.append({"name": f[2] if len(f) > 2 and f[2] else ("X-TOUCH", "X-TOUCH-EXT")[min(i, 1)] + " (network)",
+                    "ip": ip, "port": port})
+    return out
+
+
+def rtp_label(hub):
+    """Ligne du menu de l'icône : état des X-Touch par Ethernet (None = pas de ligne)."""
+    if hub is None:
+        return None
+    st = hub.status()
+    return "X-Touch Ethernet : %d / %d" % (sum(1 for x in st if x["up"]), len(st)) if st else None
+
+
+def start_tray(gr_url=None, reaper_exe=None, finder=None, get_link=None, get_rtp=None):
     """Icône près de l'horloge (comme X/M32 Gain Recall) : mise à jour (si disponible), mode d'emploi, dossier des
     journaux, Quitter ; « Tout quitter » avec X/M32 Gain Recall (gr_url) et / ou REAPER LV1 (reaper_exe)."""
     try:
@@ -1373,6 +1419,7 @@ def start_tray(gr_url=None, reaper_exe=None, finder=None, get_link=None):
           lambda: open_path(UPDATE["url"] or RELEASES_PAGE)),
          ("Mode d'emploi", lambda: open_path(os.path.join(HERE, "MODE_EMPLOI.html"))),
          ("Dossier des journaux", lambda: open_path(HERE)),
+         (lambda: rtp_label(get_rtp() if get_rtp else None), lambda: None),
          None] + lv1_items + [
          ("Quitter XTouch-LV1", STOP.set),
          (lambda: quit_all_label(gr_url, reaper_exe),
@@ -1418,12 +1465,23 @@ def parse_args():
                     help="ne pas lancer REAPER LV1 (installé par Total Control for LV1) avec le pont")
     ap.add_argument("--sans-gain-recall", action="store_true",
                     help="ne pas lancer X/M32 Gain Recall avec le pont")
+    ap.add_argument("--rtpmidi", default=None,
+                    help="X-Touch par Ethernet (RTP-MIDI) : ip:port[:nom],... (défaut : xtouch_rtpmidi.json), "
+                         "ou « aucun »")
+    ap.add_argument("--sans-usb", action="store_true",
+                    help="n'ouvre pas les ports MIDI USB de ce PC (X-Touch par Ethernet ou relais seulement)")
     ap.add_argument("--attendre", action="store_true",
                     help="attendre que les X-Touch soient branchées (défaut de l'exe compilé)")
     argv = sys.argv[1:]
     if getattr(sys, "frozen", False) and not argv:      # exe lancé d'un double-clic : réglage de Joseph
         argv = ["--clic-lv1", "--attendre"]
     return ap.parse_args(argv)
+
+
+def rtp_log(msg):
+    """Connexions / pertes RTP-MIDI : console et journal (diagnostic chez Joseph)."""
+    print(msg)
+    JOURNAL.mark(msg.strip())
 
 
 class App:
@@ -1441,6 +1499,7 @@ class App:
         self.midi = None
         self.midi_in = None
         self.hub = None                  # netmidi.RelayHub : X-Touch d'un autre PC (relais)
+        self.rtp = None                  # rtpmidi.RtpHub : X-Touch par leur prise Ethernet (RTP-MIDI)
         self.units = []
         self.wanted = []                 # unités du démarrage : on les veut toutes après une coupure
         self.inputs_open = 0
@@ -1491,7 +1550,7 @@ class App:
                 if hosts:
                     entry = lv1_finder.pick(self.finder.entries(), self.finder.choice)
                     return run_relay(a, hosts, self.finder, entry)
-        self.tray_icon = (start_tray(gr_url, reaper_exe, self.finder, lambda: self.link)
+        self.tray_icon = (start_tray(gr_url, reaper_exe, self.finder, lambda: self.link, lambda: self.rtp)
                           if (getattr(sys, "frozen", False) and not a.dry_run) else None)
         if self.tray_icon:
             threading.Thread(target=update_loop, args=(self.tray_icon,), daemon=True).start()
@@ -1508,30 +1567,51 @@ class App:
 
         if a.dry_run:
             midi = X.DryOut()
-        elif sys.platform != "win32":
-            print("Windows uniquement (ou --dry-run).")
-            return 2
         else:
+            devices = rtp_devices(a)                 # X-Touch par leur prise Ethernet (RTP-MIDI direct)
+            usb = sys.platform == "win32" and not a.sans_usb
+            if sys.platform != "win32" and not devices:
+                print("Windows uniquement (ou --dry-run, ou X-Touch par Ethernet : --rtpmidi).")
+                return 2
             import netmidi                           # X-Touch d'un autre PC par le réseau (relais, 0.8.1)
             self.hub = netmidi.RelayHub(log=print)
             self.hub.start()
-            midi = netmidi.CombinedOut(X.WinMidiOut(), self.hub)
+            midi = netmidi.CombinedOut(X.WinMidiOut() if usb else None, self.hub)
+            if devices:                              # l'USB reste prioritaire : ses ports sont listés d'abord
+                import atexit
+                import rtpmidi
+                self.rtp = rtpmidi.RtpHub(devices, log=rtp_log)
+                self.rtp.start()
+                atexit.register(self.rtp.stop)       # BY aux appareils même si le pont s'arrête sur une erreur
+                midi = rtpmidi.RtpOut(midi, self.rtp)
+                print("  X-Touch par Ethernet (RTP-MIDI) : %s"
+                      % ", ".join("%s %s:%d" % (d["name"], d["ip"], d["port"]) for d in devices))
+                t_up = time.time() + 3.0             # sessions faites en quelques ms : les attendre toutes un peu
+                while time.time() < t_up and not all(x["up"] for x in self.rtp.status()):
+                    if STOP.wait(0.05):
+                        break
         self.midi = midi = SafeMidi(midi)
 
         units = open_units(midi, a, wait=a.attendre)
         if units is None:                                  # « Quitter » pendant l'attente des X-Touch
             if self.tray_icon:
                 self.tray_icon.stop()
+            self.stop_rtp()
             return 0
         if not units:
             print("Aucune X-Touch utilisable. Liste des ports : py xtouch_probe.py --list")
+            self.stop_rtp()
             return 3
         self.units = units
 
         self.wanted = [label for label, _, _ in units]
         if not a.dry_run:
             import netmidi
-            self.midi_in = netmidi.CombinedIn(WinMidiIn(self.events), self.hub, self.events)
+            usb = sys.platform == "win32" and not a.sans_usb
+            self.midi_in = netmidi.CombinedIn(WinMidiIn(self.events) if usb else None, self.hub, self.events)
+            if self.rtp:
+                import rtpmidi
+                self.midi_in = rtpmidi.RtpIn(self.midi_in, self.rtp, self.events)
             self.inputs_open = open_inputs(self.midi_in, units)
         self.ports_check = time.time()
         load_fader_curve()
@@ -1748,6 +1828,11 @@ class App:
                 JOURNAL.mark("nouvel essai des entrées MIDI : %s" % why_missing)
                 midi_in.close_all()
                 self.inputs_open = open_inputs(midi_in, self.units)
+        if self.rtp and not midi.lost:               # session RTP-MIDI tombée (X-Touch Ethernet éteinte, câble) : vu
+            for label, _, h in self.units:           # tout de suite, même si rien n'est envoyé à ce moment-là
+                if self.rtp.stale(h):
+                    midi.lost = "%s : session RTP-MIDI perdue" % label
+                    break
         if midi.lost:                                # X-Touch disparue : on attend qu'elle revienne, puis on rouvre
             print("  X-Touch perdue (%s) : en attente de son retour..." % midi.lost)
             JOURNAL.mark("X-Touch perdue : %s" % midi.lost)
@@ -1958,9 +2043,16 @@ class App:
         self.xt.clear()
         for _, _, h in self.units:
             self.midi.close(h)
+        self.stop_rtp()
         print("\nArrêté, écrans remis à zéro.")
         if self.tray_icon:
             self.tray_icon.stop()
+
+    def stop_rtp(self):
+        """Fin des sessions RTP-MIDI (``BY``) : sinon les X-Touch gardent la session jusqu'à leur propre délai."""
+        if self.rtp:
+            time.sleep(0.05)                         # laisser partir les derniers écrans avant le BY
+            self.rtp.stop()
 
 
 def main():

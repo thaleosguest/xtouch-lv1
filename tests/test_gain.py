@@ -54,6 +54,8 @@ def server():
     lay = [("i", 0), ("i", 0), ("i", 1), ("s", "Ch 1-16"), ("i", 16)]
     for k in range(16): lay += [("i", 0), ("i", k)]
     send("/Notify/Layers", lay); send("/Notify/CurrentLayer", [("i", 0), ("i", 0)])
+    for k in range(16):              # une vraie LV1 envoie ses 16 User Keys à la connexion (17/10) ; sans elles le pont
+        send("/Notify/UserKeyInfo", [("i", k), ("s", "None"), ("s", "None"), ("i", 0)])   # se reconnecte à 3 s (10/11)
     time.sleep(6)
 threading.Thread(target=server, daemon=True).start()
 

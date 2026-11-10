@@ -25,7 +25,8 @@ l'overlay), Windows (winmm par ctypes).
 - `lv1/layout.py` (TOUTE la géométrie de l'écran LV1, 1920x1080), `lv1/screen.py` (fenêtres, captures),
   `lv1_clic.py` (clics PostMessage, `Target`), `lv1_patch.py` (REALIGN Input B), `lv1_db.py` (base LV1 sur copie).
 - `osc.py`, `lv1_probe.py` (sonde + découverte), `lv1_finder.py` (0.8.1 : LV1 du réseau, choix, ce PC d'abord),
-  `netmidi.py` (0.8.1 : X-Touch par le réseau, TCP 9310), `xgr_link.py` (Gain Recall HTTP), `reaper_link.py`,
+  `netmidi.py` (0.8.1 : X-Touch par le réseau, TCP 9310), `rtpmidi.py` (X-Touch par Ethernet en RTP-MIDI direct,
+  `xtouch_rtpmidi.json` / `--rtpmidi`), `xgr_link.py` (Gain Recall HTTP), `reaper_link.py`,
   `reaper_scenes.py`, `reaper/*.lua`, `xtouch_overlay_qt.py` (overlay, processus `--overlay`), `tray.py`.
 - Réglages de Joseph à côté de l'exe : `xtouch_ecran.json`, `xtouch_courbe_fader.json` (calibré : NE PAS écraser),
   `xtouch_lv1_choix.json`, journaux `xtouch_journal_*.txt` (un par lancement : la meilleure source de diagnostic).
